@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
 import { CheckCircle2, FileText, Plus, RefreshCw, Search, Send, Trash2, Users, X } from 'lucide-react'
 import { db } from '../lib/firebase'
-import { useAuth } from '../auth/AuthContext'
+import { isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
 import '../agent-commissions-v4.css'
 
 type AnyRecord = { id: string } & DocumentData
@@ -183,7 +183,7 @@ function generatePdf(sources: AnyRecord[], planMap: Map<string, AnyRecord>) {
 function CommissionModal({ source, plan, onClose }: { source: AnyRecord; plan?: AnyRecord; onClose: () => void }) {
   const { profile } = useAuth()
   const canOperate = profile?.role === 'master' || profile?.role === 'tesouraria'
-  const canApprove = profile?.role === 'master' || profile?.role === 'diretor'
+  const canApprove = profile?.role === 'master' || Boolean(profile && isOfficialDirectorEmail(profile.email) && profile.role === 'diretor')
   const gross = sourceGrossCommission(source)
   const editable = !plan || plan.status === 'rejeitado'
   const execution = Boolean(plan && ['aprovado', 'parcialmente_pago', 'pago'].includes(String(plan.status)))

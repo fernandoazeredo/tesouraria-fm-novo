@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
 import { BadgeDollarSign, CheckCircle2, FileText, RefreshCw, Search, Send, Users, X } from 'lucide-react'
 import { db } from '../lib/firebase'
-import { useAuth } from '../auth/AuthContext'
+import { isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
 
 type AnyRecord = { id: string } & DocumentData
 type PaymentKind = 'client' | 'agent'
@@ -181,7 +181,7 @@ function SourceSnapshot({ source, kind }: { source: AnyRecord; kind: PaymentKind
 function PaymentPlanModal({ source, plan, kind, collectionName, onClose }: { source: AnyRecord; plan?: AnyRecord; kind: PaymentKind; collectionName: string; onClose: () => void }) {
   const { profile } = useAuth()
   const canOperate = profile?.role === 'master' || profile?.role === 'tesouraria'
-  const canApprove = profile?.role === 'master' || profile?.role === 'diretor'
+  const canApprove = profile?.role === 'master' || Boolean(profile && isOfficialDirectorEmail(profile.email) && profile.role === 'diretor')
   const amount = sourceAmount(source, kind)
   const isExecutionStage = Boolean(plan && ['aprovado', 'parcialmente_pago', 'pago'].includes(String(plan.status)))
   const [paymentType, setPaymentType] = useState<'avista' | 'parcelado'>(plan?.paymentType === 'parcelado' ? 'parcelado' : 'avista')

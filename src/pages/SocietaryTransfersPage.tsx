@@ -26,7 +26,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { db } from '../lib/firebase'
-import { useAuth } from '../auth/AuthContext'
+import { isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
 import '../societary-transfers.css'
 
 type AnyRecord = { id: string } & DocumentData
@@ -275,7 +275,7 @@ function SettingsPanel() {
   const settings = useSocietarySettings()
   const [form, setForm] = useState<Settings>(settings)
   const [saving, setSaving] = useState(false)
-  const canEdit = ['master', 'diretor'].includes(String(profile?.role ?? ''))
+  const canEdit = profile?.role === 'master' || Boolean(profile && isOfficialDirectorEmail(profile.email) && profile.role === 'diretor')
 
   useEffect(() => setForm(settings), [settings])
 
@@ -335,7 +335,7 @@ export function SocietaryTransfersPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [busyId, setBusyId] = useState('')
-  const canDecide = ['master', 'diretor'].includes(String(profile?.role ?? ''))
+  const canDecide = profile?.role === 'master' || Boolean(profile && isOfficialDirectorEmail(profile.email) && profile.role === 'diretor')
 
   const rows = useMemo(() => records
     .filter((item) => {

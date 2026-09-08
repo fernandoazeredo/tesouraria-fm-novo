@@ -1,11 +1,11 @@
 import { useEffect } from 'react'
 
-const NEW_LOGO = '/logo-mm.svg'
+const NEW_LOGO = '/logo-fm.svg'
 
 export function BrandIdentityMMEnhancer() {
   useEffect(() => {
     function applyBrandImages() {
-      document.title = 'Controle de Despesas e Receitas | Marques & Müller Advogados Associados'
+      document.title = 'Controle de Despesas e Receitas | Flávio Marques Advogados Associados'
 
       const images = Array.from(document.querySelectorAll('img')) as HTMLImageElement[]
       for (const image of images) {
@@ -14,7 +14,7 @@ export function BrandIdentityMMEnhancer() {
         if (!isBrandImage) continue
 
         if (src !== NEW_LOGO) image.setAttribute('src', NEW_LOGO)
-        if (image.alt !== 'Marques & Müller Advogados Associados') image.alt = 'Marques & Müller Advogados Associados'
+        if (image.alt !== 'Flávio Marques Advogados Associados') image.alt = 'Flávio Marques Advogados Associados'
       }
     }
 

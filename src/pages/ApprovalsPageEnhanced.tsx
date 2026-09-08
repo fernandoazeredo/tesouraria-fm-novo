@@ -106,7 +106,7 @@ export function ApprovalsPageEnhanced() {
   }
 
   return <>
-    <div className="page-heading"><div><span className="eyebrow">Fluxo de aprovação</span><h1>Aprovações</h1><p>Todos os colaboradores ativos podem acompanhar a fila. Flávio Marques e Ana Paula Müller são os autorizadores oficiais de pagamentos; o Administrador Master Fernando possui as mesmas ações para testes e homologação do sistema.</p></div></div>
+    <div className="page-heading"><div><span className="eyebrow">Fluxo de aprovação</span><h1>Aprovações</h1><p>Todos os colaboradores ativos podem acompanhar a fila. Flávio Marques é o autorizador oficial de pagamentos; o Administrador Master Fernando possui as mesmas ações para testes e homologação do sistema.</p></div></div>
     {!canDecide && <div className="warning-box"><Eye size={18} /><span><strong>Modo consulta:</strong> você pode acompanhar todos os itens da fila de aprovação, mas não pode Aprovar, Devolver ou Rejeitar.</span></div>}
     {isMasterTester && <div className="warning-box"><BadgeCheck size={18} /><span><strong>Modo Master de homologação:</strong> você pode Aprovar, Devolver e Rejeitar para testar integralmente o fluxo. Todas as decisões ficam registradas na Auditoria com seu usuário.</span></div>}
     <section className="page-card module-card approval-card">
