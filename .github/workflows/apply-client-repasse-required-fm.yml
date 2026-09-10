@@ -1,0 +1,106 @@
+name: Aplicar dados obrigatorios do cliente - FM NOVO
+
+on:
+  push:
+    branches:
+      - dev-fm-2026-09-08
+    paths:
+      - '.github/workflows/apply-client-repasse-required-fm.yml'
+
+jobs:
+  apply:
+    if: "!contains(github.event.head_commit.message, '[deploy-firebase]')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+        with:
+          ref: dev-fm-2026-09-08
+
+      - name: Aplicar ajustes aprovados
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              text = path.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'Padrao nao encontrado: {label} em {path}')
+              if text.count(old) != 1:
+                  raise SystemExit(f'Padrao ambiguo: {label} em {path} ({text.count(old)} ocorrencias)')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # ALVARA: obrigatorios quando houver repasse; PIX opcional.
+          p = Path('src/pages/ReceivablesPageStorageV2.tsx')
+          replace_once(p,
+              "  const [cpf, setCpf] = useState('')\n  const [emailNf, setEmailNf] = useState('')",
+              "  const [cpf, setCpf] = useState('')\n  const [pix, setPix] = useState('')\n  const [emailNf, setEmailNf] = useState('')",
+              'estado PIX alvara')
+          replace_once(p,
+              "    if (!processo.trim() || !reclamante.trim() || totalAlvara <= 0) { window.alert('Preencha número do processo, reclamante e valor líquido do alvará.'); return }\n    const missingGeneralDetail",
+              "    if (!processo.trim() || !reclamante.trim() || totalAlvara <= 0) { window.alert('Preencha número do processo, reclamante e valor líquido do alvará.'); return }\n    if (status === 'enviado_tesouraria' && liquidoCliente > 0 && (!banco.trim() || !agencia.trim() || !conta.trim() || !titular.trim() || !cpf.trim())) {\n      window.alert('Para realizar o repasse ao cliente, preencha Banco, Agência, Conta, Nome/Titular e CPF.')\n      return\n    }\n    const missingGeneralDetail",
+              'validacao obrigatoria alvara')
+          replace_once(p,
+              "        banco, agencia, conta, titular, cpf, emailNf, enderecoNf, status,",
+              "        banco, agencia, conta, titular, cpf, pix, emailNf, enderecoNf, status,",
+              'persistencia PIX alvara')
+          replace_once(p,
+              "    <div className=\"form-grid compact-grid\"><label><span>Banco</span><input value={banco} onChange={(e) => setBanco(e.target.value)} /></label><label><span>Agência</span><input value={agencia} onChange={(e) => setAgencia(e.target.value)} /></label><label><span>Conta</span><input value={conta} onChange={(e) => setConta(e.target.value)} /></label><label className=\"span-2\"><span>Nome / Titular</span><input value={titular} onChange={(e) => setTitular(e.target.value)} /></label><label><span>CPF</span><input value={cpf} onChange={(e) => setCpf(e.target.value)} /></label></div>",
+              "    <div className=\"form-grid compact-grid\">\n      <label><span>Banco *</span><input value={banco} required={liquidoCliente > 0} onChange={(e) => setBanco(e.target.value)} /></label>\n      <label><span>Agência *</span><input value={agencia} required={liquidoCliente > 0} onChange={(e) => setAgencia(e.target.value)} /></label>\n      <label><span>Conta *</span><input value={conta} required={liquidoCliente > 0} onChange={(e) => setConta(e.target.value)} /></label>\n      <label className=\"span-2\"><span>Nome / Titular *</span><input value={titular} required={liquidoCliente > 0} onChange={(e) => setTitular(e.target.value)} /></label>\n      <label><span>CPF *</span><input value={cpf} required={liquidoCliente > 0} onChange={(e) => setCpf(e.target.value)} /></label>\n      <label className=\"span-2\"><span>PIX (opcional)</span><input value={pix} onChange={(e) => setPix(e.target.value)} /></label>\n    </div>",
+              'campos obrigatorios e PIX alvara')
+
+          # ACORDO: dados completos obrigatorios quando houver repasse; PIX opcional.
+          p = Path('src/components/LaborAgreementReceivable.tsx')
+          replace_once(p,
+              "  const [contaCliente, setContaCliente] = useState('')\n  const [cpfCliente, setCpfCliente] = useState('')",
+              "  const [contaCliente, setContaCliente] = useState('')\n  const [titularCliente, setTitularCliente] = useState('')\n  const [cpfCliente, setCpfCliente] = useState('')\n  const [pixCliente, setPixCliente] = useState('')",
+              'estados titular e PIX acordo')
+          replace_once(p,
+              "    if (status === 'enviado_tesouraria' && totalRecebido <= 0) {\n      window.alert('Para enviar à Tesouraria, informe ao menos uma parcela com data realizada e valor recebido.')\n      return\n    }\n    if (outrasDeducoes > 0",
+              "    if (status === 'enviado_tesouraria' && totalRecebido <= 0) {\n      window.alert('Para enviar à Tesouraria, informe ao menos uma parcela com data realizada e valor recebido.')\n      return\n    }\n    if (status === 'enviado_tesouraria' && liquidoClienteRecebido > 0 && (!titularCliente.trim() || !cpfCliente.trim() || !bancoCliente.trim() || !agenciaCliente.trim() || !contaCliente.trim() || !emailCliente.trim() || !telefoneCliente.trim() || !enderecoCliente.trim())) {\n      window.alert('Para realizar o repasse ao cliente, preencha todos os dados obrigatórios do cliente: Nome/Titular, CPF, Banco, Agência, Conta Corrente, E-mail, Telefone e Endereço.')\n      return\n    }\n    if (outrasDeducoes > 0",
+              'validacao obrigatoria acordo')
+          replace_once(p,
+              "        conta: contaCliente.trim(),\n        cpf: cpfCliente.trim(),\n        emailNf: emailCliente.trim(),",
+              "        conta: contaCliente.trim(),\n        titular: titularCliente.trim(),\n        cpf: cpfCliente.trim(),\n        pix: pixCliente.trim(),\n        emailNf: emailCliente.trim(),",
+              'persistencia titular PIX acordo')
+          replace_once(p,
+              "      <label><span>Banco</span><input value={bancoCliente} onChange={(e) => setBancoCliente(e.target.value)} /></label>\n      <label><span>Agência</span><input value={agenciaCliente} onChange={(e) => setAgenciaCliente(e.target.value)} /></label>\n      <label><span>Conta Corrente</span><input value={contaCliente} onChange={(e) => setContaCliente(e.target.value)} /></label>\n      <label><span>CPF</span><input value={cpfCliente} onChange={(e) => setCpfCliente(e.target.value)} /></label>\n      <label><span>E-mail</span><input type=\"email\" value={emailCliente} onChange={(e) => setEmailCliente(e.target.value)} /></label>\n      <label><span>Telefone</span><input value={telefoneCliente} onChange={(e) => setTelefoneCliente(e.target.value)} /></label>\n      <label className=\"span-2\"><span>Endereço</span><input value={enderecoCliente} onChange={(e) => setEnderecoCliente(e.target.value)} /></label>",
+              "      <label><span>Banco *</span><input value={bancoCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setBancoCliente(e.target.value)} /></label>\n      <label><span>Agência *</span><input value={agenciaCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setAgenciaCliente(e.target.value)} /></label>\n      <label><span>Conta Corrente *</span><input value={contaCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setContaCliente(e.target.value)} /></label>\n      <label><span>Nome / Titular *</span><input value={titularCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setTitularCliente(e.target.value)} /></label>\n      <label><span>CPF *</span><input value={cpfCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setCpfCliente(e.target.value)} /></label>\n      <label><span>PIX (opcional)</span><input value={pixCliente} onChange={(e) => setPixCliente(e.target.value)} /></label>\n      <label><span>E-mail *</span><input type=\"email\" value={emailCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setEmailCliente(e.target.value)} /></label>\n      <label><span>Telefone *</span><input value={telefoneCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setTelefoneCliente(e.target.value)} /></label>\n      <label className=\"span-2\"><span>Endereço *</span><input value={enderecoCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setEnderecoCliente(e.target.value)} /></label>",
+              'campos obrigatorios e PIX acordo')
+
+          # REPASSE DE ALVARAS: trava para registros antigos incompletos + exibe/persiste PIX.
+          p = Path('src/pages/AlvaraControlPagesV3.tsx')
+          replace_once(p,
+              "${kind === 'client' ? `<div><b>CPF</b>${escapeHtml(source.cpf || '—')}</div><div><b>Banco / Agência / Conta</b>${escapeHtml(`${source.banco || '—'} / ${source.agencia || '—'} / ${source.conta || '—'}`)}</div>` : `<div><b>Comissão</b>${percent ? `${percent.toLocaleString('pt-BR')}%` : '—'}</div>`}",
+              "${kind === 'client' ? `<div><b>CPF</b>${escapeHtml(source.cpf || '—')}</div><div><b>Banco / Agência / Conta</b>${escapeHtml(`${source.banco || '—'} / ${source.agencia || '—'} / ${source.conta || '—'}`)}</div><div><b>PIX</b>${escapeHtml(source.pix || '—')}</div>` : `<div><b>Comissão</b>${percent ? `${percent.toLocaleString('pt-BR')}%` : '—'}</div>`}",
+              'PIX relatorio repasse')
+          replace_once(p,
+              "    {kind === 'client' && <><div><span>Banco</span><strong>{source.banco || '—'}</strong></div><div><span>Agência / Conta</span><strong>{source.agencia || '—'} / {source.conta || '—'}</strong></div><div><span>CPF</span><strong>{source.cpf || '—'}</strong></div></>}",
+              "    {kind === 'client' && <><div><span>Banco</span><strong>{source.banco || '—'}</strong></div><div><span>Agência / Conta</span><strong>{source.agencia || '—'} / {source.conta || '—'}</strong></div><div><span>CPF</span><strong>{source.cpf || '—'}</strong></div><div><span>PIX</span><strong>{source.pix || '—'}</strong></div></>}",
+              'PIX resumo repasse')
+          replace_once(p,
+              "  async function saveSchedule() {\n    if (!profile || !canOperate) return\n    if (!installments.length",
+              "  async function saveSchedule() {\n    if (!profile || !canOperate) return\n    if (kind === 'client' && (!String(source.banco || '').trim() || !String(source.agencia || '').trim() || !String(source.conta || '').trim() || !String(source.titular || '').trim() || !String(source.cpf || '').trim())) {\n      window.alert('Para realizar o repasse ao cliente, preencha Banco, Agência, Conta, Nome/Titular e CPF no recebimento de origem.')\n      return\n    }\n    if (!installments.length",
+              'trava registros antigos repasse')
+          replace_once(p,
+              "titular: source.titular || '', cpf: source.cpf || '', agentName:",
+              "titular: source.titular || '', cpf: source.cpf || '', pix: source.pix || '', agentName:",
+              'PIX snapshot repasse')
+
+      - name: Instalar dependencias
+        run: npm install --no-package-lock
+
+      - name: Validar build
+        run: npm run build
+
+      - name: Commitar somente os ajustes aprovados
+        run: |
+          git config user.name "Fernando Azeredo - automacao"
+          git config user.email "132702186+fernandoazeredo@users.noreply.github.com"
+          git add src/pages/ReceivablesPageStorageV2.tsx src/components/LaborAgreementReceivable.tsx src/pages/AlvaraControlPagesV3.tsx
+          git rm .github/workflows/apply-client-repasse-required-fm.yml
+          git commit -m "Aplica dados obrigatorios do cliente no FM NOVO"
+          git push origin HEAD:dev-fm-2026-09-08
