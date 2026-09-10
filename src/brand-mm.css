@@ -1,8 +1,11 @@
 /* Identidade visual Flávio Marques — login, menu lateral e cabeçalho móvel */
+:root {
+  --fm-logo: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjgwIDI0MCAxMTIwIDI1MCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPkZsw6F2aW8gTWFycXVlcyBBZHZvZ2Fkb3MgQXNzb2NpYWRvczwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkxvZ29tYXJjYSBjb20gcXVhZHJhZG8gYXp1bCDDoCBlc3F1ZXJkYSBlIG8gbm9tZSBGbMOhdmlvIE1hcnF1ZXMgQWR2b2dhZG9zIEFzc29jaWFkb3MuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJibHVlIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzQzYzRlYyIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjAuNzgiIHN0b3AtY29sb3I9IiMzYmMwZTkiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZThmOWZlIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogIDwvZGVmcz4KICA8cmVjdCB4PSI4MCIgeT0iMjQwIiB3aWR0aD0iMTEyMCIgaGVpZ2h0PSIyNTAiIGZpbGw9IiNmZmZmZmYiLz4KICA8cmVjdCB4PSIxMjIiIHk9IjI4MSIgd2lkdGg9IjE4MyIgaGVpZ2h0PSIxNTkiIGZpbGw9InVybCgjYmx1ZSkiIHN0cm9rZT0iIzFjYWVkOSIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHRleHQgeD0iMzM2IiB5PSIzNTciIGZvbnQtZmFtaWx5PSJHZW9yZ2lhLCAnVGltZXMgTmV3IFJvbWFuJywgc2VyaWYiIGZvbnQtc2l6ZT0iNzIiIGZvbnQtd2VpZ2h0PSI3MDAiIGxldHRlci1zcGFjaW5nPSIyIiBmaWxsPSIjMDAwMDAwIj5GTMOBVklPIE1BUlFVRVM8L3RleHQ+CiAgPHRleHQgeD0iNDAzIiB5PSI0MTAiIGZvbnQtZmFtaWx5PSJBcmlhbCwgSGVsdmV0aWNhLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjM4IiBmb250LXdlaWdodD0iNTAwIiBsZXR0ZXItc3BhY2luZz0iOCIgZmlsbD0iIzAwMDAwMCI+QURWT0dBRE9TIEFTU09DSUFET1M8L3RleHQ+Cjwvc3ZnPgo=');
+}
+
 .auth-page.login-light-only .auth-brand-panel img,
-.sidebar .brand-logo-only img,
 .mobile-header-brand img {
-  content: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjgwIDI0MCAxMTIwIDI1MCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPkZsw6F2aW8gTWFycXVlcyBBZHZvZ2Fkb3MgQXNzb2NpYWRvczwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkxvZ29tYXJjYSBjb20gcXVhZHJhZG8gYXp1bCDDoCBlc3F1ZXJkYSBlIG8gbm9tZSBGbMOhdmlvIE1hcnF1ZXMgQWR2b2dhZG9zIEFzc29jaWFkb3MuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJibHVlIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzQzYzRlYyIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjAuNzgiIHN0b3AtY29sb3I9IiMzYmMwZTkiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZThmOWZlIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogIDwvZGVmcz4KICA8cmVjdCB4PSI4MCIgeT0iMjQwIiB3aWR0aD0iMTEyMCIgaGVpZ2h0PSIyNTAiIGZpbGw9IiNmZmZmZmYiLz4KICA8cmVjdCB4PSIxMjIiIHk9IjI4MSIgd2lkdGg9IjE4MyIgaGVpZ2h0PSIxNTkiIGZpbGw9InVybCgjYmx1ZSkiIHN0cm9rZT0iIzFjYWVkOSIgc3Ryb2tlLXdpZHRoPSIyIi8+CiAgPHRleHQgeD0iMzM2IiB5PSIzNTciIGZvbnQtZmFtaWx5PSJHZW9yZ2lhLCAnVGltZXMgTmV3IFJvbWFuJywgc2VyaWYiIGZvbnQtc2l6ZT0iNzIiIGZvbnQtd2VpZ2h0PSI3MDAiIGxldHRlci1zcGFjaW5nPSIyIiBmaWxsPSIjMDAwMDAwIj5GTMOBVklPIE1BUlFVRVM8L3RleHQ+CiAgPHRleHQgeD0iNDAzIiB5PSI0MTAiIGZvbnQtZmFtaWx5PSJBcmlhbCwgSGVsdmV0aWNhLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjM4IiBmb250LXdlaWdodD0iNTAwIiBsZXR0ZXItc3BhY2luZz0iOCIgZmlsbD0iIzAwMDAwMCI+QURWT0dBRE9TIEFTU09DSUFET1M8L3RleHQ+Cjwvc3ZnPgo=') !important;
+  content: var(--fm-logo) !important;
   object-fit: contain !important;
 }
 
@@ -12,10 +15,23 @@
   max-height: 120px !important;
 }
 
-.sidebar .brand-logo-only img {
+/* Menu lateral: usa a própria Base64 como fundo para não depender do src da imagem. */
+.sidebar .brand-logo-only {
   width: 100% !important;
-  max-width: 220px !important;
-  height: auto !important;
+  min-height: 84px !important;
+  background-image: var(--fm-logo) !important;
+  background-repeat: no-repeat !important;
+  background-position: left center !important;
+  background-size: contain !important;
+}
+
+.sidebar .brand-logo-only img {
+  display: block !important;
+  width: 100% !important;
+  height: 84px !important;
+  max-height: 84px !important;
+  margin: 0 !important;
+  opacity: 0 !important;
 }
 
 .mobile-header-brand img {
