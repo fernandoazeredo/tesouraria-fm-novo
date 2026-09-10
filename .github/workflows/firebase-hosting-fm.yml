@@ -1,5 +1,6 @@
 name: Deploy Firebase Hosting - FM NOVO
 
+# Workflow oficial de deploy automatizado do TESOURARIA FM NOVO.
 on:
   push:
     branches:
