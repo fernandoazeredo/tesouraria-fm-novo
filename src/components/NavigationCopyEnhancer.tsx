@@ -14,14 +14,14 @@ function applyNavigationCopy(pathname: string) {
     const title = heading?.querySelector<HTMLElement>('h1')
     const description = heading?.querySelector<HTMLElement>('p')
     if (title && title.textContent !== 'Receitas') title.textContent = 'Receitas'
-    const desiredDescription = 'O departamento de origem registra os recebimentos, informa a conta em que o valor foi recebido e anexa os documentos que seguirão para a Tesouraria.'
+    const desiredDescription = 'O departamento de origem registra os recebimentos, informa a conta em que o valor foi recebido e faz o upload no sistema de toda a documentação comprobatória. As informações e os documentos anexados seguem eletronicamente para a Tesouraria, evitando o envio e a circulação de documentos em papel.'
     if (description && description.textContent !== desiredDescription) description.textContent = desiredDescription
   }
 
   if (pathname === '/despesas') {
     const heading = document.querySelector<HTMLElement>('.main-content .page-heading')
     const description = heading?.querySelector<HTMLElement>('p')
-    const desiredDescription = 'A Tesouraria registra e processa as despesas, confere a documentação, informa a conta em que o pagamento será realizado, encaminha para aprovação e, após a autorização, efetua o pagamento e acompanha sua conclusão.'
+    const desiredDescription = 'A Tesouraria registra e processa as despesas, faz o upload no sistema de toda a documentação comprobatória, informa a conta em que o pagamento será realizado e encaminha o lançamento para aprovação. Após a autorização, efetua e registra o pagamento. Os documentos devem permanecer anexados no sistema, evitando o envio e a circulação de documentos em papel.'
     if (description && description.textContent !== desiredDescription) description.textContent = desiredDescription
   }
 }
