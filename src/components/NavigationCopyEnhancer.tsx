@@ -21,7 +21,7 @@ function applyNavigationCopy(pathname: string) {
   if (pathname === '/despesas') {
     const heading = document.querySelector<HTMLElement>('.main-content .page-heading')
     const description = heading?.querySelector<HTMLElement>('p')
-    const desiredDescription = 'O departamento de origem registra as despesas, informa a conta em que o pagamento será realizado, anexa os documentos comprobatórios e encaminha o demonstrativo para aprovação, correção quando necessária e posterior acompanhamento pela Tesouraria.'
+    const desiredDescription = 'A Tesouraria recebe a solicitação e os documentos da despesa, confere e registra as informações, informa a conta em que o pagamento será realizado, encaminha o demonstrativo para aprovação e, após autorizado, efetua e acompanha o pagamento.'
     if (description && description.textContent !== desiredDescription) description.textContent = desiredDescription
   }
 }
