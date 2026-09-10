@@ -170,6 +170,7 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
   const [conta, setConta] = useState('')
   const [titular, setTitular] = useState('')
   const [cpf, setCpf] = useState('')
+  const [pix, setPix] = useState('')
   const [emailNf, setEmailNf] = useState('')
   const [enderecoNf, setEnderecoNf] = useState('')
   const [agentName, setAgentName] = useState('')
@@ -272,6 +273,10 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
   async function save(status: 'rascunho' | 'enviado_tesouraria') {
     if (uploading) { window.alert('Aguarde o término do envio dos documentos.'); return }
     if (!processo.trim() || !reclamante.trim() || totalAlvara <= 0) { window.alert('Preencha número do processo, reclamante e valor líquido do alvará.'); return }
+    if (status === 'enviado_tesouraria' && liquidoCliente > 0 && (!banco.trim() || !agencia.trim() || !conta.trim() || !titular.trim() || !cpf.trim())) {
+      window.alert('Para realizar o repasse ao cliente, preencha Banco, Agência, Conta, Nome/Titular e CPF.')
+      return
+    }
     const missingGeneralDetail = components.find((item) => (item.nome.includes('Geral') || isDynamicComponent(item.nome)) && toNumber(item.valor) > 0 && !item.detalhe?.trim())
     if (missingGeneralDetail) { window.alert('Informe do que se trata ou quem é o beneficiário em cada linha de Outras Deduções / Participações utilizada.'); return }
     if (agentCommissionValue > 0 && !agentName.trim()) { window.alert('Informe o nome do agente/beneficiário em Outras Deduções / Participações.'); return }
@@ -287,7 +292,7 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
         receivingBankAccountId, receivingBankAccount, receiptDate,
         valorAlvara: totalAlvara, baseCalculo, valorLiquidoCliente: liquidoCliente, totalDeducoes, components: componentsToSave,
         agentName: agentName.trim(), agentCommissionValue, invoiceValue,
-        banco, agencia, conta, titular, cpf, emailNf, enderecoNf, status,
+        banco, agencia, conta, titular, cpf, pix, emailNf, enderecoNf, status,
         attachments: uploaded, attachmentCount: uploaded.length, storageStatus: 'active',
         createdBy: profile?.uid, createdByName: profile?.displayName, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       })
@@ -329,7 +334,14 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
     </div>
 
     <h3 className="form-section-title">Dados bancários para crédito do cliente</h3>
-    <div className="form-grid compact-grid"><label><span>Banco</span><input value={banco} onChange={(e) => setBanco(e.target.value)} /></label><label><span>Agência</span><input value={agencia} onChange={(e) => setAgencia(e.target.value)} /></label><label><span>Conta</span><input value={conta} onChange={(e) => setConta(e.target.value)} /></label><label className="span-2"><span>Nome / Titular</span><input value={titular} onChange={(e) => setTitular(e.target.value)} /></label><label><span>CPF</span><input value={cpf} onChange={(e) => setCpf(e.target.value)} /></label></div>
+    <div className="form-grid compact-grid">
+      <label><span>Banco *</span><input value={banco} required={liquidoCliente > 0} onChange={(e) => setBanco(e.target.value)} /></label>
+      <label><span>Agência *</span><input value={agencia} required={liquidoCliente > 0} onChange={(e) => setAgencia(e.target.value)} /></label>
+      <label><span>Conta *</span><input value={conta} required={liquidoCliente > 0} onChange={(e) => setConta(e.target.value)} /></label>
+      <label className="span-2"><span>Nome / Titular *</span><input value={titular} required={liquidoCliente > 0} onChange={(e) => setTitular(e.target.value)} /></label>
+      <label><span>CPF *</span><input value={cpf} required={liquidoCliente > 0} onChange={(e) => setCpf(e.target.value)} /></label>
+      <label className="span-2"><span>PIX (opcional)</span><input value={pix} onChange={(e) => setPix(e.target.value)} /></label>
+    </div>
     <h3 className="form-section-title">Dados para emissão de Nota Fiscal</h3>
     <div className="form-grid compact-grid"><label className="span-2"><span>Endereço</span><input value={enderecoNf} onChange={(e) => setEnderecoNf(e.target.value)} /></label><label><span>E-mail</span><input type="email" value={emailNf} onChange={(e) => setEmailNf(e.target.value)} /></label></div>
 

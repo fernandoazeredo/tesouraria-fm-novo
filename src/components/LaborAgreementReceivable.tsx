@@ -89,7 +89,9 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
   const [bancoCliente, setBancoCliente] = useState('')
   const [agenciaCliente, setAgenciaCliente] = useState('')
   const [contaCliente, setContaCliente] = useState('')
+  const [titularCliente, setTitularCliente] = useState('')
   const [cpfCliente, setCpfCliente] = useState('')
+  const [pixCliente, setPixCliente] = useState('')
   const [emailCliente, setEmailCliente] = useState('')
   const [telefoneCliente, setTelefoneCliente] = useState('')
   const [enderecoCliente, setEnderecoCliente] = useState('')
@@ -152,6 +154,10 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
       window.alert('Para enviar à Tesouraria, informe ao menos uma parcela com data realizada e valor recebido.')
       return
     }
+    if (status === 'enviado_tesouraria' && liquidoClienteRecebido > 0 && (!titularCliente.trim() || !cpfCliente.trim() || !bancoCliente.trim() || !agenciaCliente.trim() || !contaCliente.trim() || !emailCliente.trim() || !telefoneCliente.trim() || !enderecoCliente.trim())) {
+      window.alert('Para realizar o repasse ao cliente, preencha todos os dados obrigatórios do cliente: Nome/Titular, CPF, Banco, Agência, Conta Corrente, E-mail, Telefone e Endereço.')
+      return
+    }
     if (outrasDeducoes > 0 && !outrasDeducoesDescricao.trim()) {
       window.alert('Especifique as Outras Deduções.')
       return
@@ -197,7 +203,9 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
         banco: bancoCliente.trim(),
         agencia: agenciaCliente.trim(),
         conta: contaCliente.trim(),
+        titular: titularCliente.trim(),
         cpf: cpfCliente.trim(),
+        pix: pixCliente.trim(),
         emailNf: emailCliente.trim(),
         telefoneCliente: telefoneCliente.trim(),
         enderecoNf: enderecoCliente.trim(),
@@ -276,13 +284,15 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
 
     <h3 className="form-section-title">Dados bancários e contato do cliente</h3>
     <div className="form-grid compact-grid labor-agreement-grid">
-      <label><span>Banco</span><input value={bancoCliente} onChange={(e) => setBancoCliente(e.target.value)} /></label>
-      <label><span>Agência</span><input value={agenciaCliente} onChange={(e) => setAgenciaCliente(e.target.value)} /></label>
-      <label><span>Conta Corrente</span><input value={contaCliente} onChange={(e) => setContaCliente(e.target.value)} /></label>
-      <label><span>CPF</span><input value={cpfCliente} onChange={(e) => setCpfCliente(e.target.value)} /></label>
-      <label><span>E-mail</span><input type="email" value={emailCliente} onChange={(e) => setEmailCliente(e.target.value)} /></label>
-      <label><span>Telefone</span><input value={telefoneCliente} onChange={(e) => setTelefoneCliente(e.target.value)} /></label>
-      <label className="span-2"><span>Endereço</span><input value={enderecoCliente} onChange={(e) => setEnderecoCliente(e.target.value)} /></label>
+      <label><span>Banco *</span><input value={bancoCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setBancoCliente(e.target.value)} /></label>
+      <label><span>Agência *</span><input value={agenciaCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setAgenciaCliente(e.target.value)} /></label>
+      <label><span>Conta Corrente *</span><input value={contaCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setContaCliente(e.target.value)} /></label>
+      <label><span>Nome / Titular *</span><input value={titularCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setTitularCliente(e.target.value)} /></label>
+      <label><span>CPF *</span><input value={cpfCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setCpfCliente(e.target.value)} /></label>
+      <label><span>PIX (opcional)</span><input value={pixCliente} onChange={(e) => setPixCliente(e.target.value)} /></label>
+      <label><span>E-mail *</span><input type="email" value={emailCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setEmailCliente(e.target.value)} /></label>
+      <label><span>Telefone *</span><input value={telefoneCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setTelefoneCliente(e.target.value)} /></label>
+      <label className="span-2"><span>Endereço *</span><input value={enderecoCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setEnderecoCliente(e.target.value)} /></label>
     </div>
 
     <h3 className="form-section-title">Deduções</h3>

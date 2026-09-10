@@ -159,7 +159,7 @@ function generatePaymentPdf(kind: PaymentKind, sources: AnyRecord[], planMap: Ma
     const paid = planPaidValue(plan)
     const installments = planInstallments(plan)
     const percent = componentPercent(source, 'Outras Deduções / Participações')
-    const header = `<div class="meta"><div class="wide"><b>${kind === 'client' ? 'Cliente / Titular' : 'Agente'}</b>${escapeHtml(sourceBeneficiary(source, kind))}</div><div><b>Data do recebimento</b>${escapeHtml(dateBr(source.data))}</div><div><b>Valor recebido</b><span class="value">${escapeHtml(money.format(toNumber(source.valorAlvara)))}</span></div><div class="wide"><b>Processo</b>${escapeHtml(source.processo || '—')}</div><div><b>Reclamante</b>${escapeHtml(source.reclamante || '—')}</div><div><b>Reclamada</b>${escapeHtml(source.reclamada || '—')}</div>${kind === 'client' ? `<div><b>CPF</b>${escapeHtml(source.cpf || '—')}</div><div><b>Banco / Agência / Conta</b>${escapeHtml(`${source.banco || '—'} / ${source.agencia || '—'} / ${source.conta || '—'}`)}</div>` : `<div><b>Comissão</b>${percent ? `${percent.toLocaleString('pt-BR')}%` : '—'}</div>`}</div>`
+    const header = `<div class="meta"><div class="wide"><b>${kind === 'client' ? 'Cliente / Titular' : 'Agente'}</b>${escapeHtml(sourceBeneficiary(source, kind))}</div><div><b>Data do recebimento</b>${escapeHtml(dateBr(source.data))}</div><div><b>Valor recebido</b><span class="value">${escapeHtml(money.format(toNumber(source.valorAlvara)))}</span></div><div class="wide"><b>Processo</b>${escapeHtml(source.processo || '—')}</div><div><b>Reclamante</b>${escapeHtml(source.reclamante || '—')}</div><div><b>Reclamada</b>${escapeHtml(source.reclamada || '—')}</div>${kind === 'client' ? `<div><b>CPF</b>${escapeHtml(source.cpf || '—')}</div><div><b>Banco / Agência / Conta</b>${escapeHtml(`${source.banco || '—'} / ${source.agencia || '—'} / ${source.conta || '—'}`)}</div><div><b>PIX</b>${escapeHtml(source.pix || '—')}</div>` : `<div><b>Comissão</b>${percent ? `${percent.toLocaleString('pt-BR')}%` : '—'}</div>`}</div>`
     const rows = installments.length ? installments.map((item) => `<tr><td class="center">${item.number}</td><td class="num">${escapeHtml(money.format(item.value))}</td><td class="center">${escapeHtml(dateBr(item.dueDate))}</td><td class="center">${escapeHtml(installmentLabel(item.status))}</td><td class="center">${escapeHtml(dateBr(item.paidDate))}</td></tr>`).join('') : `<tr><td colspan="5" class="center">Pagamento ainda não programado</td></tr>`
     return `<section class="section${index ? ' page-break' : ''}">${header}<table><thead><tr><th>Parcela</th><th>Valor</th><th>Data prevista</th><th>Status</th><th>Data pagamento</th></tr></thead><tbody>${rows}<tr class="total-row"><td>TOTAL DEVIDO</td><td class="num">${escapeHtml(money.format(amount))}</td><td>JÁ PAGO</td><td class="num">${escapeHtml(money.format(paid))}</td><td>SALDO: ${escapeHtml(money.format(Math.max(0, amount - paid)))}</td></tr></tbody></table><div class="summary"><span>Status consolidado: <b>${escapeHtml(statusLabel(plan))}</b></span></div></section>`
   }).join('')
@@ -173,7 +173,7 @@ function SourceSnapshot({ source, kind }: { source: AnyRecord; kind: PaymentKind
     <div><span>Valor recebido</span><strong>{money.format(toNumber(source.valorAlvara))}</strong></div>
     <div><span>Reclamante</span><strong>{source.reclamante || '—'}</strong></div>
     <div><span>Reclamada</span><strong>{source.reclamada || '—'}</strong></div>
-    {kind === 'client' && <><div><span>Banco</span><strong>{source.banco || '—'}</strong></div><div><span>Agência / Conta</span><strong>{source.agencia || '—'} / {source.conta || '—'}</strong></div><div><span>CPF</span><strong>{source.cpf || '—'}</strong></div></>}
+    {kind === 'client' && <><div><span>Banco</span><strong>{source.banco || '—'}</strong></div><div><span>Agência / Conta</span><strong>{source.agencia || '—'} / {source.conta || '—'}</strong></div><div><span>CPF</span><strong>{source.cpf || '—'}</strong></div><div><span>PIX</span><strong>{source.pix || '—'}</strong></div></>}
     <div className="obligation-source-value"><span>{kind === 'client' ? 'Valor líquido devido ao cliente' : 'Comissão devida'}</span><strong>{money.format(sourceAmount(source, kind))}</strong></div>
   </div>
 }
@@ -206,6 +206,10 @@ function PaymentPlanModal({ source, plan, kind, collectionName, onClose }: { sou
 
   async function saveSchedule() {
     if (!profile || !canOperate) return
+    if (kind === 'client' && (!String(source.banco || '').trim() || !String(source.agencia || '').trim() || !String(source.conta || '').trim() || !String(source.titular || '').trim() || !String(source.cpf || '').trim())) {
+      window.alert('Para realizar o repasse ao cliente, preencha Banco, Agência, Conta, Nome/Titular e CPF no recebimento de origem.')
+      return
+    }
     if (!installments.length || installments.some((item) => !item.dueDate || toNumber(item.value) <= 0)) { window.alert('Informe valor e data de todas as parcelas.'); return }
     if (Math.abs(sum - amount) > 0.02) { window.alert(`A soma das parcelas deve ser igual ao valor devido (${money.format(amount)}).`); return }
     setBusy(true)
@@ -217,7 +221,7 @@ function PaymentPlanModal({ source, plan, kind, collectionName, onClose }: { sou
         processo: source.processo || '', reclamante: source.reclamante || '', reclamada: source.reclamada || '', beneficiary: sourceBeneficiary(source, kind),
         amountReceived: toNumber(source.valorAlvara), amountDue: amount, paymentType, installmentCount: scheduled.length, firstDueDate: scheduled[0]?.dueDate || firstDueDate,
         installments: scheduled, status: 'aguardando_aprovacao', notes: notes.trim(), approvalNote: '', approvedBy: null, approvedByName: null, approvedAt: null,
-        sourceSnapshot: { unidade: source.unidade || '', data: source.data || '', natureza: source.natureza || '', processo: source.processo || '', reclamante: source.reclamante || '', reclamada: source.reclamada || '', origem: source.origem || '', banco: source.banco || '', agencia: source.agencia || '', conta: source.conta || '', titular: source.titular || '', cpf: source.cpf || '', agentName: source.agentName || '', valorAlvara: toNumber(source.valorAlvara), valorLiquidoCliente: toNumber(source.valorLiquidoCliente), agentCommissionValue: sourceAmount(source, 'agent') },
+        sourceSnapshot: { unidade: source.unidade || '', data: source.data || '', natureza: source.natureza || '', processo: source.processo || '', reclamante: source.reclamante || '', reclamada: source.reclamada || '', origem: source.origem || '', banco: source.banco || '', agencia: source.agencia || '', conta: source.conta || '', titular: source.titular || '', cpf: source.cpf || '', pix: source.pix || '', agentName: source.agentName || '', valorAlvara: toNumber(source.valorAlvara), valorLiquidoCliente: toNumber(source.valorLiquidoCliente), agentCommissionValue: sourceAmount(source, 'agent') },
         createdBy: plan?.createdBy || profile.uid, createdByName: plan?.createdByName || profile.displayName, createdAt: plan?.createdAt || serverTimestamp(), updatedBy: profile.uid, updatedByName: profile.displayName, updatedAt: serverTimestamp(),
       }, { merge: false })
       await audit(profile, moduleName, 'Programação enviada para aprovação', `Processo ${source.processo || '—'} — ${sourceBeneficiary(source, kind)} — ${money.format(amount)} em ${scheduled.length} parcela(s)`, source.id)
