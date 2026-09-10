@@ -1,0 +1,40 @@
+name: Deploy Firebase Hosting - FM NOVO
+
+on:
+  push:
+    branches:
+      - dev-fm-2026-09-08
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[deploy-firebase]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar dependencias
+        run: npm install --no-package-lock
+
+      - name: Gerar build
+        run: npm run build
+
+      - name: Autenticar no Google Cloud / Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TESOURARIA_FM_NOVO }}
+
+      - name: Instalar Firebase CLI
+        run: npm install --global firebase-tools
+
+      - name: Publicar somente Hosting do FM NOVO
+        run: firebase deploy --only hosting --project tesouraria-fm-novo --non-interactive
