@@ -17,6 +17,13 @@ function applyNavigationCopy(pathname: string) {
     const desiredDescription = 'O departamento de origem registra os recebimentos, informa a conta em que o valor foi recebido e anexa os documentos que seguirão para a Tesouraria.'
     if (description && description.textContent !== desiredDescription) description.textContent = desiredDescription
   }
+
+  if (pathname === '/despesas') {
+    const heading = document.querySelector<HTMLElement>('.main-content .page-heading')
+    const description = heading?.querySelector<HTMLElement>('p')
+    const desiredDescription = 'O departamento de origem registra as despesas, informa a conta em que o pagamento será realizado, anexa os documentos comprobatórios e encaminha o demonstrativo para aprovação, correção quando necessária e posterior acompanhamento pela Tesouraria.'
+    if (description && description.textContent !== desiredDescription) description.textContent = desiredDescription
+  }
 }
 
 export function NavigationCopyEnhancer() {
