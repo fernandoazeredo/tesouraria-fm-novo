@@ -77,7 +77,7 @@ const menu: MenuItem[] = [
   { to: '/repasse-societario', label: 'Repasse Societário', icon: Handshake, tone: 'revenue', roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/nota-fiscal', label: 'Nota Fiscal', icon: FileText, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/comissoes-agentes', label: 'Comissões de Agentes', icon: Users, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
-  { to: '/tesouraria', label: 'Tesouraria / Receitas', icon: CircleDollarSign, tone: 'revenue', roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
+  { to: '/tesouraria', label: 'Tesouraria — Recebimentos', icon: CircleDollarSign, tone: 'revenue', roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/aprovacoes', label: 'Aprovações', icon: FileCheck2, roles: ['master', 'diretor', 'gerente', 'tesouraria', 'operador'] },
   { to: '/dre-gerencial', label: 'DRE Gerencial', icon: BarChart3, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/plano-contas', label: 'Plano de Contas', icon: BookOpenCheck, roles: ['master'] },

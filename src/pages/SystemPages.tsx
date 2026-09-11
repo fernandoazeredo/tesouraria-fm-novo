@@ -537,12 +537,12 @@ export function TreasuryPage() {
 
   async function changeStatus(item: AnyRecord, status: string) {
     await updateDoc(doc(db, 'receivables', item.id), { status, updatedAt: serverTimestamp(), treasuryBy: profile?.uid, treasuryAt: serverTimestamp() })
-    await writeAudit(profile, `Recebimento atualizado: ${receivableStatusLabels[status] ?? status}`, 'Tesouraria / Receitas', `Processo ${item.processo ?? item.id}`, item.id)
+    await writeAudit(profile, `Recebimento atualizado: ${receivableStatusLabels[status] ?? status}`, 'Tesouraria — Recebimentos', `Processo ${item.processo ?? item.id}`, item.id)
   }
 
   return (
     <>
-      <PageHeader eyebrow="Financeiro" title="Tesouraria / Receitas" description="Recebimento dos demonstrativos prontos, confirmação bancária, repasses, comprovantes e encerramento da operação." />
+      <PageHeader eyebrow="Financeiro" title="Tesouraria — Recebimentos" description="Recebimento dos demonstrativos prontos, confirmação bancária, repasses, comprovantes e encerramento da operação." />
       <div className="workflow-cards"><article><span>1</span><strong>Receber demonstrativo</strong><small>Documento vem pronto da área de origem.</small></article><ChevronRight /><article><span>2</span><strong>Conferir crédito</strong><small>Confirmar data e valor recebido.</small></article><ChevronRight /><article><span>3</span><strong>Executar repasses</strong><small>Cliente, peritos, participações e demais pagamentos.</small></article><ChevronRight /><article><span>4</span><strong>Encerrar</strong><small>Comprovantes e dossiê final.</small></article></div>
       <section className="page-card module-card revenue-module-card">{queue.length === 0 ? <EmptyState icon={CircleDollarSign} title="Nenhum recebimento aguardando Tesouraria" text="Os demonstrativos enviados pelo módulo Recebimento de Alvarás aparecerão aqui." /> : <div className="data-table treasury-table"><div className="data-row data-head"><span>Processo</span><span>Cliente / Reclamante</span><span>Status</span><span className="numeric">Valor</span><span>Ações</span></div>{queue.map((item) => <div className="data-row" key={item.id}><span>{item.processo}</span><span>{item.reclamante}</span><span><StatusBadge value={receivableStatusLabels[item.status] || item.status} tone="revenue" /></span><span className="numeric revenue-text"><strong>{money.format(toNumber(item.valorAlvara))}</strong></span><span className="row-actions">{item.status === 'enviado_tesouraria' && <><button className="small-revenue-button" onClick={() => changeStatus(item, 'recebido_tesouraria')}>Confirmar recebimento</button><button className="small-neutral-button" onClick={() => changeStatus(item, 'devolvido')}>Devolver</button></>}{item.status === 'recebido_tesouraria' && <button className="small-success-button" onClick={() => changeStatus(item, 'encerrado')}>Encerrar</button>}</span></div>)}</div>}</section>
     </>
