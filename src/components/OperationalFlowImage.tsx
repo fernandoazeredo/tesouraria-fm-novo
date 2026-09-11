@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const PART_COUNT = 3
+const PART_COUNT = 7
 
 export function OperationalFlowImage() {
   const [src, setSrc] = useState('')
