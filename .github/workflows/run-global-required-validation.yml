@@ -1,0 +1,44 @@
+name: Executar regra global de campos obrigatorios
+
+on:
+  push:
+    branches:
+      - dev-fm-2026-09-08
+    paths:
+      - '.github/workflows/run-global-required-validation.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+        with:
+          ref: dev-fm-2026-09-08
+          fetch-depth: 0
+
+      - name: Executar script de alteracao
+        shell: bash
+        run: |
+          python -c "from pathlib import Path; t=Path('.github/workflows/apply-global-required-validation.yml').read_text(encoding='utf-8'); a=t.index(\"          python - <<'PY'\\n\")+len(\"          python - <<'PY'\\n\"); b=t.index(\"\\n          PY\\n\",a); s='\\n'.join((line[10:] if line.startswith('          ') else line) for line in t[a:b].splitlines()); exec(compile(s,'apply_global_validation.py','exec'))"
+
+      - name: Limpar scripts temporarios
+        run: rm .github/workflows/apply-global-required-validation.yml .github/workflows/run-global-required-validation.yml
+
+      - name: Instalar dependencias
+        run: npm install --no-package-lock
+
+      - name: Validar build
+        run: npm run build
+
+      - name: Commitar alteracoes
+        shell: bash
+        run: |
+          git config user.name "Fernando Azeredo - automacao"
+          git config user.email "132702186+fernandoazeredo@users.noreply.github.com"
+          git add src .github/workflows/apply-global-required-validation.yml .github/workflows/run-global-required-validation.yml
+          git commit -m "Implementa regra global de campos obrigatorios"
+          git push origin HEAD:dev-fm-2026-09-08
