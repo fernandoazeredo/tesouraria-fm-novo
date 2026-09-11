@@ -1,0 +1,108 @@
+name: Corrigir destaque dos campos obrigatorios - Dados do Processo
+
+on:
+  push:
+    branches:
+      - dev-fm-2026-09-08
+    paths:
+      - '.github/workflows/fix-process-required-visual.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+        with:
+          ref: dev-fm-2026-09-08
+          fetch-depth: 0
+
+      - name: Aplicar destaque nos Dados do Processo
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: esperado 1 trecho, encontrado {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # ALVARA
+          path = 'src/pages/ReceivablesPageStorageV2.tsx'
+          replace_once(path,
+              "  const [showClientValidation, setShowClientValidation] = useState(false)\n  const [unidade, setUnidade]",
+              "  const [showClientValidation, setShowClientValidation] = useState(false)\n  const [showProcessValidation, setShowProcessValidation] = useState(false)\n  const [unidade, setUnidade]",
+              'alvara-process-state')
+          replace_once(path,
+              "  const clientBankingIncomplete = !banco.trim() || !agencia.trim() || !conta.trim() || !titular.trim() || !cpf.trim()\n",
+              "  const clientBankingIncomplete = !banco.trim() || !agencia.trim() || !conta.trim() || !titular.trim() || !cpf.trim()\n  const processDataIncomplete = !processo.trim() || !reclamante.trim()\n",
+              'alvara-process-derived')
+          replace_once(path,
+              "    if (uploading) { window.alert('Aguarde o término do envio dos documentos.'); return }\n    if (!processo.trim() || !reclamante.trim() || totalAlvara <= 0) { window.alert('Preencha número do processo, reclamante e valor líquido do alvará.'); return }\n    if (status === 'rascunho') setShowClientValidation(false)\n    if (status === 'enviado_tesouraria' && liquidoCliente > 0 && clientBankingIncomplete) {\n      setShowClientValidation(true)\n      window.requestAnimationFrame(() => {\n        const firstField = document.querySelector('.revenue-sheet .field-validation-error input') as HTMLInputElement | null\n        firstField?.scrollIntoView({ behavior: 'smooth', block: 'center' })\n        firstField?.focus()\n      })\n      return\n    }\n    if (status === 'enviado_tesouraria') setShowClientValidation(false)\n",
+              "    if (uploading) { window.alert('Aguarde o término do envio dos documentos.'); return }\n    const basicDataIncomplete = processDataIncomplete || totalAlvara <= 0\n    if (status === 'rascunho' && basicDataIncomplete) { window.alert('Preencha número do processo, reclamante e valor líquido do alvará.'); return }\n    if (status === 'rascunho') { setShowProcessValidation(false); setShowClientValidation(false) }\n    if (status === 'enviado_tesouraria') {\n      const clientValidationNeeded = liquidoCliente > 0 && clientBankingIncomplete\n      if (processDataIncomplete || clientValidationNeeded) {\n        setShowProcessValidation(processDataIncomplete)\n        setShowClientValidation(clientValidationNeeded)\n        window.requestAnimationFrame(() => {\n          const firstField = document.querySelector('.revenue-sheet .field-validation-error input') as HTMLInputElement | null\n          firstField?.scrollIntoView({ behavior: 'smooth', block: 'center' })\n          firstField?.focus()\n        })\n        return\n      }\n      if (totalAlvara <= 0) { window.alert('Preencha número do processo, reclamante e valor líquido do alvará.'); return }\n      setShowProcessValidation(false)\n      setShowClientValidation(false)\n    }\n",
+              'alvara-process-save')
+          replace_once(path,
+              "    <h3 className=\"form-section-title\">Dados do Processo</h3>\n    <div className=\"form-grid compact-grid\">",
+              "    <h3 className=\"form-section-title\">Dados do Processo</h3>\n    {showProcessValidation && processDataIncomplete && <div className=\"form-validation-summary\" role=\"alert\">Preencha os campos destacados para continuar.</div>}\n    <div className=\"form-grid compact-grid\">",
+              'alvara-process-summary')
+          replace_once(path,
+              "<label className=\"span-2\"><span>Número do processo</span><input value={processo} onChange={(e) => setProcesso(e.target.value)} /></label>",
+              "<label className={`span-2${showProcessValidation && !processo.trim() ? ' field-validation-error' : ''}`}><span>Número do processo</span><input value={processo} aria-invalid={showProcessValidation && !processo.trim()} onChange={(e) => setProcesso(e.target.value)} />{showProcessValidation && !processo.trim() && <small className=\"field-validation-message\">Campo obrigatório</small>}</label>",
+              'alvara-process-field')
+          replace_once(path,
+              "<label className=\"span-2\"><span>Reclamante</span><input value={reclamante} onChange={(e) => setReclamante(e.target.value)} /></label>",
+              "<label className={`span-2${showProcessValidation && !reclamante.trim() ? ' field-validation-error' : ''}`}><span>Reclamante</span><input value={reclamante} aria-invalid={showProcessValidation && !reclamante.trim()} onChange={(e) => setReclamante(e.target.value)} />{showProcessValidation && !reclamante.trim() && <small className=\"field-validation-message\">Campo obrigatório</small>}</label>",
+              'alvara-claimant-field')
+
+          # ACORDO
+          path = 'src/components/LaborAgreementReceivable.tsx'
+          replace_once(path,
+              "  const [showClientValidation, setShowClientValidation] = useState(false)\n  const [unidade, setUnidade]",
+              "  const [showClientValidation, setShowClientValidation] = useState(false)\n  const [showProcessValidation, setShowProcessValidation] = useState(false)\n  const [unidade, setUnidade]",
+              'acordo-process-state')
+          replace_once(path,
+              "  const clientDataIncomplete = !bancoCliente.trim() || !agenciaCliente.trim() || !contaCliente.trim() || !titularCliente.trim() || !cpfCliente.trim() || !emailCliente.trim() || !telefoneCliente.trim() || !enderecoCliente.trim()\n",
+              "  const clientDataIncomplete = !bancoCliente.trim() || !agenciaCliente.trim() || !contaCliente.trim() || !titularCliente.trim() || !cpfCliente.trim() || !emailCliente.trim() || !telefoneCliente.trim() || !enderecoCliente.trim()\n  const processDataIncomplete = !processo.trim() || !reclamante.trim()\n",
+              'acordo-process-derived')
+          replace_once(path,
+              "    if (!processo.trim() || !reclamante.trim() || valorAcordoBruto <= 0) {\n      window.alert('Preencha número do processo, reclamante e valor bruto do acordo.')\n      return\n    }\n    if (status === 'enviado_tesouraria' && totalRecebido <= 0) {\n      window.alert('Para enviar à Tesouraria, informe ao menos uma parcela com data realizada e valor recebido.')\n      return\n    }\n    if (status === 'rascunho') setShowClientValidation(false)\n    if (status === 'enviado_tesouraria' && liquidoClienteRecebido > 0 && clientDataIncomplete) {\n      setShowClientValidation(true)\n      window.requestAnimationFrame(() => {\n        const firstField = document.querySelector('.labor-agreement-sheet .field-validation-error input') as HTMLInputElement | null\n        firstField?.scrollIntoView({ behavior: 'smooth', block: 'center' })\n        firstField?.focus()\n      })\n      return\n    }\n    if (status === 'enviado_tesouraria') setShowClientValidation(false)\n",
+              "    const basicDataIncomplete = processDataIncomplete || valorAcordoBruto <= 0\n    if (status === 'rascunho' && basicDataIncomplete) {\n      window.alert('Preencha número do processo, reclamante e valor bruto do acordo.')\n      return\n    }\n    if (status === 'rascunho') { setShowProcessValidation(false); setShowClientValidation(false) }\n    if (status === 'enviado_tesouraria') {\n      const clientValidationNeeded = liquidoClienteRecebido > 0 && clientDataIncomplete\n      if (processDataIncomplete || clientValidationNeeded) {\n        setShowProcessValidation(processDataIncomplete)\n        setShowClientValidation(clientValidationNeeded)\n        window.requestAnimationFrame(() => {\n          const firstField = document.querySelector('.labor-agreement-sheet .field-validation-error input') as HTMLInputElement | null\n          firstField?.scrollIntoView({ behavior: 'smooth', block: 'center' })\n          firstField?.focus()\n        })\n        return\n      }\n      if (valorAcordoBruto <= 0) {\n        window.alert('Preencha número do processo, reclamante e valor bruto do acordo.')\n        return\n      }\n      if (totalRecebido <= 0) {\n        window.alert('Para enviar à Tesouraria, informe ao menos uma parcela com data realizada e valor recebido.')\n        return\n      }\n      setShowProcessValidation(false)\n      setShowClientValidation(false)\n    }\n",
+              'acordo-process-save')
+          replace_once(path,
+              "    <h3 className=\"form-section-title\">Dados do Processo</h3>\n    <div className=\"form-grid compact-grid labor-agreement-grid\">",
+              "    <h3 className=\"form-section-title\">Dados do Processo</h3>\n    {showProcessValidation && processDataIncomplete && <div className=\"form-validation-summary\" role=\"alert\">Preencha os campos destacados para continuar.</div>}\n    <div className=\"form-grid compact-grid labor-agreement-grid\">",
+              'acordo-process-summary')
+          replace_once(path,
+              "      <label className=\"span-2\"><span>Número do processo</span><input value={processo} onChange={(e) => setProcesso(e.target.value)} /></label>",
+              "      <label className={`span-2${showProcessValidation && !processo.trim() ? ' field-validation-error' : ''}`}><span>Número do processo</span><input value={processo} aria-invalid={showProcessValidation && !processo.trim()} onChange={(e) => setProcesso(e.target.value)} />{showProcessValidation && !processo.trim() && <small className=\"field-validation-message\">Campo obrigatório</small>}</label>",
+              'acordo-process-field')
+          replace_once(path,
+              "      <label className=\"span-2\"><span>Reclamante</span><input value={reclamante} onChange={(e) => setReclamante(e.target.value)} /></label>",
+              "      <label className={`span-2${showProcessValidation && !reclamante.trim() ? ' field-validation-error' : ''}`}><span>Reclamante</span><input value={reclamante} aria-invalid={showProcessValidation && !reclamante.trim()} onChange={(e) => setReclamante(e.target.value)} />{showProcessValidation && !reclamante.trim() && <small className=\"field-validation-message\">Campo obrigatório</small>}</label>",
+              'acordo-claimant-field')
+          PY
+
+      - name: Remover workflow temporario
+        run: rm .github/workflows/fix-process-required-visual.yml
+
+      - name: Instalar dependencias
+        run: npm install --no-package-lock
+
+      - name: Validar build
+        run: npm run build
+
+      - name: Commitar e publicar
+        shell: bash
+        run: |
+          git config user.name "Fernando Azeredo - automacao"
+          git config user.email "132702186+fernandoazeredo@users.noreply.github.com"
+          git add src/pages/ReceivablesPageStorageV2.tsx src/components/LaborAgreementReceivable.tsx .github/workflows/fix-process-required-visual.yml
+          git commit -m "[deploy-firebase] Destaca campos obrigatorios dos Dados do Processo"
+          git push origin HEAD:dev-fm-2026-09-08
