@@ -23,7 +23,17 @@ jobs:
       - name: Executar script de alteracao
         shell: bash
         run: |
-          python -c "from pathlib import Path; t=Path('.github/workflows/apply-global-required-validation.yml').read_text(encoding='utf-8'); a=t.index(\"          python - <<'PY'\\n\")+len(\"          python - <<'PY'\\n\"); b=t.index(\"\\n          PY\\n\",a); s='\\n'.join((line[10:] if line.startswith('          ') else line) for line in t[a:b].splitlines()); s=s.replace('if count != 1:', 'if count < 1:'); exec(compile(s,'apply_global_validation.py','exec'))"
+          python - <<'PY'
+          from pathlib import Path
+          t = Path('.github/workflows/apply-global-required-validation.yml').read_text(encoding='utf-8')
+          a = t.index("          python - <<'PY'\n") + len("          python - <<'PY'\n")
+          b = t.index("\n          PY\n", a)
+          s = '\n'.join((line[10:] if line.startswith('          ') else line) for line in t[a:b].splitlines())
+          s = s.replace('if count != 1:', 'if count < 1:')
+          s = s.replace("function MoneyInput({ value, onChange, ariaLabel }: { value: number; onChange: (value: number) => void; ariaLabel?: string }) {", "function MoneyInput({ value, onChange, ariaLabel }: { value: number; onChange: (value: number) => void; ariaLabel: string }) {")
+          s = s.replace("function MoneyInput({ value, onChange, ariaLabel, validationKey }: { value: number; onChange: (value: number) => void; ariaLabel?: string; validationKey?: string }) {", "function MoneyInput({ value, onChange, ariaLabel, validationKey }: { value: number; onChange: (value: number) => void; ariaLabel: string; validationKey?: string }) {")
+          exec(compile(s, 'apply_global_validation.py', 'exec'))
+          PY
 
       - name: Limpar scripts temporarios
         run: rm .github/workflows/apply-global-required-validation.yml .github/workflows/run-global-required-validation.yml
