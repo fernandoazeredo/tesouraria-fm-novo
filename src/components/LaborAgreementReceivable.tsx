@@ -76,6 +76,7 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
   const { profile } = useAuth()
   const [recordRef] = useState(() => doc(collection(db, 'receivables')))
   const [busy, setBusy] = useState(false)
+  const [showClientValidation, setShowClientValidation] = useState(false)
   const [unidade, setUnidade] = useState<'RJ' | 'SP'>('RJ')
   const [data, setData] = useState(new Date().toISOString().slice(0, 10))
   const [processo, setProcesso] = useState('')
@@ -111,6 +112,7 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
   const honorariosRecebidos = useMemo(() => realizadas.reduce((sum, row) => sum + row.honorarios, 0), [realizadas])
   const deducoesParcelasRecebidas = useMemo(() => realizadas.reduce((sum, row) => sum + row.deducoes, 0), [realizadas])
   const liquidoClienteRecebido = useMemo(() => realizadas.reduce((sum, row) => sum + row.liquidoCliente, 0), [realizadas])
+  const clientDataIncomplete = !bancoCliente.trim() || !agenciaCliente.trim() || !contaCliente.trim() || !titularCliente.trim() || !cpfCliente.trim() || !emailCliente.trim() || !telefoneCliente.trim() || !enderecoCliente.trim()
 
   function updateParcela(index: number, patch: Partial<Parcela>) {
     setParcelas((current) => current.map((row, i) => {
@@ -154,10 +156,17 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
       window.alert('Para enviar à Tesouraria, informe ao menos uma parcela com data realizada e valor recebido.')
       return
     }
-    if (status === 'enviado_tesouraria' && liquidoClienteRecebido > 0 && (!titularCliente.trim() || !cpfCliente.trim() || !bancoCliente.trim() || !agenciaCliente.trim() || !contaCliente.trim() || !emailCliente.trim() || !telefoneCliente.trim() || !enderecoCliente.trim())) {
-      window.alert('Para realizar o repasse ao cliente, preencha todos os dados obrigatórios do cliente: Nome/Titular, CPF, Banco, Agência, Conta Corrente, E-mail, Telefone e Endereço.')
+    if (status === 'rascunho') setShowClientValidation(false)
+    if (status === 'enviado_tesouraria' && liquidoClienteRecebido > 0 && clientDataIncomplete) {
+      setShowClientValidation(true)
+      window.requestAnimationFrame(() => {
+        const firstField = document.querySelector('.labor-agreement-sheet .field-validation-error input') as HTMLInputElement | null
+        firstField?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        firstField?.focus()
+      })
       return
     }
+    if (status === 'enviado_tesouraria') setShowClientValidation(false)
     if (outrasDeducoes > 0 && !outrasDeducoesDescricao.trim()) {
       window.alert('Especifique as Outras Deduções.')
       return
@@ -283,16 +292,17 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
     <div className="labor-agreement-summary"><span>Valor do acordo <strong>{money.format(valorAcordoBruto)}</strong></span><span>Parcelas previstas <strong>{money.format(totalPrevisto)}</strong></span><span>Recebido até agora <strong>{money.format(totalRecebido)}</strong></span><span>Honorários recebidos <strong>{money.format(honorariosRecebidos)}</strong></span></div>
 
     <h3 className="form-section-title">Dados bancários e contato do cliente</h3>
+    {showClientValidation && liquidoClienteRecebido > 0 && clientDataIncomplete && <div className="form-validation-summary" role="alert">Preencha os campos destacados para continuar.</div>}
     <div className="form-grid compact-grid labor-agreement-grid">
-      <label><span>Banco *</span><input value={bancoCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setBancoCliente(e.target.value)} /></label>
-      <label><span>Agência *</span><input value={agenciaCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setAgenciaCliente(e.target.value)} /></label>
-      <label><span>Conta Corrente *</span><input value={contaCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setContaCliente(e.target.value)} /></label>
-      <label><span>Nome / Titular *</span><input value={titularCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setTitularCliente(e.target.value)} /></label>
-      <label><span>CPF *</span><input value={cpfCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setCpfCliente(e.target.value)} /></label>
+      <label className={showClientValidation && !bancoCliente.trim() ? 'field-validation-error' : ''}><span>Banco *</span><input value={bancoCliente} required={liquidoClienteRecebido > 0} aria-invalid={showClientValidation && !bancoCliente.trim()} onChange={(e) => setBancoCliente(e.target.value)} />{showClientValidation && !bancoCliente.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
+      <label className={showClientValidation && !agenciaCliente.trim() ? 'field-validation-error' : ''}><span>Agência *</span><input value={agenciaCliente} required={liquidoClienteRecebido > 0} aria-invalid={showClientValidation && !agenciaCliente.trim()} onChange={(e) => setAgenciaCliente(e.target.value)} />{showClientValidation && !agenciaCliente.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
+      <label className={showClientValidation && !contaCliente.trim() ? 'field-validation-error' : ''}><span>Conta Corrente *</span><input value={contaCliente} required={liquidoClienteRecebido > 0} aria-invalid={showClientValidation && !contaCliente.trim()} onChange={(e) => setContaCliente(e.target.value)} />{showClientValidation && !contaCliente.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
+      <label className={showClientValidation && !titularCliente.trim() ? 'field-validation-error' : ''}><span>Nome / Titular *</span><input value={titularCliente} required={liquidoClienteRecebido > 0} aria-invalid={showClientValidation && !titularCliente.trim()} onChange={(e) => setTitularCliente(e.target.value)} />{showClientValidation && !titularCliente.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
+      <label className={showClientValidation && !cpfCliente.trim() ? 'field-validation-error' : ''}><span>CPF *</span><input value={cpfCliente} required={liquidoClienteRecebido > 0} aria-invalid={showClientValidation && !cpfCliente.trim()} onChange={(e) => setCpfCliente(e.target.value)} />{showClientValidation && !cpfCliente.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
       <label><span>PIX (opcional)</span><input value={pixCliente} onChange={(e) => setPixCliente(e.target.value)} /></label>
-      <label><span>E-mail *</span><input type="email" value={emailCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setEmailCliente(e.target.value)} /></label>
-      <label><span>Telefone *</span><input value={telefoneCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setTelefoneCliente(e.target.value)} /></label>
-      <label className="span-2"><span>Endereço *</span><input value={enderecoCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setEnderecoCliente(e.target.value)} /></label>
+      <label className={showClientValidation && !emailCliente.trim() ? 'field-validation-error' : ''}><span>E-mail *</span><input type="email" value={emailCliente} required={liquidoClienteRecebido > 0} aria-invalid={showClientValidation && !emailCliente.trim()} onChange={(e) => setEmailCliente(e.target.value)} />{showClientValidation && !emailCliente.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
+      <label className={showClientValidation && !telefoneCliente.trim() ? 'field-validation-error' : ''}><span>Telefone *</span><input value={telefoneCliente} required={liquidoClienteRecebido > 0} aria-invalid={showClientValidation && !telefoneCliente.trim()} onChange={(e) => setTelefoneCliente(e.target.value)} />{showClientValidation && !telefoneCliente.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
+      <label className={`span-2${showClientValidation && !enderecoCliente.trim() ? ' field-validation-error' : ''}`}><span>Endereço *</span><input value={enderecoCliente} required={liquidoClienteRecebido > 0} aria-invalid={showClientValidation && !enderecoCliente.trim()} onChange={(e) => setEnderecoCliente(e.target.value)} />{showClientValidation && !enderecoCliente.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
     </div>
 
     <h3 className="form-section-title">Deduções</h3>

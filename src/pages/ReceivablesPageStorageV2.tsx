@@ -152,6 +152,7 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
   const [recordRef] = useState(() => doc(collection(db, 'receivables')))
   const tasks = useRef<Record<string, UploadTask>>({})
   const [busy, setBusy] = useState(false)
+  const [showClientValidation, setShowClientValidation] = useState(false)
   const [unidade, setUnidade] = useState<'RJ' | 'SP'>('RJ')
   const [data, setData] = useState(new Date().toISOString().slice(0, 10))
   const [natureza, setNatureza] = useState('Trabalhista')
@@ -193,6 +194,7 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
   const invoiceValue = useMemo(() => toNumber(components.find((item) => item.nome === 'Honorários do Escritório')?.valor), [components])
   const uploading = uploads.some((item) => item.status === 'uploading')
   const uploaded = uploads.flatMap((item) => item.meta ? [item.meta] : [])
+  const clientBankingIncomplete = !banco.trim() || !agencia.trim() || !conta.trim() || !titular.trim() || !cpf.trim()
 
   function updatePercent(index: number, percentual: number) {
     const roundedPercent = normalizePercentStored(percentual)
@@ -273,10 +275,17 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
   async function save(status: 'rascunho' | 'enviado_tesouraria') {
     if (uploading) { window.alert('Aguarde o término do envio dos documentos.'); return }
     if (!processo.trim() || !reclamante.trim() || totalAlvara <= 0) { window.alert('Preencha número do processo, reclamante e valor líquido do alvará.'); return }
-    if (status === 'enviado_tesouraria' && liquidoCliente > 0 && (!banco.trim() || !agencia.trim() || !conta.trim() || !titular.trim() || !cpf.trim())) {
-      window.alert('Para realizar o repasse ao cliente, preencha Banco, Agência, Conta, Nome/Titular e CPF.')
+    if (status === 'rascunho') setShowClientValidation(false)
+    if (status === 'enviado_tesouraria' && liquidoCliente > 0 && clientBankingIncomplete) {
+      setShowClientValidation(true)
+      window.requestAnimationFrame(() => {
+        const firstField = document.querySelector('.revenue-sheet .field-validation-error input') as HTMLInputElement | null
+        firstField?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        firstField?.focus()
+      })
       return
     }
+    if (status === 'enviado_tesouraria') setShowClientValidation(false)
     const missingGeneralDetail = components.find((item) => (item.nome.includes('Geral') || isDynamicComponent(item.nome)) && toNumber(item.valor) > 0 && !item.detalhe?.trim())
     if (missingGeneralDetail) { window.alert('Informe do que se trata ou quem é o beneficiário em cada linha de Outras Deduções / Participações utilizada.'); return }
     if (agentCommissionValue > 0 && !agentName.trim()) { window.alert('Informe o nome do agente/beneficiário em Outras Deduções / Participações.'); return }
@@ -334,12 +343,13 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
     </div>
 
     <h3 className="form-section-title">Dados bancários para crédito do cliente</h3>
+    {showClientValidation && liquidoCliente > 0 && clientBankingIncomplete && <div className="form-validation-summary" role="alert">Preencha os campos destacados para continuar.</div>}
     <div className="form-grid compact-grid">
-      <label><span>Banco *</span><input value={banco} required={liquidoCliente > 0} onChange={(e) => setBanco(e.target.value)} /></label>
-      <label><span>Agência *</span><input value={agencia} required={liquidoCliente > 0} onChange={(e) => setAgencia(e.target.value)} /></label>
-      <label><span>Conta *</span><input value={conta} required={liquidoCliente > 0} onChange={(e) => setConta(e.target.value)} /></label>
-      <label className="span-2"><span>Nome / Titular *</span><input value={titular} required={liquidoCliente > 0} onChange={(e) => setTitular(e.target.value)} /></label>
-      <label><span>CPF *</span><input value={cpf} required={liquidoCliente > 0} onChange={(e) => setCpf(e.target.value)} /></label>
+      <label className={showClientValidation && !banco.trim() ? 'field-validation-error' : ''}><span>Banco *</span><input value={banco} required={liquidoCliente > 0} aria-invalid={showClientValidation && !banco.trim()} onChange={(e) => setBanco(e.target.value)} />{showClientValidation && !banco.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
+      <label className={showClientValidation && !agencia.trim() ? 'field-validation-error' : ''}><span>Agência *</span><input value={agencia} required={liquidoCliente > 0} aria-invalid={showClientValidation && !agencia.trim()} onChange={(e) => setAgencia(e.target.value)} />{showClientValidation && !agencia.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
+      <label className={showClientValidation && !conta.trim() ? 'field-validation-error' : ''}><span>Conta *</span><input value={conta} required={liquidoCliente > 0} aria-invalid={showClientValidation && !conta.trim()} onChange={(e) => setConta(e.target.value)} />{showClientValidation && !conta.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
+      <label className={`span-2${showClientValidation && !titular.trim() ? ' field-validation-error' : ''}`}><span>Nome / Titular *</span><input value={titular} required={liquidoCliente > 0} aria-invalid={showClientValidation && !titular.trim()} onChange={(e) => setTitular(e.target.value)} />{showClientValidation && !titular.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
+      <label className={showClientValidation && !cpf.trim() ? 'field-validation-error' : ''}><span>CPF *</span><input value={cpf} required={liquidoCliente > 0} aria-invalid={showClientValidation && !cpf.trim()} onChange={(e) => setCpf(e.target.value)} />{showClientValidation && !cpf.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
       <label className="span-2"><span>PIX (opcional)</span><input value={pix} onChange={(e) => setPix(e.target.value)} /></label>
     </div>
     <h3 className="form-section-title">Dados para emissão de Nota Fiscal</h3>
