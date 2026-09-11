@@ -23,6 +23,8 @@ import {
   Wrench,
 } from 'lucide-react'
 
+import { OperationalFlowImage } from '../components/OperationalFlowImage'
+
 function Header({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
   return <div className="page-heading"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{description}</p></div></div>
 }
@@ -69,6 +71,7 @@ export function TipsPageEnhanced() {
         <div><Calculator /><span><strong>Fechamento mensal sem extrato:</strong> Contabilidade → escolha competência/unidade → Baixar ZIP completo. O extrato bancário é opcional; se anexado, entra no pacote automaticamente.</span></div>
       </div>
     </section>
+    <OperationalFlowImage />
   </>
 }
 
