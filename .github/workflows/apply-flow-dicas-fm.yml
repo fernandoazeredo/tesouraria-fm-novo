@@ -1,0 +1,45 @@
+name: Aplicar fluxo operacional em Dicas FM
+
+on:
+  push:
+    branches: [dev-fm-2026-09-08]
+    paths: ['.github/workflows/apply-flow-dicas-fm.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev-fm-2026-09-08
+          fetch-depth: 0
+      - name: Atualizar Dicas
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/pages/HelpPagesEnhanced.tsx')
+          t = p.read_text(encoding='utf-8')
+          if 'OperationalFlowImage' not in t:
+            pos = t.find('\nfunction Header')
+            t = t[:pos] + "\nimport { OperationalFlowImage } from '../components/OperationalFlowImage'\n" + t[pos:]
+          marker = "    </section>\n  </>\n}\n\nexport function HowToPageEnhanced()"
+          if '<OperationalFlowImage />' not in t:
+            if marker not in t: raise SystemExit('Marcador de Dicas nao encontrado')
+            t = t.replace(marker, "    </section>\n    <OperationalFlowImage />\n  </>\n}\n\nexport function HowToPageEnhanced()", 1)
+          p.write_text(t, encoding='utf-8')
+          PY
+      - run: npm install --no-package-lock
+      - run: npm run build
+      - name: Commitar
+        shell: bash
+        run: |
+          rm .github/workflows/apply-flow-dicas-fm.yml
+          git config user.name "Fernando Azeredo - automacao"
+          git config user.email "132702186+fernandoazeredo@users.noreply.github.com"
+          git add -A
+          git commit -m "Adiciona fluxo operacional ao final de Dicas no FM"
+          git push origin HEAD:dev-fm-2026-09-08
