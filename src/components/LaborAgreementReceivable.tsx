@@ -77,6 +77,7 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
   const [recordRef] = useState(() => doc(collection(db, 'receivables')))
   const [busy, setBusy] = useState(false)
   const [showClientValidation, setShowClientValidation] = useState(false)
+  const [showProcessValidation, setShowProcessValidation] = useState(false)
   const [unidade, setUnidade] = useState<'RJ' | 'SP'>('RJ')
   const [data, setData] = useState(new Date().toISOString().slice(0, 10))
   const [processo, setProcesso] = useState('')
@@ -113,6 +114,7 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
   const deducoesParcelasRecebidas = useMemo(() => realizadas.reduce((sum, row) => sum + row.deducoes, 0), [realizadas])
   const liquidoClienteRecebido = useMemo(() => realizadas.reduce((sum, row) => sum + row.liquidoCliente, 0), [realizadas])
   const clientDataIncomplete = !bancoCliente.trim() || !agenciaCliente.trim() || !contaCliente.trim() || !titularCliente.trim() || !cpfCliente.trim() || !emailCliente.trim() || !telefoneCliente.trim() || !enderecoCliente.trim()
+  const processDataIncomplete = !processo.trim() || !reclamante.trim()
 
   function updateParcela(index: number, patch: Partial<Parcela>) {
     setParcelas((current) => current.map((row, i) => {
@@ -148,25 +150,35 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
   }
 
   async function save(status: 'rascunho' | 'enviado_tesouraria') {
-    if (!processo.trim() || !reclamante.trim() || valorAcordoBruto <= 0) {
+    const basicDataIncomplete = processDataIncomplete || valorAcordoBruto <= 0
+    if (status === 'rascunho' && basicDataIncomplete) {
       window.alert('Preencha número do processo, reclamante e valor bruto do acordo.')
       return
     }
-    if (status === 'enviado_tesouraria' && totalRecebido <= 0) {
-      window.alert('Para enviar à Tesouraria, informe ao menos uma parcela com data realizada e valor recebido.')
-      return
+    if (status === 'rascunho') { setShowProcessValidation(false); setShowClientValidation(false) }
+    if (status === 'enviado_tesouraria') {
+      const clientValidationNeeded = liquidoClienteRecebido > 0 && clientDataIncomplete
+      if (processDataIncomplete || clientValidationNeeded) {
+        setShowProcessValidation(processDataIncomplete)
+        setShowClientValidation(clientValidationNeeded)
+        window.requestAnimationFrame(() => {
+          const firstField = document.querySelector('.labor-agreement-sheet .field-validation-error input') as HTMLInputElement | null
+          firstField?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          firstField?.focus()
+        })
+        return
+      }
+      if (valorAcordoBruto <= 0) {
+        window.alert('Preencha número do processo, reclamante e valor bruto do acordo.')
+        return
+      }
+      if (totalRecebido <= 0) {
+        window.alert('Para enviar à Tesouraria, informe ao menos uma parcela com data realizada e valor recebido.')
+        return
+      }
+      setShowProcessValidation(false)
+      setShowClientValidation(false)
     }
-    if (status === 'rascunho') setShowClientValidation(false)
-    if (status === 'enviado_tesouraria' && liquidoClienteRecebido > 0 && clientDataIncomplete) {
-      setShowClientValidation(true)
-      window.requestAnimationFrame(() => {
-        const firstField = document.querySelector('.labor-agreement-sheet .field-validation-error input') as HTMLInputElement | null
-        firstField?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        firstField?.focus()
-      })
-      return
-    }
-    if (status === 'enviado_tesouraria') setShowClientValidation(false)
     if (outrasDeducoes > 0 && !outrasDeducoesDescricao.trim()) {
       window.alert('Especifique as Outras Deduções.')
       return
@@ -257,13 +269,14 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
     <div className="legacy-title-block revenue-title"><strong>FLÁVIO MARQUES ADVOGADOS ASSOCIADOS</strong><span>CONTROLE DE RECEBIMENTO DE ACORDOS</span></div>
 
     <h3 className="form-section-title">Dados do Processo</h3>
+    {showProcessValidation && processDataIncomplete && <div className="form-validation-summary" role="alert">Preencha os campos destacados para continuar.</div>}
     <div className="form-grid compact-grid labor-agreement-grid">
       <label><span>Unidade</span><select value={unidade} onChange={(e) => setUnidade(e.target.value as 'RJ' | 'SP')}><option>RJ</option><option>SP</option></select></label>
       <label><span>Data</span><input type="date" value={data} onChange={(e) => setData(e.target.value)} /></label>
       <label><span>Natureza</span><input value="Trabalhista" readOnly /></label>
-      <label className="span-2"><span>Número do processo</span><input value={processo} onChange={(e) => setProcesso(e.target.value)} /></label>
+      <label className={`span-2${showProcessValidation && !processo.trim() ? ' field-validation-error' : ''}`}><span>Número do processo</span><input value={processo} aria-invalid={showProcessValidation && !processo.trim()} onChange={(e) => setProcesso(e.target.value)} />{showProcessValidation && !processo.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
       <label className="span-2"><span>Reclamada</span><input value={reclamada} onChange={(e) => setReclamada(e.target.value)} /></label>
-      <label className="span-2"><span>Reclamante</span><input value={reclamante} onChange={(e) => setReclamante(e.target.value)} /></label>
+      <label className={`span-2${showProcessValidation && !reclamante.trim() ? ' field-validation-error' : ''}`}><span>Reclamante</span><input value={reclamante} aria-invalid={showProcessValidation && !reclamante.trim()} onChange={(e) => setReclamante(e.target.value)} />{showProcessValidation && !reclamante.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
       <label><span>Percentual Honorários (%)</span><input type="number" min="0" max="100" step="0.01" value={percentualHonorarios} onChange={(e) => setPercentualHonorarios(Math.max(0, Number(e.target.value) || 0))} /></label>
     </div>
 
