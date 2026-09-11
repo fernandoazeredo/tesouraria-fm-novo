@@ -8,6 +8,7 @@ import { useAuth } from '../auth/AuthContext'
 import { FinancialMovementCard } from '../components/FinancialMovementCard'
 import { WorkflowStatusBadge } from '../components/WorkflowStatusBadge'
 import { DEFAULT_BANK_ACCOUNT_ID, getBankAccount, type BankAccount } from '../data/bankAccounts'
+import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const decimalBR = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -71,7 +72,7 @@ function normalizePercentStored(value: number) {
   return Math.max(0, Math.round(value * 100)) / 100
 }
 
-function BrazilianMoneyInput({ value, onChange, ariaLabel }: { value: number; onChange: (value: number) => void; ariaLabel?: string }) {
+function BrazilianMoneyInput({ value, onChange, ariaLabel, validationKey }: { value: number; onChange: (value: number) => void; ariaLabel?: string; validationKey?: string }) {
   const [focused, setFocused] = useState(false)
   const [text, setText] = useState(value > 0 ? decimalBR.format(value) : '')
 
@@ -83,6 +84,7 @@ function BrazilianMoneyInput({ value, onChange, ariaLabel }: { value: number; on
     type="text"
     inputMode="decimal"
     aria-label={ariaLabel}
+    data-required-key={validationKey}
     placeholder="0,00"
     value={text}
     onFocus={(event) => {
@@ -152,8 +154,6 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
   const [recordRef] = useState(() => doc(collection(db, 'receivables')))
   const tasks = useRef<Record<string, UploadTask>>({})
   const [busy, setBusy] = useState(false)
-  const [showClientValidation, setShowClientValidation] = useState(false)
-  const [showProcessValidation, setShowProcessValidation] = useState(false)
   const [unidade, setUnidade] = useState<'RJ' | 'SP'>('RJ')
   const [data, setData] = useState(new Date().toISOString().slice(0, 10))
   const [natureza, setNatureza] = useState('Trabalhista')
@@ -276,28 +276,24 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
 
   async function save(status: 'rascunho' | 'enviado_tesouraria') {
     if (uploading) { window.alert('Aguarde o término do envio dos documentos.'); return }
-    const basicDataIncomplete = processDataIncomplete || totalAlvara <= 0
-    if (status === 'rascunho' && basicDataIncomplete) { window.alert('Preencha número do processo, reclamante e valor líquido do alvará.'); return }
-    if (status === 'rascunho') { setShowProcessValidation(false); setShowClientValidation(false) }
-    if (status === 'enviado_tesouraria') {
-      const clientValidationNeeded = liquidoCliente > 0 && clientBankingIncomplete
-      if (processDataIncomplete || clientValidationNeeded) {
-        setShowProcessValidation(processDataIncomplete)
-        setShowClientValidation(clientValidationNeeded)
-        window.requestAnimationFrame(() => {
-          const firstField = document.querySelector('.revenue-sheet .field-validation-error input') as HTMLInputElement | null
-          firstField?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          firstField?.focus()
-        })
-        return
-      }
-      if (totalAlvara <= 0) { window.alert('Preencha número do processo, reclamante e valor líquido do alvará.'); return }
-      setShowProcessValidation(false)
-      setShowClientValidation(false)
+    const missingKeys: string[] = []
+    if (!processo.trim()) missingKeys.push('alvara-processo')
+    if (!reclamante.trim()) missingKeys.push('alvara-reclamante')
+    if (totalAlvara <= 0) missingKeys.push('alvara-total')
+    if (status === 'enviado_tesouraria' && liquidoCliente > 0) {
+      if (!banco.trim()) missingKeys.push('alvara-banco')
+      if (!agencia.trim()) missingKeys.push('alvara-agencia')
+      if (!conta.trim()) missingKeys.push('alvara-conta')
+      if (!titular.trim()) missingKeys.push('alvara-titular')
+      if (!cpf.trim()) missingKeys.push('alvara-cpf')
     }
-    const missingGeneralDetail = components.find((item) => (item.nome.includes('Geral') || isDynamicComponent(item.nome)) && toNumber(item.valor) > 0 && !item.detalhe?.trim())
-    if (missingGeneralDetail) { window.alert('Informe do que se trata ou quem é o beneficiário em cada linha de Outras Deduções / Participações utilizada.'); return }
-    if (agentCommissionValue > 0 && !agentName.trim()) { window.alert('Informe o nome do agente/beneficiário em Outras Deduções / Participações.'); return }
+    components.forEach((item, index) => {
+      const requiresDetail = (item.nome.includes('Geral') || isDynamicComponent(item.nome)) && toNumber(item.valor) > 0 && !item.detalhe?.trim()
+      if (requiresDetail) missingKeys.push(`alvara-detail-${index}`)
+    })
+    if (agentCommissionValue > 0 && !agentName.trim()) missingKeys.push('alvara-agent')
+    if (missingKeys.length) { showRequiredFieldErrors('.revenue-sheet', missingKeys); return }
+    clearRequiredFieldErrors('.revenue-sheet')
     const componentsToSave = components.map((item) => item.nome === 'Outras Deduções / Participações'
       ? { ...item, detalhe: agentName.trim() }
       : item.nome.startsWith('Outras Deduções / Participações') ? { ...item, detalhe: item.detalhe?.trim() ?? '' } : item)
@@ -326,12 +322,11 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
     <div className="modal-toolbar"><div><span className="eyebrow revenue-text">Recebimento de Alvarás</span><h2>Demonstrativo de Recebimento de Honorários</h2></div><button className="icon-button" onClick={() => void closeAndClean()}><X size={20} /></button></div>
     <div className="legacy-title-block revenue-title"><strong>FLÁVIO MARQUES ADVOGADOS ASSOCIADOS</strong><span>DEMONSTRATIVO DE RECEBIMENTO DE HONORÁRIOS</span></div>
     <h3 className="form-section-title">Dados do Processo</h3>
-    {showProcessValidation && processDataIncomplete && <div className="form-validation-summary" role="alert">Preencha os campos destacados para continuar.</div>}
-    <div className="form-grid compact-grid"><label><span>Unidade</span><select value={unidade} onChange={(e) => setUnidade(e.target.value as 'RJ' | 'SP')}><option>RJ</option><option>SP</option></select></label><label><span>Data</span><input type="date" value={data} onChange={(e) => setData(e.target.value)} /></label><label><span>Natureza</span><select value={natureza} onChange={(e) => setNatureza(e.target.value)}><option>Trabalhista</option><option>Cível</option></select></label><label className={`span-2${showProcessValidation && !processo.trim() ? ' field-validation-error' : ''}`}><span>Número do processo</span><input value={processo} aria-invalid={showProcessValidation && !processo.trim()} onChange={(e) => setProcesso(e.target.value)} />{showProcessValidation && !processo.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label><label className="span-2"><span>Reclamada</span><input value={reclamada} onChange={(e) => setReclamada(e.target.value)} /></label><label className={`span-2${showProcessValidation && !reclamante.trim() ? ' field-validation-error' : ''}`}><span>Reclamante</span><input value={reclamante} aria-invalid={showProcessValidation && !reclamante.trim()} onChange={(e) => setReclamante(e.target.value)} />{showProcessValidation && !reclamante.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label><label><span>Origem</span><select value={origem} onChange={(e) => setOrigem(e.target.value)}><option>Alvará</option><option>Acordo</option></select></label><label><span>Forma de recebimento</span><input value={formaRecebimento} onChange={(e) => setFormaRecebimento(e.target.value)} /></label><label><span>Data prevista</span><input type="date" value={dataPrevista} onChange={(e) => setDataPrevista(e.target.value)} /></label></div>
+    <div className="form-grid compact-grid"><label><span>Unidade</span><select value={unidade} onChange={(e) => setUnidade(e.target.value as 'RJ' | 'SP')}><option>RJ</option><option>SP</option></select></label><label><span>Data</span><input type="date" value={data} onChange={(e) => setData(e.target.value)} /></label><label><span>Natureza</span><select value={natureza} onChange={(e) => setNatureza(e.target.value)}><option>Trabalhista</option><option>Cível</option></select></label><label className="span-2"><span>Número do processo</span><input data-required-key="alvara-processo" value={processo} onChange={(e) => setProcesso(e.target.value)} /></label><label className="span-2"><span>Reclamada</span><input value={reclamada} onChange={(e) => setReclamada(e.target.value)} /></label><label className="span-2"><span>Reclamante</span><input data-required-key="alvara-reclamante" value={reclamante} onChange={(e) => setReclamante(e.target.value)} /></label><label><span>Origem</span><select value={origem} onChange={(e) => setOrigem(e.target.value)}><option>Alvará</option><option>Acordo</option></select></label><label><span>Forma de recebimento</span><input value={formaRecebimento} onChange={(e) => setFormaRecebimento(e.target.value)} /></label><label><span>Data prevista</span><input type="date" value={dataPrevista} onChange={(e) => setDataPrevista(e.target.value)} /></label></div>
     <h3 className="form-section-title">Composição do Valor</h3>
     <div className="composition-table">
       <div className="composition-row composition-head"><span>Componente</span><span>Percentual (%)</span><span>Valor (R$)</span></div>
-      <div className="composition-row total-row"><strong>Valor Líquido do Alvará</strong><span>100%</span><BrazilianMoneyInput value={totalAlvara} onChange={changeTotal} ariaLabel="Valor Líquido do Alvará" /></div>
+      <div className="composition-row total-row"><strong>Valor Líquido do Alvará</strong><span>100%</span><BrazilianMoneyInput value={totalAlvara} onChange={changeTotal} ariaLabel="Valor Líquido do Alvará" validationKey="alvara-total" /></div>
       <div className="composition-row"><strong>Base Cálculo Honorários (Valor Bruto)</strong><span>editável</span><BrazilianMoneyInput value={baseCalculo} onChange={setBaseCalculo} ariaLabel="Base Cálculo Honorários" /></div>
       {components.map((component, index) => {
         const isAgentCommission = component.nome === 'Outras Deduções / Participações'
@@ -340,7 +335,7 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
         return <div className={`composition-row${isDynamic ? ' dynamic-composition-row' : ''}`} key={component.nome}>
           <span className={isOtherDeduction ? 'commission-component-label' : ''}>
             <span className="component-label-text">{componentLabel(component.nome)}</span>
-            {isOtherDeduction && <input aria-label={isAgentCommission ? 'Nome do agente ou beneficiário da comissão' : `Descrição ou beneficiário de ${componentLabel(component.nome)}`} placeholder={isAgentCommission ? 'Nome do agente / beneficiário da comissão' : 'Do que se trata / nome do beneficiário'} value={isAgentCommission ? agentName : component.detalhe ?? ''} onChange={(e) => isAgentCommission ? setAgentName(e.target.value) : updateDetail(index, e.target.value)} />}
+            {isOtherDeduction && <input data-required-key={isAgentCommission ? 'alvara-agent' : `alvara-detail-${index}`} aria-label={isAgentCommission ? 'Nome do agente ou beneficiário da comissão' : `Descrição ou beneficiário de ${componentLabel(component.nome)}`} placeholder={isAgentCommission ? 'Nome do agente / beneficiário da comissão' : 'Do que se trata / nome do beneficiário'} value={isAgentCommission ? agentName : component.detalhe ?? ''} onChange={(e) => isAgentCommission ? setAgentName(e.target.value) : updateDetail(index, e.target.value)} />}
             {isDynamic && <button type="button" className="dynamic-component-trash" title="Excluir campo adicional" aria-label="Excluir campo adicional" onClick={() => removeDynamicComponent(index)}><Trash2 size={16} /></button>}
           </span>
           <BrazilianPercentInput value={component.percentual} onChange={(value) => updatePercent(index, value)} ariaLabel={`Percentual de ${componentLabel(component.nome)}`} />
@@ -353,13 +348,12 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
     </div>
 
     <h3 className="form-section-title">Dados bancários para crédito do cliente</h3>
-    {showClientValidation && liquidoCliente > 0 && clientBankingIncomplete && <div className="form-validation-summary" role="alert">Preencha os campos destacados para continuar.</div>}
     <div className="form-grid compact-grid">
-      <label className={showClientValidation && !banco.trim() ? 'field-validation-error' : ''}><span>Banco *</span><input value={banco} required={liquidoCliente > 0} aria-invalid={showClientValidation && !banco.trim()} onChange={(e) => setBanco(e.target.value)} />{showClientValidation && !banco.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
-      <label className={showClientValidation && !agencia.trim() ? 'field-validation-error' : ''}><span>Agência *</span><input value={agencia} required={liquidoCliente > 0} aria-invalid={showClientValidation && !agencia.trim()} onChange={(e) => setAgencia(e.target.value)} />{showClientValidation && !agencia.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
-      <label className={showClientValidation && !conta.trim() ? 'field-validation-error' : ''}><span>Conta *</span><input value={conta} required={liquidoCliente > 0} aria-invalid={showClientValidation && !conta.trim()} onChange={(e) => setConta(e.target.value)} />{showClientValidation && !conta.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
-      <label className={`span-2${showClientValidation && !titular.trim() ? ' field-validation-error' : ''}`}><span>Nome / Titular *</span><input value={titular} required={liquidoCliente > 0} aria-invalid={showClientValidation && !titular.trim()} onChange={(e) => setTitular(e.target.value)} />{showClientValidation && !titular.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
-      <label className={showClientValidation && !cpf.trim() ? 'field-validation-error' : ''}><span>CPF *</span><input value={cpf} required={liquidoCliente > 0} aria-invalid={showClientValidation && !cpf.trim()} onChange={(e) => setCpf(e.target.value)} />{showClientValidation && !cpf.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
+      <label><span>Banco *</span><input data-required-key="alvara-banco" value={banco} required={liquidoCliente > 0} onChange={(e) => setBanco(e.target.value)} /></label>
+      <label><span>Agência *</span><input data-required-key="alvara-agencia" value={agencia} required={liquidoCliente > 0} onChange={(e) => setAgencia(e.target.value)} /></label>
+      <label><span>Conta *</span><input data-required-key="alvara-conta" value={conta} required={liquidoCliente > 0} onChange={(e) => setConta(e.target.value)} /></label>
+      <label className="span-2"><span>Nome / Titular *</span><input data-required-key="alvara-titular" value={titular} required={liquidoCliente > 0} onChange={(e) => setTitular(e.target.value)} /></label>
+      <label><span>CPF *</span><input data-required-key="alvara-cpf" value={cpf} required={liquidoCliente > 0} onChange={(e) => setCpf(e.target.value)} /></label>
       <label className="span-2"><span>PIX (opcional)</span><input value={pix} onChange={(e) => setPix(e.target.value)} /></label>
     </div>
     <h3 className="form-section-title">Dados para emissão de Nota Fiscal</h3>

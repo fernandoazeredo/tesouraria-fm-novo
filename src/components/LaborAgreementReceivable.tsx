@@ -6,6 +6,7 @@ import { FileText, Plus, Send, Upload, X } from 'lucide-react'
 import { db, storage } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
 import { DEFAULT_BANK_ACCOUNT_ID, getBankAccount, type BankAccount } from '../data/bankAccounts'
+import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const decimalBR = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -39,7 +40,7 @@ function parseMoney(value: string) {
   return Number.isFinite(number) ? Math.max(0, number) : 0
 }
 
-function MoneyInput({ value, onChange, ariaLabel }: { value: number; onChange: (value: number) => void; ariaLabel: string }) {
+function MoneyInput({ value, onChange, ariaLabel, validationKey }: { value: number; onChange: (value: number) => void; ariaLabel: string; validationKey?: string }) {
   const [focused, setFocused] = useState(false)
   const [text, setText] = useState(value > 0 ? decimalBR.format(value) : '')
   useEffect(() => { if (!focused) setText(value > 0 ? decimalBR.format(value) : '') }, [value, focused])
@@ -47,6 +48,7 @@ function MoneyInput({ value, onChange, ariaLabel }: { value: number; onChange: (
     type="text"
     inputMode="decimal"
     aria-label={ariaLabel}
+    data-required-key={validationKey}
     placeholder="0,00"
     value={text}
     onFocus={(event) => { setFocused(true); event.currentTarget.select() }}
@@ -76,8 +78,6 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
   const { profile } = useAuth()
   const [recordRef] = useState(() => doc(collection(db, 'receivables')))
   const [busy, setBusy] = useState(false)
-  const [showClientValidation, setShowClientValidation] = useState(false)
-  const [showProcessValidation, setShowProcessValidation] = useState(false)
   const [unidade, setUnidade] = useState<'RJ' | 'SP'>('RJ')
   const [data, setData] = useState(new Date().toISOString().slice(0, 10))
   const [processo, setProcesso] = useState('')
@@ -150,39 +150,29 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
   }
 
   async function save(status: 'rascunho' | 'enviado_tesouraria') {
-    const basicDataIncomplete = processDataIncomplete || valorAcordoBruto <= 0
-    if (status === 'rascunho' && basicDataIncomplete) {
-      window.alert('Preencha número do processo, reclamante e valor bruto do acordo.')
-      return
+    const missingKeys: string[] = []
+    if (!processo.trim()) missingKeys.push('acordo-processo')
+    if (!reclamante.trim()) missingKeys.push('acordo-reclamante')
+    if (valorAcordoBruto <= 0) missingKeys.push('acordo-valor-bruto')
+    if (status === 'enviado_tesouraria' && totalRecebido <= 0) {
+      const firstIncomplete = parcelas.findIndex((row) => !row.dataRealizada || row.valorParcela <= 0)
+      const index = firstIncomplete >= 0 ? firstIncomplete : 0
+      if (!parcelas[index]?.dataRealizada) missingKeys.push(`acordo-realizada-${index}`)
+      if (Number(parcelas[index]?.valorParcela || 0) <= 0) missingKeys.push(`acordo-parcela-valor-${index}`)
     }
-    if (status === 'rascunho') { setShowProcessValidation(false); setShowClientValidation(false) }
-    if (status === 'enviado_tesouraria') {
-      const clientValidationNeeded = liquidoClienteRecebido > 0 && clientDataIncomplete
-      if (processDataIncomplete || clientValidationNeeded) {
-        setShowProcessValidation(processDataIncomplete)
-        setShowClientValidation(clientValidationNeeded)
-        window.requestAnimationFrame(() => {
-          const firstField = document.querySelector('.labor-agreement-sheet .field-validation-error input') as HTMLInputElement | null
-          firstField?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          firstField?.focus()
-        })
-        return
-      }
-      if (valorAcordoBruto <= 0) {
-        window.alert('Preencha número do processo, reclamante e valor bruto do acordo.')
-        return
-      }
-      if (totalRecebido <= 0) {
-        window.alert('Para enviar à Tesouraria, informe ao menos uma parcela com data realizada e valor recebido.')
-        return
-      }
-      setShowProcessValidation(false)
-      setShowClientValidation(false)
+    if (status === 'enviado_tesouraria' && liquidoClienteRecebido > 0) {
+      if (!bancoCliente.trim()) missingKeys.push('acordo-banco')
+      if (!agenciaCliente.trim()) missingKeys.push('acordo-agencia')
+      if (!contaCliente.trim()) missingKeys.push('acordo-conta')
+      if (!titularCliente.trim()) missingKeys.push('acordo-titular')
+      if (!cpfCliente.trim()) missingKeys.push('acordo-cpf')
+      if (!emailCliente.trim()) missingKeys.push('acordo-email')
+      if (!telefoneCliente.trim()) missingKeys.push('acordo-telefone')
+      if (!enderecoCliente.trim()) missingKeys.push('acordo-endereco')
     }
-    if (outrasDeducoes > 0 && !outrasDeducoesDescricao.trim()) {
-      window.alert('Especifique as Outras Deduções.')
-      return
-    }
+    if (outrasDeducoes > 0 && !outrasDeducoesDescricao.trim()) missingKeys.push('acordo-outras-deducoes')
+    if (missingKeys.length) { showRequiredFieldErrors('.labor-agreement-sheet', missingKeys); return }
+    clearRequiredFieldErrors('.labor-agreement-sheet')
     setBusy(true)
     try {
       const attachments = await uploadAttachments()
@@ -269,21 +259,20 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
     <div className="legacy-title-block revenue-title"><strong>FLÁVIO MARQUES ADVOGADOS ASSOCIADOS</strong><span>CONTROLE DE RECEBIMENTO DE ACORDOS</span></div>
 
     <h3 className="form-section-title">Dados do Processo</h3>
-    {showProcessValidation && processDataIncomplete && <div className="form-validation-summary" role="alert">Preencha os campos destacados para continuar.</div>}
     <div className="form-grid compact-grid labor-agreement-grid">
       <label><span>Unidade</span><select value={unidade} onChange={(e) => setUnidade(e.target.value as 'RJ' | 'SP')}><option>RJ</option><option>SP</option></select></label>
       <label><span>Data</span><input type="date" value={data} onChange={(e) => setData(e.target.value)} /></label>
       <label><span>Natureza</span><input value="Trabalhista" readOnly /></label>
-      <label className={`span-2${showProcessValidation && !processo.trim() ? ' field-validation-error' : ''}`}><span>Número do processo</span><input value={processo} aria-invalid={showProcessValidation && !processo.trim()} onChange={(e) => setProcesso(e.target.value)} />{showProcessValidation && !processo.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
+      <label className="span-2"><span>Número do processo</span><input data-required-key="acordo-processo" value={processo} onChange={(e) => setProcesso(e.target.value)} /></label>
       <label className="span-2"><span>Reclamada</span><input value={reclamada} onChange={(e) => setReclamada(e.target.value)} /></label>
-      <label className={`span-2${showProcessValidation && !reclamante.trim() ? ' field-validation-error' : ''}`}><span>Reclamante</span><input value={reclamante} aria-invalid={showProcessValidation && !reclamante.trim()} onChange={(e) => setReclamante(e.target.value)} />{showProcessValidation && !reclamante.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
+      <label className="span-2"><span>Reclamante</span><input data-required-key="acordo-reclamante" value={reclamante} onChange={(e) => setReclamante(e.target.value)} /></label>
       <label><span>Percentual Honorários (%)</span><input type="number" min="0" max="100" step="0.01" value={percentualHonorarios} onChange={(e) => setPercentualHonorarios(Math.max(0, Number(e.target.value) || 0))} /></label>
     </div>
 
     <h3 className="form-section-title">Dados do Acordo</h3>
     <div className="form-grid compact-grid labor-agreement-grid">
       <label className="span-2"><span>Forma de Recebimento</span><input value={formaRecebimento} onChange={(e) => setFormaRecebimento(e.target.value)} /></label>
-      <label><span>Valor bruto do acordo</span><MoneyInput value={valorAcordoBruto} onChange={setValorAcordoBruto} ariaLabel="Valor bruto do acordo" /></label>
+      <label><span>Valor bruto do acordo</span><MoneyInput value={valorAcordoBruto} onChange={setValorAcordoBruto} ariaLabel="Valor bruto do acordo" validationKey="acordo-valor-bruto" /></label>
       <label><span>Número de parcelas</span><input type="number" min="1" max="60" value={quantidadeParcelas} onChange={(e) => setQuantidadeParcelas(Math.min(60, Math.max(1, Number(e.target.value) || 1)))} /></label>
       <label className="span-2"><span>Conta de recebimento do escritório</span><select value={receivingBankAccountId} onChange={(e) => setReceivingBankAccountId(e.target.value as BankAccount['id'])}>{(['itau-pj','bb-pf','cef-pf'] as BankAccount['id'][]).map((id) => { const account = getBankAccount(id); return <option key={id} value={id}>{account.bank} · Ag. {account.agency} · C/C {account.account}</option> })}</select></label>
     </div>
@@ -294,8 +283,8 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
       {parcelas.map((row, index) => <div className="labor-installment-row" key={row.numero}>
         <strong>{row.numero}</strong>
         <input type="date" value={row.dataPrevista} onChange={(e) => updateParcela(index, { dataPrevista: e.target.value })} />
-        <input type="date" value={row.dataRealizada} onChange={(e) => updateParcela(index, { dataRealizada: e.target.value })} />
-        <MoneyInput value={row.valorParcela} onChange={(value) => updateParcela(index, { valorParcela: value })} ariaLabel={`Valor parcela ${row.numero}`} />
+        <input data-required-key={`acordo-realizada-${index}`} type="date" value={row.dataRealizada} onChange={(e) => updateParcela(index, { dataRealizada: e.target.value })} />
+        <MoneyInput value={row.valorParcela} onChange={(value) => updateParcela(index, { valorParcela: value })} ariaLabel={`Valor parcela ${row.numero}`} validationKey={`acordo-parcela-valor-${index}`} />
         <MoneyInput value={row.honorarios} onChange={(value) => updateParcela(index, { honorarios: value })} ariaLabel={`Honorários parcela ${row.numero}`} />
         <MoneyInput value={row.deducoes} onChange={(value) => updateParcela(index, { deducoes: value })} ariaLabel={`Deduções parcela ${row.numero}`} />
         <strong>{money.format(row.liquidoCliente)}</strong>
@@ -305,17 +294,16 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
     <div className="labor-agreement-summary"><span>Valor do acordo <strong>{money.format(valorAcordoBruto)}</strong></span><span>Parcelas previstas <strong>{money.format(totalPrevisto)}</strong></span><span>Recebido até agora <strong>{money.format(totalRecebido)}</strong></span><span>Honorários recebidos <strong>{money.format(honorariosRecebidos)}</strong></span></div>
 
     <h3 className="form-section-title">Dados bancários e contato do cliente</h3>
-    {showClientValidation && liquidoClienteRecebido > 0 && clientDataIncomplete && <div className="form-validation-summary" role="alert">Preencha os campos destacados para continuar.</div>}
     <div className="form-grid compact-grid labor-agreement-grid">
-      <label className={showClientValidation && !bancoCliente.trim() ? 'field-validation-error' : ''}><span>Banco *</span><input value={bancoCliente} required={liquidoClienteRecebido > 0} aria-invalid={showClientValidation && !bancoCliente.trim()} onChange={(e) => setBancoCliente(e.target.value)} />{showClientValidation && !bancoCliente.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
-      <label className={showClientValidation && !agenciaCliente.trim() ? 'field-validation-error' : ''}><span>Agência *</span><input value={agenciaCliente} required={liquidoClienteRecebido > 0} aria-invalid={showClientValidation && !agenciaCliente.trim()} onChange={(e) => setAgenciaCliente(e.target.value)} />{showClientValidation && !agenciaCliente.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
-      <label className={showClientValidation && !contaCliente.trim() ? 'field-validation-error' : ''}><span>Conta Corrente *</span><input value={contaCliente} required={liquidoClienteRecebido > 0} aria-invalid={showClientValidation && !contaCliente.trim()} onChange={(e) => setContaCliente(e.target.value)} />{showClientValidation && !contaCliente.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
-      <label className={showClientValidation && !titularCliente.trim() ? 'field-validation-error' : ''}><span>Nome / Titular *</span><input value={titularCliente} required={liquidoClienteRecebido > 0} aria-invalid={showClientValidation && !titularCliente.trim()} onChange={(e) => setTitularCliente(e.target.value)} />{showClientValidation && !titularCliente.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
-      <label className={showClientValidation && !cpfCliente.trim() ? 'field-validation-error' : ''}><span>CPF *</span><input value={cpfCliente} required={liquidoClienteRecebido > 0} aria-invalid={showClientValidation && !cpfCliente.trim()} onChange={(e) => setCpfCliente(e.target.value)} />{showClientValidation && !cpfCliente.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
+      <label><span>Banco *</span><input data-required-key="acordo-banco" value={bancoCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setBancoCliente(e.target.value)} /></label>
+      <label><span>Agência *</span><input data-required-key="acordo-agencia" value={agenciaCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setAgenciaCliente(e.target.value)} /></label>
+      <label><span>Conta Corrente *</span><input data-required-key="acordo-conta" value={contaCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setContaCliente(e.target.value)} /></label>
+      <label><span>Nome / Titular *</span><input data-required-key="acordo-titular" value={titularCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setTitularCliente(e.target.value)} /></label>
+      <label><span>CPF *</span><input data-required-key="acordo-cpf" value={cpfCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setCpfCliente(e.target.value)} /></label>
       <label><span>PIX (opcional)</span><input value={pixCliente} onChange={(e) => setPixCliente(e.target.value)} /></label>
-      <label className={showClientValidation && !emailCliente.trim() ? 'field-validation-error' : ''}><span>E-mail *</span><input type="email" value={emailCliente} required={liquidoClienteRecebido > 0} aria-invalid={showClientValidation && !emailCliente.trim()} onChange={(e) => setEmailCliente(e.target.value)} />{showClientValidation && !emailCliente.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
-      <label className={showClientValidation && !telefoneCliente.trim() ? 'field-validation-error' : ''}><span>Telefone *</span><input value={telefoneCliente} required={liquidoClienteRecebido > 0} aria-invalid={showClientValidation && !telefoneCliente.trim()} onChange={(e) => setTelefoneCliente(e.target.value)} />{showClientValidation && !telefoneCliente.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
-      <label className={`span-2${showClientValidation && !enderecoCliente.trim() ? ' field-validation-error' : ''}`}><span>Endereço *</span><input value={enderecoCliente} required={liquidoClienteRecebido > 0} aria-invalid={showClientValidation && !enderecoCliente.trim()} onChange={(e) => setEnderecoCliente(e.target.value)} />{showClientValidation && !enderecoCliente.trim() && <small className="field-validation-message">Campo obrigatório</small>}</label>
+      <label><span>E-mail *</span><input data-required-key="acordo-email" type="email" value={emailCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setEmailCliente(e.target.value)} /></label>
+      <label><span>Telefone *</span><input data-required-key="acordo-telefone" value={telefoneCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setTelefoneCliente(e.target.value)} /></label>
+      <label className="span-2"><span>Endereço *</span><input data-required-key="acordo-endereco" value={enderecoCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setEnderecoCliente(e.target.value)} /></label>
     </div>
 
     <h3 className="form-section-title">Deduções</h3>
@@ -324,7 +312,7 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
       <label><span>Data Repasse Perito</span><input type="date" value={dataRepassePerito} onChange={(e) => setDataRepassePerito(e.target.value)} /></label>
       <label><span>Ressarcimentos de Custas</span><MoneyInput value={ressarcimentoCustas} onChange={setRessarcimentoCustas} ariaLabel="Ressarcimentos de Custas" /></label>
       <label><span>Outras Deduções</span><MoneyInput value={outrasDeducoes} onChange={setOutrasDeducoes} ariaLabel="Outras Deduções" /></label>
-      <label className="span-2"><span>Especificar outras deduções</span><input value={outrasDeducoesDescricao} onChange={(e) => setOutrasDeducoesDescricao(e.target.value)} /></label>
+      <label className="span-2"><span>Especificar outras deduções</span><input data-required-key="acordo-outras-deducoes" value={outrasDeducoesDescricao} onChange={(e) => setOutrasDeducoesDescricao(e.target.value)} /></label>
     </div>
 
     <h3 className="form-section-title">Documentos do Acordo</h3>

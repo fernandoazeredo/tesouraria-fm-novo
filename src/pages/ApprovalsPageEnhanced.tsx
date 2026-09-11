@@ -4,6 +4,7 @@ import { addDoc, collection, doc, onSnapshot, serverTimestamp, updateDoc, type D
 import { db } from '../lib/firebase'
 import { PRIMARY_ADMIN_EMAIL, isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
 import { WorkflowStatusBadge } from '../components/WorkflowStatusBadge'
+import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 type AnyRecord = { id: string } & DocumentData
@@ -77,7 +78,9 @@ export function ApprovalsPageEnhanced() {
   }
 
   async function confirmDecision() {
-    if (!canDecide || !decision || !reason.trim()) return
+    if (!canDecide || !decision) return
+    if (!reason.trim()) { showRequiredFieldErrors('.decision-modal', ['approval-reason']); return }
+    clearRequiredFieldErrors('.decision-modal')
     setBusy(true)
     try {
       const label = expenseStatusLabels[decision.status]
@@ -113,6 +116,6 @@ export function ApprovalsPageEnhanced() {
       {queue.length === 0 ? <div className="module-empty"><FileCheck2 size={34} /><strong>Nenhuma aprovação pendente</strong><span>As despesas enviadas ou reenviadas pela operação aparecerão nesta fila.</span></div> : <div className="approval-list">{queue.map((item) => <article className="approval-item" key={item.id}><div><WorkflowStatusBadge status={item.status} label={expenseStatusLabels[item.status] || item.status} /><h3>{expenseBeneficiary(item)}</h3><p>{item.cpfCnpj || item.cnpjCpf || 'Documento não informado'} · {item.competencia || 'Sem competência'} · {item.categoria || 'Sem categoria'}</p></div><strong className="expense-text">{money.format(Number(item.valorTotal ?? 0))}</strong>{canDecide ? <div className="row-actions"><button className="small-success-button" disabled={busy} onClick={() => approve(item)}><BadgeCheck size={15} /> Aprovar</button><button className="small-neutral-button" disabled={busy} onClick={() => openDecision(item, 'devolvido')}>Devolver</button><button className="small-expense-button" disabled={busy} onClick={() => openDecision(item, 'rejeitado')}>Rejeitar</button></div> : <div className="row-actions"><span className="status-badge neutral">Somente consulta</span></div>}</article>)}</div>}
     </section>
 
-    {decision && canDecide && <div className="modal-backdrop"><section className={`decision-modal ${decision.status}`} role="dialog" aria-modal="true"><div className="modal-toolbar"><div><span className="eyebrow">{isMasterTester ? 'Administrador Master · Homologação' : 'Diretoria autorizadora'}</span><h2>{decision.status === 'devolvido' ? 'Devolver para correção' : 'Rejeitar despesa'}</h2></div><button className="icon-button" type="button" onClick={() => setDecision(null)}><X size={20} /></button></div><div className="decision-warning"><AlertTriangle size={20} /><div><strong>{expenseBeneficiary(decision.item)}</strong><span>{money.format(Number(decision.item.valorTotal ?? 0))}</span></div></div><label className="decision-reason"><span>{decision.status === 'devolvido' ? 'O que precisa ser corrigido?' : 'Justificativa da rejeição'}</span><textarea rows={5} autoFocus value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Digite o motivo completo. Ele ficará registrado na Auditoria." /></label><div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setDecision(null)}>Cancelar</button><button className={decision.status === 'rejeitado' ? 'expense-button' : 'warning-action-button'} type="button" disabled={busy || !reason.trim()} onClick={confirmDecision}>{busy ? 'Registrando...' : decision.status === 'devolvido' ? 'Confirmar devolução' : 'Confirmar rejeição'}</button></div></section></div>}
+    {decision && canDecide && <div className="modal-backdrop"><section className={`decision-modal ${decision.status}`} role="dialog" aria-modal="true"><div className="modal-toolbar"><div><span className="eyebrow">{isMasterTester ? 'Administrador Master · Homologação' : 'Diretoria autorizadora'}</span><h2>{decision.status === 'devolvido' ? 'Devolver para correção' : 'Rejeitar despesa'}</h2></div><button className="icon-button" type="button" onClick={() => setDecision(null)}><X size={20} /></button></div><div className="decision-warning"><AlertTriangle size={20} /><div><strong>{expenseBeneficiary(decision.item)}</strong><span>{money.format(Number(decision.item.valorTotal ?? 0))}</span></div></div><label className="decision-reason"><span>{decision.status === 'devolvido' ? 'O que precisa ser corrigido?' : 'Justificativa da rejeição'}</span><textarea data-required-key="approval-reason" rows={5} autoFocus value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Digite o motivo completo. Ele ficará registrado na Auditoria." /></label><div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setDecision(null)}>Cancelar</button><button className={decision.status === 'rejeitado' ? 'expense-button' : 'warning-action-button'} type="button" disabled={busy} onClick={confirmDecision}>{busy ? 'Registrando...' : decision.status === 'devolvido' ? 'Confirmar devolução' : 'Confirmar rejeição'}</button></div></section></div>}
   </>
 }

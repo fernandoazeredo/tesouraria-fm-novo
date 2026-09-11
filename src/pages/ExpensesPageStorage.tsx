@@ -10,6 +10,7 @@ import { FinancialMovementCard } from '../components/FinancialMovementCard'
 import { WorkflowStatusBadge } from '../components/WorkflowStatusBadge'
 import { DEFAULT_BANK_ACCOUNT_ID, getBankAccount, type BankAccount } from '../data/bankAccounts'
 import type { ChartOfAccount } from '../data/chartOfAccounts'
+import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 type AnyRecord = { id: string } & DocumentData
@@ -237,10 +238,14 @@ function ExpenseModal({ record, onClose }: { record?: AnyRecord | null; onClose:
 
   async function save(status: 'rascunho' | 'devolvido' | 'enviado_aprovacao') {
     const validItems = items.filter((item) => item.historico.trim() || parseBRL(item.valor) > 0)
-    if (!nome.trim() || !validItems.length || total <= 0) {
-      window.alert('Preencha o nome/responsável e pelo menos uma linha de despesa com histórico e valor.')
-      return
-    }
+    const missingKeys: string[] = []
+    if (!nome.trim()) missingKeys.push('expense-name')
+    const firstValidIndex = items.findIndex((item) => item.historico.trim() || parseBRL(item.valor) > 0)
+    const requiredIndex = firstValidIndex >= 0 ? firstValidIndex : 0
+    if (!items[requiredIndex]?.historico.trim()) missingKeys.push(`expense-history-${requiredIndex}`)
+    if (parseBRL(items[requiredIndex]?.valor || '') <= 0 || total <= 0) missingKeys.push(`expense-value-${requiredIndex}`)
+    if (missingKeys.length) { showRequiredFieldErrors('.expense-sheet', missingKeys); return }
+    clearRequiredFieldErrors('.expense-sheet')
     if (hasUploading) {
       window.alert('Aguarde a conclusão do envio dos anexos. O progresso está sendo mostrado no formulário.')
       return
@@ -309,9 +314,9 @@ function ExpenseModal({ record, onClose }: { record?: AnyRecord | null; onClose:
     <div className="legacy-title-block"><strong>FLÁVIO MARQUES ADVOGADOS ASSOCIADOS</strong><span>DEMONSTRATIVO DE DESPESAS</span></div>
     {isReturned && <div className="return-note"><div><strong>Devolvido para correção</strong><span>{record?.approvalNote || 'A Diretoria solicitou correção deste demonstrativo.'}</span></div></div>}
 
-    <div className="form-grid compact-grid"><label><span>Unidade</span><select value={unidade} onChange={(e) => setUnidade(e.target.value as 'RJ' | 'SP')}><option>RJ</option><option>SP</option></select></label><label className="span-2"><span>Nome / Responsável</span><input value={nome} onChange={(e) => setNome(e.target.value)} /></label><label><span>Competência</span><input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} /></label><label className="span-2"><span>Fornecedor / Favorecido</span><input value={fornecedor} onChange={(e) => setFornecedor(e.target.value)} /></label><label><span>CPF / CNPJ</span><input value={documento} onChange={(e) => setDocumento(e.target.value)} /></label></div>
+    <div className="form-grid compact-grid"><label><span>Unidade</span><select value={unidade} onChange={(e) => setUnidade(e.target.value as 'RJ' | 'SP')}><option>RJ</option><option>SP</option></select></label><label className="span-2"><span>Nome / Responsável</span><input data-required-key="expense-name" value={nome} onChange={(e) => setNome(e.target.value)} /></label><label><span>Competência</span><input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} /></label><label className="span-2"><span>Fornecedor / Favorecido</span><input value={fornecedor} onChange={(e) => setFornecedor(e.target.value)} /></label><label><span>CPF / CNPJ</span><input value={documento} onChange={(e) => setDocumento(e.target.value)} /></label></div>
 
-    <div className="legacy-table expense-table"><div className="legacy-row legacy-head"><span>DATA</span><span>HISTÓRICO</span><span>VALOR</span><span></span></div>{items.map((item, index) => <div className="legacy-row" key={index}><input type="date" value={item.data} onChange={(e) => updateItem(index, 'data', e.target.value)} /><input value={item.historico} onChange={(e) => updateItem(index, 'historico', e.target.value)} /><input inputMode="numeric" value={item.valor} onChange={(e) => updateItem(index, 'valor', formatCurrencyFromDigits(e.target.value))} placeholder="R$ 0,00" /><button type="button" className="row-remove" onClick={() => setItems((current) => current.length > 1 ? current.filter((_, i) => i !== index) : current)}><Trash2 size={15} /></button></div>)}</div>
+    <div className="legacy-table expense-table"><div className="legacy-row legacy-head"><span>DATA</span><span>HISTÓRICO</span><span>VALOR</span><span></span></div>{items.map((item, index) => <div className="legacy-row" key={index}><input type="date" value={item.data} onChange={(e) => updateItem(index, 'data', e.target.value)} /><input data-required-key={`expense-history-${index}`} value={item.historico} onChange={(e) => updateItem(index, 'historico', e.target.value)} /><input data-required-key={`expense-value-${index}`} inputMode="numeric" value={item.valor} onChange={(e) => updateItem(index, 'valor', formatCurrencyFromDigits(e.target.value))} placeholder="R$ 0,00" /><button type="button" className="row-remove" onClick={() => setItems((current) => current.length > 1 ? current.filter((_, i) => i !== index) : current)}><Trash2 size={15} /></button></div>)}</div>
     <button type="button" className="add-row-button expense-text" onClick={() => setItems((current) => [...current, { data: '', historico: '', valor: '' }])}><Plus size={16} /> Adicionar linha</button>
 
     <div className="form-grid compact-grid section-gap"><label className="span-2"><span>Detalhamento complementar <small>(opcional)</small></span><input value={subcategoria} onChange={(e) => setSubcategoria(e.target.value)} /></label><label className="span-3"><span>OBS.</span><textarea rows={3} value={observacoes} onChange={(e) => setObservacoes(e.target.value)} /></label></div>

@@ -5,6 +5,7 @@ import { Save } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { db } from '../lib/firebase'
+import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 
 const DEFAULTS = {
   razaoSocial: 'MARQUES & MÜLLER ADVOGADOS ASSOCIADOS',
@@ -62,10 +63,12 @@ export function InstitutionalSettingsEditor() {
 
   async function save() {
     if (!profile || profile.role !== 'master') return
-    if (!form.razaoSocial.trim() || !form.cnpj.trim() || !form.endereco.trim()) {
-      setMessage('Preencha todos os campos.')
-      return
-    }
+    const missingKeys: string[] = []
+    if (!form.razaoSocial.trim()) missingKeys.push('institution-name')
+    if (!form.cnpj.trim()) missingKeys.push('institution-cnpj')
+    if (!form.endereco.trim()) missingKeys.push('institution-address')
+    if (missingKeys.length) { showRequiredFieldErrors('.institutional-settings-editor', missingKeys); return }
+    clearRequiredFieldErrors('.institutional-settings-editor')
     setSaving(true)
     setMessage('')
     try {
@@ -89,9 +92,9 @@ export function InstitutionalSettingsEditor() {
 
   return createPortal(
     <div className="settings-grid institutional-settings-editor">
-      <label><span>Razão Social</span><input value={form.razaoSocial} onChange={(e) => setForm((current) => ({ ...current, razaoSocial: e.target.value }))} /></label>
-      <label><span>CNPJ</span><input value={form.cnpj} onChange={(e) => setForm((current) => ({ ...current, cnpj: e.target.value }))} /></label>
-      <label className="settings-full-width"><span>Endereço</span><input value={form.endereco} onChange={(e) => setForm((current) => ({ ...current, endereco: e.target.value }))} /></label>
+      <label><span>Razão Social</span><input data-required-key="institution-name" value={form.razaoSocial} onChange={(e) => setForm((current) => ({ ...current, razaoSocial: e.target.value }))} /></label>
+      <label><span>CNPJ</span><input data-required-key="institution-cnpj" value={form.cnpj} onChange={(e) => setForm((current) => ({ ...current, cnpj: e.target.value }))} /></label>
+      <label className="settings-full-width"><span>Endereço</span><input data-required-key="institution-address" value={form.endereco} onChange={(e) => setForm((current) => ({ ...current, endereco: e.target.value }))} /></label>
       <div className="settings-full-width" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <button className="primary-button" type="button" disabled={saving} onClick={() => void save()}><Save size={17} /> {saving ? 'Salvando...' : 'Salvar alterações'}</button>
         {message && <span>{message}</span>}

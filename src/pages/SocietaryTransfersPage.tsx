@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
+import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 import '../societary-transfers.css'
 
 type AnyRecord = { id: string } & DocumentData
@@ -281,7 +282,9 @@ function SettingsPanel() {
 
   async function save() {
     if (!canEdit) return
-    if (!form.beneficiary.trim() || form.defaultPercent < 0 || form.defaultPercent > 100 || form.dueDay < 0 || form.dueDay > 31) {
+    if (!form.beneficiary.trim()) { showRequiredFieldErrors('.soc-settings', ['soc-beneficiary']); return }
+    clearRequiredFieldErrors('.soc-settings')
+    if (form.defaultPercent < 0 || form.defaultPercent > 100 || form.dueDay < 0 || form.dueDay > 31) {
       window.alert('Revise beneficiário, percentual padrão e dia de vencimento.')
       return
     }
@@ -312,7 +315,7 @@ function SettingsPanel() {
   return <details className="soc-settings">
     <summary><Settings2 size={17} /> Parâmetros do acordo</summary>
     <div className="soc-settings-grid soc-settings-grid-full">
-      <label><span>Beneficiário</span><input value={form.beneficiary} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, beneficiary: event.target.value }))} /></label>
+      <label><span>Beneficiário</span><input data-required-key="soc-beneficiary" value={form.beneficiary} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, beneficiary: event.target.value }))} /></label>
       <label><span>Percentual padrão</span><input type="number" min="0" max="100" step="0.01" value={form.defaultPercent} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, defaultPercent: toNumber(event.target.value) }))} /></label>
       <label><span>Data de início</span><input type="date" value={form.startDate} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></label>
       <label><span>Data de encerramento</span><input type="date" value={form.endDate} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></label>

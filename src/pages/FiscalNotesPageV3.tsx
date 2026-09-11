@@ -3,6 +3,7 @@ import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type Docu
 import { FileText, RefreshCw, Search, X } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
+import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 import '../fiscal-notes-v3.css'
 
 type AnyRecord = { id: string } & DocumentData
@@ -79,10 +80,13 @@ function FiscalNoteModal({ source, note, onClose }: { source: AnyRecord; note?: 
 
   async function save() {
     if (!profile || !canEdit) return
-    if (status === 'emitida' && (!number.trim() || !issueDate)) {
-      window.alert('Para marcar como Emitida, informe o número da NFS-e e a data de emissão.')
-      return
+    if (status === 'emitida') {
+      const missingKeys: string[] = []
+      if (!number.trim()) missingKeys.push('fiscal-number')
+      if (!issueDate) missingKeys.push('fiscal-date')
+      if (missingKeys.length) { showRequiredFieldErrors('.obligation-modal', missingKeys); return }
     }
+    clearRequiredFieldErrors('.obligation-modal')
     setBusy(true)
     try {
       await setDoc(doc(db, 'fiscalNotes', source.id), {
@@ -127,7 +131,7 @@ function FiscalNoteModal({ source, note, onClose }: { source: AnyRecord; note?: 
   return <div className="modal-backdrop"><section className="decision-modal obligation-modal" role="dialog" aria-modal="true">
     <div className="modal-toolbar"><div><span className="eyebrow">Nota Fiscal / NFS-e</span><h2>Dados para emissão</h2></div><button className="icon-button" type="button" onClick={onClose}><X size={20} /></button></div>
     <div className="fiscal-client-card"><div><span>Cliente</span><strong>{source.titular || source.reclamante || '—'}</strong></div><div><span>CPF</span><strong>{source.cpf || '—'}</strong></div><div><span>E-mail</span><strong>{source.emailNf || '—'}</strong></div><div><span>Endereço</span><strong>{source.enderecoNf || '—'}</strong></div><div><span>Processo</span><strong>{source.processo || '—'}</strong></div><div className="fiscal-value"><span>Valor da NFS-e / Honorários</span><strong>{money.format(value)}</strong></div></div>
-    <div className="obligation-form-grid fiscal-form-grid"><label><span>Status da NFS-e</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="pendente">Pendente de emissão</option><option value="emitida">Emitida</option><option value="cancelada">Cancelada</option></select></label><label><span>Número da NFS-e</span><input value={number} onChange={(event) => setNumber(event.target.value)} placeholder="Ex.: 0085967" /></label><label><span>Data de emissão</span><input type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} /></label></div>
+    <div className="obligation-form-grid fiscal-form-grid"><label><span>Status da NFS-e</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="pendente">Pendente de emissão</option><option value="emitida">Emitida</option><option value="cancelada">Cancelada</option></select></label><label><span>Número da NFS-e</span><input data-required-key="fiscal-number" value={number} onChange={(event) => setNumber(event.target.value)} placeholder="Ex.: 0085967" /></label><label><span>Data de emissão</span><input data-required-key="fiscal-date" type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} /></label></div>
     <label className="obligation-notes"><span>Observações</span><textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
     <div className="modal-actions"><button className="secondary-button" type="button" onClick={onClose}>Fechar</button>{canEdit && <button className="revenue-button" type="button" disabled={busy} onClick={() => void save()}><FileText size={16} /> Salvar controle da NFS-e</button>}</div>
   </section></div>

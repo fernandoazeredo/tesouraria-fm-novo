@@ -129,7 +129,7 @@ nav { display: flex; flex-direction: column; gap: 4px; }
 }
 
 
-/* Validacao visual inline dos campos obrigatorios do cliente */
+/* Regra global de validacao visual dos campos obrigatorios */
 .form-validation-summary { margin: 0 0 12px; border: 1px solid rgba(220, 38, 38, .42); background: rgba(220, 38, 38, .08); color: #b91c1c; border-radius: 10px; padding: 10px 12px; font-size: 13px; font-weight: 800; }
 .field-validation-error > span:first-child { color: #b91c1c !important; font-weight: 800; }
 .field-validation-error input, .field-validation-error select, .field-validation-error textarea { border-color: #dc2626 !important; background: rgba(220, 38, 38, .06) !important; box-shadow: 0 0 0 3px rgba(220, 38, 38, .12) !important; animation: required-field-pulse .45s ease-out; }
@@ -137,3 +137,8 @@ nav { display: flex; flex-direction: column; gap: 4px; }
 .field-validation-message { color: #b91c1c; font-size: 11px; font-weight: 800; line-height: 1.2; }
 @keyframes required-field-pulse { 0% { transform: scale(.995); } 55% { transform: scale(1.01); } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .field-validation-error input, .field-validation-error select, .field-validation-error textarea { animation: none; } }
+
+
+/* Controles obrigatorios sem wrapper label */
+input.required-control-error, select.required-control-error, textarea.required-control-error { border-color: #dc2626 !important; background: rgba(220, 38, 38, .06) !important; box-shadow: 0 0 0 3px rgba(220, 38, 38, .12) !important; animation: required-field-pulse .45s ease-out; }
+input.required-control-error:focus, select.required-control-error:focus, textarea.required-control-error:focus { border-color: #b91c1c !important; box-shadow: 0 0 0 4px rgba(220, 38, 38, .18) !important; }

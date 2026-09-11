@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import { DEFAULT_BANK_ACCOUNT_ID, getBankAccount, type BankAccount } from '../data/bankAccounts'
 import { officialChartOfAccounts } from '../data/chartOfAccounts'
+import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const decimalBR = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -33,7 +34,7 @@ function parseMoney(value: string) {
   return Number.isFinite(number) ? Math.max(0, number) : 0
 }
 
-function MoneyInput({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+function MoneyInput({ value, onChange, validationKey }: { value: number; onChange: (value: number) => void; validationKey?: string }) {
   const [focused, setFocused] = useState(false)
   const [text, setText] = useState(value > 0 ? decimalBR.format(value) : '')
 
@@ -45,6 +46,7 @@ function MoneyInput({ value, onChange }: { value: number; onChange: (value: numb
     type="text"
     inputMode="decimal"
     aria-label="Valor da outra receita"
+    data-required-key={validationKey}
     placeholder="0,00"
     value={text}
     onFocus={(event) => { setFocused(true); event.currentTarget.select() }}
@@ -98,10 +100,13 @@ function OtherRevenueModal({ onClose }: { onClose: () => void }) {
   }
 
   async function save(status: 'rascunho' | 'enviado_tesouraria') {
-    if (!descricao.trim() || valor <= 0 || !selectedAccount) {
-      window.alert('Preencha descrição/origem, valor e conta gerencial.')
-      return
-    }
+    const missingKeys: string[] = []
+    if (!descricao.trim()) missingKeys.push('other-description')
+    if (valor <= 0) missingKeys.push('other-value')
+    if (!selectedAccount) missingKeys.push('other-account')
+    if (missingKeys.length) { showRequiredFieldErrors('.other-revenue-sheet', missingKeys); return }
+    clearRequiredFieldErrors('.other-revenue-sheet')
+    if (!selectedAccount) return
     setBusy(true)
     try {
       const attachments = await uploadAttachments()
@@ -176,9 +181,9 @@ function OtherRevenueModal({ onClose }: { onClose: () => void }) {
       <div className="form-grid compact-grid other-revenue-grid">
         <label><span>Unidade</span><select value={unidade} onChange={(event) => setUnidade(event.target.value as 'RJ' | 'SP')}><option>RJ</option><option>SP</option></select></label>
         <label><span>Data</span><input type="date" value={data} onChange={(event) => setData(event.target.value)} /></label>
-        <label><span>Valor</span><MoneyInput value={valor} onChange={setValor} /></label>
-        <label className="span-3"><span>Descrição / Origem</span><input value={descricao} onChange={(event) => setDescricao(event.target.value)} placeholder="Ex.: Aporte de sócio, reembolso, rendimento de aplicação" /></label>
-        <label className="span-3"><span>Conta Gerencial</span><select value={accountCode} onChange={(event) => setAccountCode(event.target.value)}><option value="">Selecione a conta gerencial</option>{OTHER_REVENUE_ACCOUNTS.map((account) => <option key={account.code} value={account.code}>{account.code} - {account.name}</option>)}</select></label>
+        <label><span>Valor</span><MoneyInput value={valor} onChange={setValor} validationKey="other-value" /></label>
+        <label className="span-3"><span>Descrição / Origem</span><input data-required-key="other-description" value={descricao} onChange={(event) => setDescricao(event.target.value)} placeholder="Ex.: Aporte de sócio, reembolso, rendimento de aplicação" /></label>
+        <label className="span-3"><span>Conta Gerencial</span><select data-required-key="other-account" value={accountCode} onChange={(event) => setAccountCode(event.target.value)}><option value="">Selecione a conta gerencial</option>{OTHER_REVENUE_ACCOUNTS.map((account) => <option key={account.code} value={account.code}>{account.code} - {account.name}</option>)}</select></label>
         <label className="span-3"><span>Conta de recebimento</span><select value={receivingBankAccountId} onChange={(event) => setReceivingBankAccountId(event.target.value as BankAccount['id'])}>{(['itau-pj', 'bb-pf', 'cef-pf'] as BankAccount['id'][]).map((id) => { const account = getBankAccount(id); return <option key={id} value={id}>{account.bank} · Ag. {account.agency} · C/C {account.account} · {account.holder}</option> })}</select></label>
       </div>
 
