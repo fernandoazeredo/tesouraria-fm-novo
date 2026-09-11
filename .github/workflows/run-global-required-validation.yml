@@ -35,6 +35,24 @@ jobs:
           exec(compile(s, 'apply_global_validation.py', 'exec'))
           PY
 
+      - name: Corrigir tipagem do patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/LaborAgreementReceivable.tsx')
+          t = p.read_text(encoding='utf-8')
+          t = t.replace("if (toNumber(parcelas[index]?.valorParcela) <= 0)", "if (Number(parcelas[index]?.valorParcela || 0) <= 0)")
+          p.write_text(t, encoding='utf-8')
+
+          p = Path('src/components/OtherRevenueReceivable.tsx')
+          t = p.read_text(encoding='utf-8')
+          needle = "    clearRequiredFieldErrors('.other-revenue-sheet')\n"
+          if needle in t and "    if (!selectedAccount) return\n" not in t:
+              t = t.replace(needle, needle + "    if (!selectedAccount) return\n", 1)
+          p.write_text(t, encoding='utf-8')
+          PY
+
       - name: Limpar scripts temporarios
         run: rm .github/workflows/apply-global-required-validation.yml .github/workflows/run-global-required-validation.yml
 
