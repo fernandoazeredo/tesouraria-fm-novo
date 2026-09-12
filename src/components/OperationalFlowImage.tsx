@@ -1,13 +1,20 @@
 import { useEffect, useState } from 'react'
 
-const PART_COUNT = 7
+const PART_FILES = [
+  '/fluxo-operacional-1.b64',
+  '/fluxo-operacional-3.b64',
+  '/fluxo-operacional-4.b64',
+  '/fluxo-operacional-5.b64',
+  '/fluxo-operacional-6.b64',
+  '/fluxo-operacional-7.b64',
+]
 
 export function OperationalFlowImage() {
   const [src, setSrc] = useState('')
 
   useEffect(() => {
     let active = true
-    Promise.all(Array.from({ length: PART_COUNT }, (_, index) => fetch(`/fluxo-operacional-${index + 1}.b64`).then((response) => {
+    Promise.all(PART_FILES.map((file) => fetch(file).then((response) => {
       if (!response.ok) throw new Error('Imagem ainda não disponível')
       return response.text()
     })))
