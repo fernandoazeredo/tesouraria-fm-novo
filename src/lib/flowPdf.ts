@@ -14,8 +14,8 @@ function buildPdf(jpeg: Uint8Array, width: number, height: number) {
     write(`${number} 0 obj\n${body}\nendobj\n`)
   }
 
-  const pageWidth = width * 72 / 150
-  const pageHeight = height * 72 / 150
+  const pageWidth = width * 72 / 300
+  const pageHeight = height * 72 / 300
 
   write('%PDF-1.4\n')
   object(1, '<< /Type /Catalog /Pages 2 0 R >>')
