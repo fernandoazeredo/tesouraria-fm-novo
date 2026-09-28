@@ -1,5 +1,6 @@
 export type OfxTransaction = {
   fitId: string
+  sourceIndex: number
   date: string
   amount: number
   type: string
@@ -31,9 +32,30 @@ function dateFromOfx(value: string) {
 }
 
 function numberFromOfx(value: string) {
-  const normalized = value.trim().replace(',', '.')
+  const cleaned = value.trim().replace(/\s/g, '').replace(/[^0-9,.-]/g, '')
+  if (!cleaned) return 0
+
+  const lastComma = cleaned.lastIndexOf(',')
+  const lastDot = cleaned.lastIndexOf('.')
+  let normalized = cleaned
+
+  if (lastComma >= 0 && lastDot >= 0) {
+    if (lastComma > lastDot) normalized = cleaned.replace(/\./g, '').replace(',', '.')
+    else normalized = cleaned.replace(/,/g, '')
+  } else if (lastComma >= 0) {
+    normalized = cleaned.replace(/\./g, '').replace(',', '.')
+  }
+
   const number = Number(normalized)
   return Number.isFinite(number) ? number : 0
+}
+
+export async function readOfxFile(file: File) {
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  const latin1 = new TextDecoder('windows-1252').decode(bytes)
+  const header = latin1.slice(0, 2048)
+  const declaresUtf8 = /CHARSET\s*:\s*(UTF-?8|65001)/i.test(header)
+  return declaresUtf8 ? new TextDecoder('utf-8').decode(bytes) : latin1
 }
 
 export function parseOfx(text: string): ParsedOfx {
@@ -46,6 +68,7 @@ export function parseOfx(text: string): ParsedOfx {
     const fitId = field(block, 'FITID') || `SEM-FITID-${index + 1}-${dateFromOfx(field(block, 'DTPOSTED'))}-${amount.toFixed(2)}`
     return {
       fitId,
+      sourceIndex: index,
       date: dateFromOfx(field(block, 'DTPOSTED')),
       amount,
       type: field(block, 'TRNTYPE'),
