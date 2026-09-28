@@ -317,6 +317,24 @@ service cloud.firestore {
       allow delete: if masterRestoreMode() || hasRole(['master', 'gerente', 'tesouraria']);
     }
 
+    match /bankTransactions/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create, update: if masterRestoreMode() || hasRole(['master', 'gerente', 'tesouraria']);
+      allow delete: if masterRestoreMode() || hasRole(['master']);
+    }
+
+    match /bankReconciliations/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create, delete: if masterRestoreMode() || hasRole(['master', 'gerente', 'tesouraria']);
+      allow update: if masterRestoreMode() || hasRole(['master']);
+    }
+
+    match /bankReconciliationPeriods/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create: if masterRestoreMode() || hasRole(['master', 'gerente', 'tesouraria']);
+      allow update, delete: if masterRestoreMode() || (isPrimaryAdminEmail() && hasRole(['master']));
+    }
+
     match /auditLogs/{document=**} {
       allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
       allow create: if masterRestoreMode() || activeUser();
