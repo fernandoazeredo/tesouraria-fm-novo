@@ -51,7 +51,6 @@ export function BankReconciliationPage() {
   const [message, setMessage] = useState('')
 
   const transactions = useLiveCollection('bankTransactions')
-  const statements = useLiveCollection('bankStatements')
   const reconciliations = useLiveCollection('bankReconciliations')
   const periods = useLiveCollection('bankReconciliationPeriods')
   const expenses = useLiveCollection('expenses')
@@ -140,14 +139,11 @@ export function BankReconciliationPage() {
     return rows
   }, [expenses, receivables, transfers, commissions, societaryTransfers, competence])
 
-  const activeStatement = statements.find((item) => item.id === `${competence}__Todas` && /\\.ofx$/i.test(String(item.fileName || '')))
-    ?? statements.find((item) => String(item.competence) === competence && /\\.ofx$/i.test(String(item.fileName || '')))
-    ?? null
   const monthTransactions = useMemo(() => transactions
     .filter((item) => String(item.competence) === competence
       && item.statementActive !== false
       && String(item.bankAccountId || DEFAULT_BANK_ACCOUNT_ID) === DEFAULT_BANK_ACCOUNT_ID)
-    .sort((a, b) => String(a.date).localeCompare(String(b.date))), [transactions, competence, activeStatement?.storagePath])
+    .sort((a, b) => String(a.date).localeCompare(String(b.date))), [transactions, competence])
 
   const monthReconciliations = useMemo(() => reconciliations.filter((item) => String(item.competence) === competence), [reconciliations, competence])
   const reconciliationByTransaction = useMemo(() => new Map(monthReconciliations.map((item) => [String(item.bankTransactionId), item])), [monthReconciliations])
