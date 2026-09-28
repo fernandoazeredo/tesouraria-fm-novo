@@ -337,17 +337,6 @@ export function AccountingPageStorageV2() {
     if (!profile) return
     if (totalEntries === 0) { setMessage('Nenhum lançamento apto foi encontrado.'); return }
 
-    let reconciliationOverrideReason = ''
-    if (!reconciliationClosed) {
-      if (profile.role !== 'master') {
-        setMessage('A Conciliação Bancária desta competência ainda não foi fechada. Finalize a conciliação antes de preparar o e-mail para a Contabilidade.')
-        return
-      }
-      const reason = window.prompt('A Conciliação Bancária desta competência ainda não foi fechada. Como Administrador Master, informe a justificativa para preparar o e-mail excepcionalmente:')
-      if (!reason?.trim()) return
-      reconciliationOverrideReason = reason.trim()
-    }
-
     const warning = statement ? '' : '\n\nATENÇÃO: o extrato bancário não está anexado e não será incluído no pacote.'
     if (!window.confirm(`Preparar o e-mail da competência ${competenceLabel(competence)} para fiscal@contabilidadequality.com.br?${warning}\n\nIsso NÃO registrará o envio como concluído.`)) return
 
@@ -381,7 +370,7 @@ export function AccountingPageStorageV2() {
 
       await audit(
         'E-mail para a Contabilidade preparado',
-        `${competence} · ${unit} · Para: ${ACCOUNTING_EMAIL_TO.join(', ')} · Cópia: ${ACCOUNTING_EMAIL_CC.join(', ')} · ${fileName}${reconciliationOverrideReason ? ` · Exceção Master: ${reconciliationOverrideReason}` : ''}`
+        `${competence} · ${unit} · Para: ${ACCOUNTING_EMAIL_TO.join(', ')} · Cópia: ${ACCOUNTING_EMAIL_CC.join(', ')} · ${fileName}`
       )
 
       const gmailUrl = gmailComposeUrl(ACCOUNTING_EMAIL_TO, ACCOUNTING_EMAIL_CC, subject, body)
