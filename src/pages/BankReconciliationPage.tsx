@@ -145,8 +145,8 @@ export function BankReconciliationPage() {
     ?? null
   const monthTransactions = useMemo(() => transactions
     .filter((item) => String(item.competence) === competence
-      && String(item.bankAccountId || DEFAULT_BANK_ACCOUNT_ID) === DEFAULT_BANK_ACCOUNT_ID
-      && (!activeStatement?.storagePath || String(item.statementStoragePath || '') === String(activeStatement.storagePath)))
+      && item.statementActive !== false
+      && String(item.bankAccountId || DEFAULT_BANK_ACCOUNT_ID) === DEFAULT_BANK_ACCOUNT_ID)
     .sort((a, b) => String(a.date).localeCompare(String(b.date))), [transactions, competence, activeStatement?.storagePath])
 
   const monthReconciliations = useMemo(() => reconciliations.filter((item) => String(item.competence) === competence), [reconciliations, competence])
@@ -156,7 +156,11 @@ export function BankReconciliationPage() {
   function suggestionsFor(tx: AnyRecord) {
     const amount = toNumber(tx.amount)
     return candidates
-      .filter((candidate) => Math.abs(candidate.amount - amount) < 0.005 && !usedCandidateKeys.has(candidate.key))
+      .filter((candidate) =>
+        Math.abs(candidate.amount - amount) < 0.005
+        && !usedCandidateKeys.has(candidate.key)
+        && (!candidate.bankAccountId || candidate.bankAccountId === DEFAULT_BANK_ACCOUNT_ID)
+      )
       .map((candidate) => {
         const delta = daysBetween(candidate.date, String(tx.date || ''))
         const sameBank = !candidate.bankAccountId || candidate.bankAccountId === DEFAULT_BANK_ACCOUNT_ID
@@ -204,6 +208,7 @@ export function BankReconciliationPage() {
         competence,
         bankTransactionId: tx.id,
         candidateKey: candidate.key,
+        periodId,
         sourceCollection: candidate.collection,
         sourceId: candidate.id,
         sourceType: candidate.type,
