@@ -116,6 +116,7 @@ export function AccountingPageStorageV2() {
   const monthBankTransactions = bankTransactions.filter((item) =>
     String(item.competence) === competence
     && String(item.bankAccountId || 'itau') === 'itau'
+    && String(item.movementClass || 'conciliavel') === 'conciliavel'
     && Array.isArray(item.statementVersions)
     && item.statementVersions.some((version: unknown) => activeStatementVersions.has(String(version)))
   ).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
@@ -159,11 +160,17 @@ export function AccountingPageStorageV2() {
       let activeVersionId: string | null = null
       let coveredMonths: string[] = []
       let discardedTransactionCount = 0
+      let balanceCount = 0
+      let automaticInvestmentCount = 0
+      let reconcilableCount = 0
       if (parsedOfx) {
         const parsed = parsedOfx
         activeVersionId = `${statementId}__${Date.now()}__${safeName(file.name)}`
         coveredMonths = Array.from(new Set(parsed.transactions.map((item) => item.date.slice(0, 7))))
         discardedTransactionCount = parsed.discardedCount
+        balanceCount = parsed.balanceCount
+        automaticInvestmentCount = parsed.automaticInvestmentCount
+        reconcilableCount = parsed.reconcilableCount
 
         const ops = parsed.transactions.map((transaction) => {
           const transactionCompetence = transaction.date.slice(0, 7)
@@ -208,6 +215,7 @@ export function AccountingPageStorageV2() {
         competence, unit, fileName: file.name, storagePath: path, downloadUrl, size: file.size,
         type: file.type || 'application/octet-stream', bankAccountId: isOfx ? 'itau' : null,
         importedTransactionCount, discardedTransactionCount,
+        balanceCount, automaticInvestmentCount, reconcilableCount,
         ofxBankId: ofxBankId || null, ofxAccountId: ofxAccountId || null,
         activeVersionId,
         coveredMonths,
@@ -217,7 +225,7 @@ export function AccountingPageStorageV2() {
       })
       await audit('Extrato bancário consolidado anexado', `${competence} · ${unit} · ${file.name}${importedTransactionCount ? ` · ${importedTransactionCount} movimentação(ões) OFX importada(s)` : ''}`, statementId)
       setMessage(importedTransactionCount
-        ? `Extrato OFX anexado com sucesso. ${importedTransactionCount} movimentação(ões) foram importadas para a Conciliação Bancária.${discardedTransactionCount ? ` Atenção: ${discardedTransactionCount} linha(s) inválida(s) foram ignoradas.` : ''}`
+        ? `Extrato OFX anexado com sucesso. ${reconcilableCount} movimento(s) conciliável(is), ${balanceCount} linha(s) de saldo e ${automaticInvestmentCount} movimentação(ões) automática(s) de aplicação/resgate/rendimento foram identificados.${discardedTransactionCount ? ` Atenção: ${discardedTransactionCount} linha(s) inválida(s) foram ignoradas.` : ''}`
         : 'Extrato consolidado anexado com sucesso. Ele será incluído automaticamente no ZIP da Contabilidade.')
     } catch (error) { console.error(error); setMessage('Não foi possível enviar o extrato consolidado.') } finally { setBusy('') }
   }
