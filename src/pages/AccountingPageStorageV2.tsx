@@ -127,6 +127,19 @@ export function AccountingPageStorageV2() {
     if (!profile || file.size > 30 * 1024 * 1024) { if (file.size > 30 * 1024 * 1024) setMessage('O extrato ultrapassa o limite de 30 MB.'); return }
     setBusy('statement'); setMessage('')
     try {
+      const isOfx = /\.ofx$/i.test(file.name)
+      const parsedOfx = isOfx ? parseOfx(await readOfxFile(file)) : null
+      if (isOfx && !parsedOfx?.transactions.length) throw new Error('O arquivo OFX não contém movimentações bancárias reconhecíveis.')
+
+      if (parsedOfx) {
+        const affectedMonths = Array.from(new Set(parsedOfx.transactions.map((item) => item.date.slice(0, 7))))
+        const closedMonths = affectedMonths.filter((month) => reconciliationPeriods.some((item) => item.id === `${month}__itau` && item.status === 'fechada'))
+        if (closedMonths.length) {
+          setMessage(`Não é possível substituir/importar o OFX porque a Conciliação Bancária está fechada em: ${closedMonths.join(', ')}. O Administrador Master deve reabrir a competência antes.`)
+          return
+        }
+      }
+
       const path = `extratos-bancarios/${competence}/${safeName(unit)}/${Date.now()}-${safeName(file.name)}`
       const target = storageRef(storage, path)
       await uploadBytes(target, file, { contentType: file.type || 'application/octet-stream' })
@@ -134,9 +147,8 @@ export function AccountingPageStorageV2() {
       let importedTransactionCount = 0
       let ofxBankId = ''
       let ofxAccountId = ''
-      if (/\.ofx$/i.test(file.name)) {
-        const parsed = parseOfx(await readOfxFile(file))
-        if (!parsed.transactions.length) throw new Error('O arquivo OFX não contém movimentações bancárias reconhecíveis.')
+      if (parsedOfx) {
+        const parsed = parsedOfx
 
         const oldActive = bankTransactions.filter((item) => String(item.statementId || '') === statementId && item.statementActive !== false)
         const deactivateOps = oldActive.map((item) => ({ ref: doc(db, 'bankTransactions', item.id) }))
@@ -185,7 +197,7 @@ export function AccountingPageStorageV2() {
       }
       await setDoc(doc(db, 'bankStatements', statementId), {
         competence, unit, fileName: file.name, storagePath: path, downloadUrl, size: file.size,
-        type: file.type || 'application/octet-stream', bankAccountId: /\.ofx$/i.test(file.name) ? 'itau' : null,
+        type: file.type || 'application/octet-stream', bankAccountId: isOfx ? 'itau' : null,
         importedTransactionCount, ofxBankId: ofxBankId || null, ofxAccountId: ofxAccountId || null,
         uploadedBy: profile.uid, uploadedByName: profile.displayName, uploadedByEmail: profile.email, uploadedAt: serverTimestamp(),
       })
@@ -294,7 +306,6 @@ export function AccountingPageStorageV2() {
       if (!reason?.trim()) return
       reconciliationOverride = true
       reconciliationOverrideReason = reason.trim()
-      await audit('Envio à Contabilidade liberado sem Conciliação Bancária fechada', `${competence} · Motivo: ${reconciliationOverrideReason}`)
     }
 
     const previousDispatches = dispatches.filter((item) => String(item.competence) === competence && String(item.unit || 'Todas') === unit)
@@ -317,6 +328,9 @@ export function AccountingPageStorageV2() {
         sentBy: profile?.uid, sentByName: profile?.displayName, sentByEmail: profile?.email,
         createdAt: serverTimestamp(),
       })
+      if (reconciliationOverride) {
+        await audit('Envio à Contabilidade liberado sem Conciliação Bancária fechada', `${competence} · Motivo: ${reconciliationOverrideReason}`, ref.id)
+      }
       await audit('Movimento registrado como enviado à Contabilidade', `${competence} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões) · conciliação ${reconciliationClosed ? 'fechada' : 'liberada excepcionalmente'}`, ref.id)
       setMessage(previousDispatches.length ? 'Reenvio registrado com sucesso no histórico.' : 'Movimento registrado com sucesso no histórico.')
     } catch (error) { console.error(error); setMessage('Não foi possível registrar o envio.') } finally { setBusy('') }
