@@ -389,25 +389,15 @@ export function AccountingPageStorageV2() {
 
   async function sendMovement() {
     if (totalEntries === 0) { setMessage('Nenhum lançamento apto foi encontrado.'); return }
-    let reconciliationOverride = false
-    let reconciliationOverrideReason = ''
-
-    if (!reconciliationClosed) {
-      if (profile?.role !== 'master') {
-        setMessage('A Conciliação Bancária desta competência ainda não foi fechada. Finalize a conciliação antes de registrar o envio à Contabilidade.')
-        return
-      }
-      const reason = window.prompt('A Conciliação Bancária desta competência ainda não foi fechada. Como Administrador Master, informe a justificativa para liberar excepcionalmente o registro do envio:')
-      if (!reason?.trim()) return
-      reconciliationOverride = true
-      reconciliationOverrideReason = reason.trim()
-    }
 
     const previousDispatches = dispatches.filter((item) => String(item.competence) === competence && String(item.unit || 'Todas') === unit)
+    const reconciliationWarning = reconciliationClosed
+      ? ''
+      : '\n\nAVISO: a Conciliação Bancária desta competência não está fechada. A conciliação é opcional e não impede o registro do envio.'
     const alreadySentWarning = previousDispatches.length
       ? `\n\nATENÇÃO: esta competência já possui ${previousDispatches.length} envio(s) registrado(s). Este registro será tratado como novo envio/reenvio.`
       : ''
-    if (!window.confirm(`Registrar o movimento ${competence} como enviado à Contabilidade?${alreadySentWarning}`)) return
+    if (!window.confirm(`Registrar o movimento ${competence} como enviado à Contabilidade?${reconciliationWarning}${alreadySentWarning}`)) return
 
     setBusy('send'); setMessage('')
     try {
@@ -415,18 +405,13 @@ export function AccountingPageStorageV2() {
         competence, unit, movement, expenseCount, receivableCount, transferCount, commissionCount,
         expenseTotal, revenueTotal, transferTotal, commissionTotal, documentCount,
         bankStatement: statement?.fileName ?? null,
-        reconciliationStatus: reconciliationClosed ? 'fechada' : 'liberada_excepcionalmente',
+        reconciliationStatus: reconciliationClosed ? 'fechada' : 'opcional_nao_fechada',
         reconciliationPeriodId,
-        reconciliationOverride,
-        reconciliationOverrideReason: reconciliationOverrideReason || null,
         status: 'enviado',
         sentBy: profile?.uid, sentByName: profile?.displayName, sentByEmail: profile?.email,
         createdAt: serverTimestamp(),
       })
-      if (reconciliationOverride) {
-        await audit('Envio à Contabilidade liberado sem Conciliação Bancária fechada', `${competence} · Motivo: ${reconciliationOverrideReason}`, ref.id)
-      }
-      await audit('Movimento registrado como enviado à Contabilidade', `${competence} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões) · conciliação ${reconciliationClosed ? 'fechada' : 'liberada excepcionalmente'}`, ref.id)
+      await audit('Movimento registrado como enviado à Contabilidade', `${competence} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões) · conciliação ${reconciliationClosed ? 'fechada' : 'não fechada (opcional)'}`, ref.id)
       setMessage(previousDispatches.length ? 'Reenvio registrado com sucesso no histórico.' : 'Movimento registrado com sucesso no histórico.')
     } catch (error) { console.error(error); setMessage('Não foi possível registrar o envio.') } finally { setBusy('') }
   }
