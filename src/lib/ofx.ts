@@ -92,6 +92,7 @@ function classifyMovement(item: { type: string; memo: string; name: string }) {
 
   const balancePatterns = [
     'SALDO TOTAL DISPONIVEL',
+    'SALDO TOTAL DISPONIVEL DIA',
     'SALDO MOVIMENTACAO CONTA',
     'SALDO MOVIMENTACAO',
     'SALDO DISPONIVEL',
@@ -103,8 +104,11 @@ function classifyMovement(item: { type: string; memo: string; name: string }) {
   const automaticInvestmentPatterns = [
     'APLICACAO AUTOMATICA',
     'APLIC AUTOMATICA',
+    'APLIC AUT MAIS',
+    'APL APLIC AUT',
     'RESGATE AUTOMATICO',
     'RESGATE APLICACAO',
+    'RESGATE CDB',
     'RENDIMENTO AUTOMATICO',
     'REND APLIC AUTOM',
     'REMUNERACAO APLICACAO',
