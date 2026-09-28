@@ -81,8 +81,12 @@ function paidMovements(plans: AnyRecord[], type: PaidMovement['type'], competenc
 }
 
 async function bytesFromAttachment(file: Attachment) {
+  if (file.url) {
+    const response = await fetch(file.url)
+    if (!response.ok) throw new Error(`Falha HTTP ${response.status} ao baixar ${file.name || 'documento'}`)
+    return new Uint8Array(await response.arrayBuffer())
+  }
   if (file.path) return new Uint8Array(await getBytes(storageRef(storage, file.path)))
-  if (file.url) return new Uint8Array(await (await fetch(file.url)).arrayBuffer())
   throw new Error(`Documento sem referência de Storage: ${file.name || 'arquivo'}`)
 }
 
@@ -306,7 +310,14 @@ export function AccountingPageStorageV2() {
     const entries: Array<{ name: string; content: string | Uint8Array }> = [{ name: `Movimento_Contabilidade_${competence}_${safeName(unit)}.xlsx`, content: workbook }]
     if (statement?.storagePath) {
       try {
-        const statementBytes = new Uint8Array(await getBytes(storageRef(storage, String(statement.storagePath))))
+        let statementBytes: Uint8Array
+        if (statement.downloadUrl) {
+          const response = await fetch(String(statement.downloadUrl))
+          if (!response.ok) throw new Error(`Falha HTTP ${response.status} ao baixar o extrato bancário.`)
+          statementBytes = new Uint8Array(await response.arrayBuffer())
+        } else {
+          statementBytes = new Uint8Array(await getBytes(storageRef(storage, String(statement.storagePath))))
+        }
         entries.push({ name: `Extrato_Bancario/${safeName(String(statement.fileName ?? 'Extrato_Consolidado'))}`, content: statementBytes })
       } catch (error) {
         console.warn('Extrato bancário não incluído no ZIP:', error)
