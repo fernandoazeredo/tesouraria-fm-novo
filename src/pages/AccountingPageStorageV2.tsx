@@ -75,6 +75,9 @@ export function AccountingPageStorageV2() {
   const commissions = useLiveCollection('agentCommissions')
   const dispatches = useLiveCollection('accountingDispatches')
   const statements = useLiveCollection('bankStatements')
+  const bankTransactions = useLiveCollection('bankTransactions')
+  const bankReconciliations = useLiveCollection('bankReconciliations')
+  const reconciliationPeriods = useLiveCollection('bankReconciliationPeriods')
   const [competence, setCompetence] = useState(new Date().toISOString().slice(0, 7))
   const [unit, setUnit] = useState('Todas')
   const [movement, setMovement] = useState('Movimento completo')
@@ -106,6 +109,12 @@ export function AccountingPageStorageV2() {
   const orderedDispatches = [...dispatches].sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0))
   const statementId = `${competence}__${unit}`
   const statement = statements.find((item) => item.id === statementId) ?? null
+  const reconciliationPeriodId = `${competence}__itau`
+  const reconciliationPeriod = reconciliationPeriods.find((item) => item.id === reconciliationPeriodId) ?? null
+  const reconciliationClosed = reconciliationPeriod?.status === 'fechada'
+  const monthBankTransactions = bankTransactions.filter((item) => String(item.competence) === competence && String(item.bankAccountId || 'itau') === 'itau').sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
+  const monthReconciliations = bankReconciliations.filter((item) => String(item.competence) === competence)
+  const reconciliationByTransaction = new Map(monthReconciliations.map((item) => [String(item.bankTransactionId), item]))
   const documentCount = [...selectedExpenses, ...selectedReceivables].reduce((sum, item) => sum + attachmentsOf(item).length, 0)
   const missingDocs = [...selectedExpenses.map((item) => ({ type: 'Despesa', item })), ...selectedReceivables.map((item) => ({ type: 'Receita', item }))].filter(({ item }) => attachmentsOf(item).length === 0)
 
@@ -176,7 +185,7 @@ export function AccountingPageStorageV2() {
       ['Receitas aptas', receivableCount], ['Total receitas', revenueTotal],
       ['Repasses de Alvarás pagos no mês', transferCount], ['Total repassado a clientes', transferTotal],
       ['Comissões de Agentes pagas no mês', commissionCount], ['Total de comissões pagas', commissionTotal],
-      ['Documentos anexados', documentCount], ['Lançamentos sem documento', missingDocs.length], ['Extrato consolidado', statement?.fileName || 'NÃO ANEXADO (OPCIONAL)'],
+      ['Documentos anexados', documentCount], ['Lançamentos sem documento', missingDocs.length], ['Extrato consolidado', statement?.fileName || 'NÃO ANEXADO (OPCIONAL)'], ['Conciliação Bancária', reconciliationClosed ? 'FECHADA' : 'NÃO FECHADA'], ['Movimentos bancários', monthBankTransactions.length], ['Movimentos conciliados', monthReconciliations.length],
       ['Gerado por', profile?.displayName || profile?.email || 'Usuário'], ['Gerado em', dateTimeBR.format(new Date())],
     ]
     const expenseRows: (string | number)[][] = [['Competência', 'Unidade', 'Responsável', 'Fornecedor/Favorecido', 'CPF/CNPJ', 'Plano de Contas', 'Descrição da Conta', 'DRE', 'Status', 'Valor', 'Documentos']]
@@ -193,6 +202,18 @@ export function AccountingPageStorageV2() {
     const pendingRows: (string | number)[][] = [['Tipo', 'Referência', 'Valor', 'Pendência']]
     missingDocs.forEach(({ type, item }) => pendingRows.push([type, type === 'Despesa' ? `${item.nome ?? ''} · ${item.fornecedor ?? ''}` : `${item.processo ?? ''} · ${item.reclamante ?? ''}`, type === 'Despesa' ? toNumber(item.valorTotal) : toNumber(item.valorAlvara), 'Sem documento anexado']))
     if (!statement) pendingRows.push(['Extrato bancário', competence, 0, 'Extrato consolidado não anexado — opcional'])
+    const reconciliationRows: (string | number)[][] = [['Data', 'Histórico bancário', 'Valor', 'Status', 'Tipo no sistema', 'Data no sistema']]
+    monthBankTransactions.forEach((transaction) => {
+      const reconciliation = reconciliationByTransaction.get(transaction.id)
+      reconciliationRows.push([
+        transaction.date ?? '',
+        transaction.memo || transaction.name || transaction.refNum || transaction.type || '',
+        toNumber(transaction.amount),
+        reconciliation ? 'Conciliado' : 'Pendente',
+        reconciliation?.sourceType || '',
+        reconciliation?.systemDate || '',
+      ])
+    })
     return [
       { name: 'Resumo', rows: summaryRows as (string | number)[][], currencyColumns: [1] },
       { name: 'Despesas', rows: expenseRows, currencyColumns: [9] },
@@ -201,6 +222,7 @@ export function AccountingPageStorageV2() {
       { name: 'Comissoes_Agentes', rows: commissionRows, currencyColumns: [5] },
       { name: 'Documentos', rows: documentRows },
       { name: 'Pendencias', rows: pendingRows, currencyColumns: [2] },
+      { name: 'Conciliacao_Bancaria', rows: reconciliationRows, currencyColumns: [2] },
     ]
   }
 
@@ -240,12 +262,43 @@ export function AccountingPageStorageV2() {
 
   async function sendMovement() {
     if (totalEntries === 0) { setMessage('Nenhum lançamento apto foi encontrado.'); return }
-    if (!window.confirm(`Registrar o movimento ${competence} como enviado à Contabilidade?`)) return
+    let reconciliationOverride = false
+    let reconciliationOverrideReason = ''
+
+    if (!reconciliationClosed) {
+      if (profile?.role !== 'master') {
+        setMessage('A Conciliação Bancária desta competência ainda não foi fechada. Finalize a conciliação antes de registrar o envio à Contabilidade.')
+        return
+      }
+      const reason = window.prompt('A Conciliação Bancária desta competência ainda não foi fechada. Como Administrador Master, informe a justificativa para liberar excepcionalmente o registro do envio:')
+      if (!reason?.trim()) return
+      reconciliationOverride = true
+      reconciliationOverrideReason = reason.trim()
+      await audit('Envio à Contabilidade liberado sem Conciliação Bancária fechada', `${competence} · Motivo: ${reconciliationOverrideReason}`)
+    }
+
+    const previousDispatches = dispatches.filter((item) => String(item.competence) === competence && String(item.unit || 'Todas') === unit)
+    const alreadySentWarning = previousDispatches.length
+      ? `\n\nATENÇÃO: esta competência já possui ${previousDispatches.length} envio(s) registrado(s). Este registro será tratado como novo envio/reenvio.`
+      : ''
+    if (!window.confirm(`Registrar o movimento ${competence} como enviado à Contabilidade?${alreadySentWarning}`)) return
+
     setBusy('send'); setMessage('')
     try {
-      const ref = await addDoc(collection(db, 'accountingDispatches'), { competence, unit, movement, expenseCount, receivableCount, transferCount, commissionCount, expenseTotal, revenueTotal, transferTotal, commissionTotal, documentCount, bankStatement: statement?.fileName ?? null, status: 'enviado', sentBy: profile?.uid, sentByName: profile?.displayName, sentByEmail: profile?.email, createdAt: serverTimestamp() })
-      await audit('Movimento registrado como enviado à Contabilidade', `${competence} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões)`, ref.id)
-      setMessage('Movimento registrado com sucesso no histórico.')
+      const ref = await addDoc(collection(db, 'accountingDispatches'), {
+        competence, unit, movement, expenseCount, receivableCount, transferCount, commissionCount,
+        expenseTotal, revenueTotal, transferTotal, commissionTotal, documentCount,
+        bankStatement: statement?.fileName ?? null,
+        reconciliationStatus: reconciliationClosed ? 'fechada' : 'liberada_excepcionalmente',
+        reconciliationPeriodId,
+        reconciliationOverride,
+        reconciliationOverrideReason: reconciliationOverrideReason || null,
+        status: 'enviado',
+        sentBy: profile?.uid, sentByName: profile?.displayName, sentByEmail: profile?.email,
+        createdAt: serverTimestamp(),
+      })
+      await audit('Movimento registrado como enviado à Contabilidade', `${competence} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões) · conciliação ${reconciliationClosed ? 'fechada' : 'liberada excepcionalmente'}`, ref.id)
+      setMessage(previousDispatches.length ? 'Reenvio registrado com sucesso no histórico.' : 'Movimento registrado com sucesso no histórico.')
     } catch (error) { console.error(error); setMessage('Não foi possível registrar o envio.') } finally { setBusy('') }
   }
 
