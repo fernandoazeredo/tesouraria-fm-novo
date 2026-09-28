@@ -3,7 +3,7 @@ import { addDoc, collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc
 import { AlertTriangle, CheckCircle2, Landmark, Link2, LockKeyhole, RefreshCw, Search, Undo2 } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
-import { DEFAULT_BANK_ACCOUNT_ID } from '../data/bankAccounts'
+import { DEFAULT_BANK_ACCOUNT_ID, normalizeBankAccountId } from '../data/bankAccounts'
 import './BankReconciliationPage.css'
 
 type AnyRecord = { id: string } & DocumentData
@@ -51,6 +51,7 @@ export function BankReconciliationPage() {
   const [message, setMessage] = useState('')
 
   const transactions = useLiveCollection('bankTransactions')
+  const statements = useLiveCollection('bankStatements')
   const reconciliations = useLiveCollection('bankReconciliations')
   const periods = useLiveCollection('bankReconciliationPeriods')
   const expenses = useLiveCollection('expenses')
@@ -79,7 +80,7 @@ export function BankReconciliationPage() {
         date,
         amount: -Math.abs(toNumber(item.valorTotal)),
         label: String(item.fornecedor || item.nome || 'Despesa'),
-        bankAccountId: String(item.paymentBankAccountId || ''),
+        bankAccountId: normalizeBankAccountId(String(item.paymentBankAccountId || '')),
       })
     }
 
@@ -95,7 +96,7 @@ export function BankReconciliationPage() {
         date,
         amount: Math.abs(toNumber(item.valorAlvara)),
         label: String(item.processo || item.reclamante || 'Receita'),
-        bankAccountId: String(item.receivingBankAccountId || ''),
+        bankAccountId: normalizeBankAccountId(String(item.receivingBankAccountId || '')),
       })
     }
 
@@ -139,13 +140,21 @@ export function BankReconciliationPage() {
     return rows
   }, [expenses, receivables, transfers, commissions, societaryTransfers, competence])
 
+  const activeStatementVersions = useMemo(() => new Set(
+    statements.map((item) => String(item.activeVersionId || '')).filter(Boolean)
+  ), [statements])
+
   const monthTransactions = useMemo(() => transactions
     .filter((item) => String(item.competence) === competence
-      && item.statementActive !== false
-      && String(item.bankAccountId || DEFAULT_BANK_ACCOUNT_ID) === DEFAULT_BANK_ACCOUNT_ID)
-    .sort((a, b) => String(a.date).localeCompare(String(b.date))), [transactions, competence])
+      && String(item.bankAccountId || DEFAULT_BANK_ACCOUNT_ID) === DEFAULT_BANK_ACCOUNT_ID
+      && Array.isArray(item.statementVersions)
+      && item.statementVersions.some((version: unknown) => activeStatementVersions.has(String(version))))
+    .sort((a, b) => String(a.date).localeCompare(String(b.date))), [transactions, competence, activeStatementVersions])
 
-  const monthReconciliations = useMemo(() => reconciliations.filter((item) => String(item.competence) === competence), [reconciliations, competence])
+  const activeTransactionIds = useMemo(() => new Set(monthTransactions.map((item) => item.id)), [monthTransactions])
+  const monthReconciliations = useMemo(() => reconciliations.filter((item) =>
+    String(item.competence) === competence && activeTransactionIds.has(String(item.bankTransactionId))
+  ), [reconciliations, competence, activeTransactionIds])
   const reconciliationByTransaction = useMemo(() => new Map(monthReconciliations.map((item) => [String(item.bankTransactionId), item])), [monthReconciliations])
   const usedCandidateKeys = useMemo(() => new Set(monthReconciliations.map((item) => String(item.candidateKey))), [monthReconciliations])
 
