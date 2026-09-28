@@ -39,11 +39,15 @@ jobs:
 
           python3 - "$RULESET_NAME" <<'PY'
           import json, sys
+          release_name = "projects/tesouraria-fm-novo/releases/cloud.firestore"
           with open("/tmp/release.json", "w", encoding="utf-8") as f:
               json.dump({
-                  "name": "projects/tesouraria-fm-novo/releases/cloud.firestore",
-                  "rulesetName": sys.argv[1]
+                  "release": {
+                      "name": release_name,
+                      "rulesetName": sys.argv[1]
+                  },
+                  "updateMask": "rulesetName"
               }, f)
           PY
 
-          curl -fsS -X PATCH             "https://firebaserules.googleapis.com/v1/projects/tesouraria-fm-novo/releases/cloud.firestore?updateMask=rulesetName"             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/release.json
+          curl -fsS -X PATCH             "https://firebaserules.googleapis.com/v1/projects/tesouraria-fm-novo/releases/cloud.firestore"             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/release.json
