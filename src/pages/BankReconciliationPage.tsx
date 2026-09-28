@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { addDoc, arrayUnion, collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, writeBatch, type DocumentData } from 'firebase/firestore'
-import { AlertTriangle, CheckCircle2, Landmark, Link2, LockKeyhole, RefreshCw, Search, Undo2, Upload } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Landmark, Link2, LockKeyhole, RefreshCw, Search, Trash2, Undo2, Upload } from 'lucide-react'
 import { db, storage } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
 import { DEFAULT_BANK_ACCOUNT_ID, normalizeBankAccountId } from '../data/bankAccounts'
-import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
+import { deleteObject, getDownloadURL, listAll, ref as storageRef, uploadBytes } from 'firebase/storage'
 import { parseOfx, readOfxFile } from '../lib/ofx'
 import './BankReconciliationPage.css'
 
@@ -46,6 +46,15 @@ function txDescription(tx: AnyRecord) {
 
 function safeName(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'arquivo'
+}
+
+async function deleteStorageTree(path: string) {
+  const root = storageRef(storage, path)
+  const result = await listAll(root)
+  await Promise.all(result.items.map((item) => deleteObject(item)))
+  for (const prefix of result.prefixes) {
+    await deleteStorageTree(prefix.fullPath)
+  }
 }
 
 export function BankReconciliationPage() {
@@ -329,6 +338,89 @@ export function BankReconciliationPage() {
     }
   }
 
+  async function deleteStatementCompletely() {
+    if (!profile || !statement) return
+    if (!window.confirm(`Apagar definitivamente o extrato "${statement.fileName}"?\n\nIsso removerá o arquivo, as movimentações importadas por ele e os ZIPs já gerados desta competência. Esta ação não pode ser desfeita.`)) return
+
+    const statementVersionPrefix = `${statementId}__`
+    const relatedTransactions = transactions.filter((item) =>
+      Array.isArray(item.statementVersions)
+      && item.statementVersions.some((version: unknown) => String(version).startsWith(statementVersionPrefix))
+    )
+
+    const affectedClosedPeriods = Array.from(new Set(
+      relatedTransactions
+        .map((item) => String(item.reconciliationPeriodId || ''))
+        .filter((periodKey) => periodKey && periods.some((p) => p.id === periodKey && p.status === 'fechada'))
+    ))
+
+    if (affectedClosedPeriods.length) {
+      setMessage(`Não é possível apagar este extrato porque há Conciliação Bancária fechada em: ${affectedClosedPeriods.map((item) => item.replace('__itau', '')).join(', ')}. Reabra a competência antes de apagar.`)
+      return
+    }
+
+    setStatementBusy(true)
+    setMessage('')
+    try {
+      const deletedTransactionIds = new Set<string>()
+
+      for (let start = 0; start < relatedTransactions.length; start += 350) {
+        const batch = writeBatch(db)
+        relatedTransactions.slice(start, start + 350).forEach((item) => {
+          const versions = Array.isArray(item.statementVersions) ? item.statementVersions.map(String) : []
+          const remainingVersions = versions.filter((version) => !version.startsWith(statementVersionPrefix))
+          if (remainingVersions.length === 0) {
+            batch.delete(doc(db, 'bankTransactions', item.id))
+            deletedTransactionIds.add(item.id)
+          } else {
+            batch.update(doc(db, 'bankTransactions', item.id), {
+              statementVersions: remainingVersions,
+              lastStatementId: item.lastStatementId === statementId ? null : item.lastStatementId ?? null,
+              lastStatementStoragePath: item.lastStatementId === statementId ? null : item.lastStatementStoragePath ?? null,
+            })
+          }
+        })
+        await batch.commit()
+      }
+
+      const relatedReconciliations = reconciliations.filter((item) => deletedTransactionIds.has(String(item.bankTransactionId)))
+      for (let start = 0; start < relatedReconciliations.length; start += 400) {
+        const batch = writeBatch(db)
+        relatedReconciliations.slice(start, start + 400).forEach((item) => {
+          batch.delete(doc(db, 'bankReconciliations', item.id))
+        })
+        await batch.commit()
+      }
+
+      // Remove todas as cópias históricas do extrato da competência/unidade.
+      try {
+        await deleteStorageTree(`extratos-bancarios/${competence}/Todas`)
+      } catch (error) {
+        console.warn('Algum arquivo histórico do extrato já não existia:', error)
+      }
+
+      // Remove ZIPs já gerados que poderiam conter o extrato apagado.
+      try {
+        await deleteStorageTree(`envios-contabilidade/${competence}`)
+      } catch (error) {
+        console.warn('Nenhum ZIP anterior encontrado ou já removido:', error)
+      }
+
+      await deleteDoc(doc(db, 'bankStatements', statementId))
+      await audit(
+        'Extrato bancário apagado definitivamente',
+        `${competence} · Todas · ${statement.fileName} · ${relatedTransactions.length} movimentação(ões) revisada(s) · ${deletedTransactionIds.size} removida(s) · ZIPs da competência removidos`,
+        statementId
+      )
+      setMessage('Extrato apagado definitivamente. Arquivo, movimentações exclusivas e ZIPs da competência foram removidos.')
+    } catch (error) {
+      console.error(error)
+      setMessage('Não foi possível apagar completamente o extrato. Nenhuma nova exclusão deve ser tentada até revisar a Auditoria e o estado da competência.')
+    } finally {
+      setStatementBusy(false)
+    }
+  }
+
   async function reconcile(tx: AnyRecord, candidate: Candidate) {
     if (!profile || closed) return
     setBusy(tx.id); setMessage('')
@@ -428,7 +520,7 @@ export function BankReconciliationPage() {
     </div>
 
     <section className="page-card reconciliation-panel">
-      <div className="bank-statement-box"><div><Landmark size={21} /><div><strong>Extrato consolidado do banco</strong><span>Opcional para gerar o pacote mensal. Se anexado, será incluído no ZIP. Aceita PDF, OFX, CSV e Excel.</span>{statement && <small><CheckCircle2 size={13} /> {statement.fileName}</small>}</div></div><label className="secondary-button accounting-file-button"><Upload size={17} /> {statementBusy ? 'Enviando...' : statement ? 'Substituir extrato' : 'Anexar extrato'}<input type="file" hidden accept=".pdf,.ofx,.csv,.xlsx,.xls" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadStatement(file); e.currentTarget.value = '' }} /></label></div>
+      <div className="bank-statement-box"><div><Landmark size={21} /><div><strong>Extrato consolidado do banco</strong><span>Opcional para gerar o pacote mensal. Se anexado, será incluído no ZIP. Aceita PDF, OFX, CSV e Excel.</span>{statement && <small><CheckCircle2 size={13} /> {statement.fileName}</small>}</div></div><div className="bank-statement-actions"><label className="secondary-button accounting-file-button"><Upload size={17} /> {statementBusy ? 'Enviando...' : statement ? 'Substituir extrato' : 'Anexar extrato'}<input type="file" hidden accept=".pdf,.ofx,.csv,.xlsx,.xls" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadStatement(file); e.currentTarget.value = '' }} /></label>{statement && <button className="expense-button" type="button" disabled={statementBusy} onClick={() => void deleteStatementCompletely()}><Trash2 size={17} /> {statementBusy ? 'Processando...' : 'Apagar extrato'}</button>}</div></div>
       <div className="reconciliation-toolbar">
         <label><span>Competência</span><input type="month" value={competence} onChange={(e) => setCompetence(e.target.value)} /></label>
         <label><span>Status</span><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option>Todos</option><option>Conciliado</option><option>Correspondência provável</option><option>Sem correspondência</option></select></label>
