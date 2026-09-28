@@ -34,5 +34,5 @@ jobs:
       - name: Instalar Firebase CLI
         run: npm install --global firebase-tools
 
-      - name: Publicar regras e Hosting do FM NOVO
-        run: firebase deploy --only firestore:rules,firestore:indexes,storage,hosting --project tesouraria-fm-novo --non-interactive
+      - name: Publicar Firestore e Hosting do FM NOVO
+        run: firebase deploy --only firestore:rules,firestore:indexes,hosting --project tesouraria-fm-novo --non-interactive
