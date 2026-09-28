@@ -48,8 +48,8 @@ export function TipsPageEnhanced() {
       <article className="tip"><FileText /><h3>Nota Fiscal</h3><p>O menu Nota Fiscal reaproveita os dados do cliente e o valor dos Honorários do Escritório. Registre <strong>Status NFS-e, Nº NFSe e Data</strong>.</p></article>
       <article className="tip"><LayoutDashboard /><h3>Dashboard</h3><p>Receitas aparecem em azul, Despesas em vermelho e Saldo/Resultado em verde. Os indicadores consolidam o movimento financeiro conforme o fluxo atual.</p></article>
       <article className="tip"><BookOpenCheck /><h3>Plano de Contas</h3><p>O Plano de Contas oficial é a referência do sistema. O classificador da DRE utiliza somente contas existentes; não cria códigos novos automaticamente. A manutenção é exclusiva do Administrador Master.</p></article>
-      <article className="tip"><Calculator /><h3>Contabilidade</h3><p>O pacote mensal separa <strong>Despesas, Receitas, Repasses de Alvarás e Comissões de Agentes</strong>. Repasses e comissões entram no mês da data efetiva do pagamento.</p></article>
-      <article className="tip"><Landmark /><h3>Extrato bancário</h3><p>O extrato consolidado é <strong>opcional</strong> para gerar o ZIP da Contabilidade. Se estiver anexado, será incluído automaticamente; se não estiver, o pacote pode ser baixado normalmente.</p></article>
+      <article className="tip"><Calculator /><h3>Contabilidade</h3><p>O pacote mensal separa <strong>Despesas, Receitas, Repasses de Alvarás e Comissões de Agentes</strong>. Repasses e comissões entram no mês da data efetiva do pagamento. A <strong>Conciliação Bancária é opcional</strong> e não bloqueia preparar o e-mail nem registrar o envio à Contabilidade.</p></article>
+      <article className="tip"><Landmark /><h3>Extrato bancário e conciliação</h3><p>O extrato consolidado e a <strong>Conciliação Bancária são opcionais</strong> para o envio contábil. Se o extrato estiver anexado, entra automaticamente no ZIP. A conciliação pode ser feita e fechada quando necessário, sem travar o preparo do e-mail ou o registro do envio.</p></article>
       <article className="tip"><ShieldCheck /><h3>Auditoria</h3><p>Aprovações, recebimentos, pagamentos, arquivamentos, repasses, comissões e demais ações relevantes ficam registrados com usuário, data e detalhe.</p></article>
       <article className="tip"><Paperclip /><h3>Documentos / Storage</h3><p>Despesas e Receitas/Alvarás aceitam anexos no Firebase Storage, e o <strong>Arquivo de Documentos</strong> centraliza os arquivos gravados.</p></article>
       <article className="tip"><Moon /><h3>Modo Claro / Escuro</h3><p>Use o controle de tema para alternar entre <strong>Modo Claro e Modo Escuro</strong>. A preferência fica salva no navegador e é reaplicada nos próximos acessos.</p></article>
@@ -68,7 +68,7 @@ export function TipsPageEnhanced() {
         <div><Users /><span><strong>Comissão com dedução:</strong> Comissões de Agentes → Programar → Adicionar dedução → informe data, histórico e valor → programe o valor líquido.</span></div>
         <div><ShieldCheck /><span><strong>Precisa comprovar quem fez uma ação:</strong> abra Auditoria e pesquise por processo, usuário, módulo ou ação.</span></div>
         <div><FolderArchive /><span><strong>Precisa localizar um anexo:</strong> abra Arquivo de Documentos e pesquise pelos dados disponíveis.</span></div>
-        <div><Calculator /><span><strong>Fechamento mensal sem extrato:</strong> Contabilidade → escolha competência/unidade → Baixar ZIP completo. O extrato bancário é opcional; se anexado, entra no pacote automaticamente.</span></div>
+        <div><Calculator /><span><strong>Envio contábil:</strong> Contabilidade → escolha competência/unidade → preparar e-mail ou baixar ZIP → registrar envio. Extrato e Conciliação Bancária são opcionais; quando disponíveis, acompanham e enriquecem o fechamento, mas não bloqueiam o envio.</span></div>
       </div>
     </section>
     <OperationalFlowImage />
@@ -95,8 +95,8 @@ export function HowToPageEnhanced() {
     ['16', 'Consultar a Dashboard', 'A Dashboard consolida Receitas, Despesas e Resultado e oferece atalhos para os principais fluxos.'],
     ['17', 'Plano de Contas', 'O Plano de Contas oficial é utilizado pelos lançamentos e pela classificação da DRE. O sistema não deve inventar contas; a manutenção do plano é exclusiva do Administrador Master.'],
     ['18', 'Gerenciar usuários', 'O Master visualiza usuários Pendentes e pode alterar os estados permitidos, mantendo o controle de perfis e acessos.'],
-    ['19', 'Preparar o fechamento contábil', 'Em Contabilidade, escolha competência e unidade. O pacote separa Despesas, Receitas, Repasses e Comissões; repasses e comissões usam a data efetiva do pagamento.'],
-    ['20', 'Baixar o ZIP da Contabilidade', 'O ZIP pode ser gerado mesmo sem extrato bancário. O extrato é opcional e, quando anexado, é incluído automaticamente junto da planilha e dos anexos disponíveis.'],
+    ['19', 'Preparar o fechamento contábil', 'Em Contabilidade, escolha competência e unidade. O pacote separa Despesas, Receitas, Repasses e Comissões; repasses e comissões usam a data efetiva do pagamento. A Conciliação Bancária é opcional e não bloqueia o envio.'],
+    ['20', 'Baixar o ZIP da Contabilidade', 'O ZIP pode ser gerado mesmo sem extrato bancário e sem Conciliação Bancária fechada. Ambos são opcionais para o fluxo contábil; o extrato, quando anexado, é incluído automaticamente junto da planilha e dos anexos disponíveis.'],
     ['21', 'Consultar Auditoria', 'A Auditoria registra as ações relevantes, incluindo aprovação de despesas, baixa como Pago, Arquivamento, recebimentos, aprovações e execuções financeiras.'],
     ['22', 'Modo Claro / Escuro', 'Use o seletor de tema para alternar entre Claro e Escuro. A preferência fica persistida no navegador.'],
     ['23', 'Backup e restauração', 'No menu Utilitários, exclusivo do Master, o Backup JSON preserva os dados do Firestore. Arquivos físicos do Storage não fazem parte do JSON.'],
