@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BadgeDollarSign, Calculator, CheckCircle2, Download, FileSpreadsheet, Landmark, Paperclip, ReceiptText, Send, Upload } from 'lucide-react'
-import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
+import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, writeBatch, type DocumentData } from 'firebase/firestore'
 import { deleteObject, getBytes, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
 import { db, storage } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
 import { createZip } from '../lib/simpleZip'
 import { createXlsx, type XlsxSheet } from '../lib/simpleXlsx'
+import { parseOfx } from '../lib/ofx'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const dateTimeBR = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
@@ -122,9 +123,47 @@ export function AccountingPageStorageV2() {
       const target = storageRef(storage, path)
       await uploadBytes(target, file, { contentType: file.type || 'application/octet-stream' })
       const downloadUrl = await getDownloadURL(target)
-      await setDoc(doc(db, 'bankStatements', statementId), { competence, unit, fileName: file.name, storagePath: path, downloadUrl, size: file.size, type: file.type || 'application/octet-stream', uploadedBy: profile.uid, uploadedByName: profile.displayName, uploadedByEmail: profile.email, uploadedAt: serverTimestamp() })
-      await audit('Extrato bancário consolidado anexado', `${competence} · ${unit} · ${file.name}`, statementId)
-      setMessage('Extrato consolidado anexado com sucesso. Ele será incluído automaticamente no ZIP da Contabilidade.')
+      let importedTransactionCount = 0
+      let ofxBankId = ''
+      let ofxAccountId = ''
+      if (/\\.ofx$/i.test(file.name)) {
+        const parsed = parseOfx(await file.text())
+        if (!parsed.transactions.length) throw new Error('O arquivo OFX não contém movimentações bancárias reconhecíveis.')
+        const batch = writeBatch(db)
+        parsed.transactions.forEach((transaction) => {
+          const transactionId = `${competence}__itau__${safeName(transaction.fitId)}`
+          batch.set(doc(db, 'bankTransactions', transactionId), {
+            ...transaction,
+            competence,
+            unit,
+            bankAccountId: 'itau',
+            bankId: parsed.bankId,
+            branchId: parsed.branchId,
+            accountId: parsed.accountId,
+            currency: parsed.currency,
+            statementId,
+            statementStoragePath: path,
+            importedBy: profile.uid,
+            importedByName: profile.displayName,
+            importedByEmail: profile.email,
+            importedAt: serverTimestamp(),
+          }, { merge: true })
+        })
+        await batch.commit()
+        importedTransactionCount = parsed.transactions.length
+        ofxBankId = parsed.bankId
+        ofxAccountId = parsed.accountId
+      }
+      await setDoc(doc(db, 'bankStatements', statementId), {
+        competence, unit, fileName: file.name, storagePath: path, downloadUrl, size: file.size,
+        type: file.type || 'application/octet-stream', bankAccountId: /\\.ofx$/i.test(file.name) ? 'itau' : null,
+        importedTransactionCount, ofxBankId: ofxBankId || null, ofxAccountId: ofxAccountId || null,
+        uploadedBy: profile.uid, uploadedByName: profile.displayName, uploadedByEmail: profile.email, uploadedAt: serverTimestamp(),
+      })
+      await audit('Extrato bancário consolidado anexado', `${competence} · ${unit} · ${file.name}${importedTransactionCount ? ` · ${importedTransactionCount} movimentação(ões) OFX importada(s)` : ''}`, statementId)
+      setMessage(importedTransactionCount
+        ? `Extrato OFX anexado com sucesso. ${importedTransactionCount} movimentação(ões) foram importadas para a Conciliação Bancária.`
+        : 'Extrato consolidado anexado com sucesso. Ele será incluído automaticamente no ZIP da Contabilidade.')
     } catch (error) { console.error(error); setMessage('Não foi possível enviar o extrato consolidado.') } finally { setBusy('') }
   }
 
