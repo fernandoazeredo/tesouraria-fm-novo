@@ -112,7 +112,7 @@ export function AccountingPageStorageV2() {
   const reconciliationPeriodId = `${competence}__itau`
   const reconciliationPeriod = reconciliationPeriods.find((item) => item.id === reconciliationPeriodId) ?? null
   const reconciliationClosed = reconciliationPeriod?.status === 'fechada'
-  const monthBankTransactions = bankTransactions.filter((item) => String(item.competence) === competence && String(item.bankAccountId || 'itau') === 'itau').sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
+  const monthBankTransactions = bankTransactions.filter((item) => String(item.competence) === competence && String(item.bankAccountId || 'itau') === 'itau' && (!statement?.storagePath || String(item.statementStoragePath || '') === String(statement.storagePath))).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
   const monthReconciliations = bankReconciliations.filter((item) => String(item.competence) === competence)
   const reconciliationByTransaction = new Map(monthReconciliations.map((item) => [String(item.bankTransactionId), item]))
   const documentCount = [...selectedExpenses, ...selectedReceivables].reduce((sum, item) => sum + attachmentsOf(item).length, 0)
