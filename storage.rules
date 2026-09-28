@@ -82,7 +82,7 @@ service firebase.storage {
       allow read: if financialReader();
       allow create, update: if financialWriter()
         && request.resource.size <= 250 * 1024 * 1024;
-      allow delete: if isPrimaryAdminEmail();
+      allow delete: if financialWriter();
     }
 
     // Estrutura antiga mantida somente para leitura/limpeza de pacotes já existentes.
