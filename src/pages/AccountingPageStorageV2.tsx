@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BadgeDollarSign, Calculator, CheckCircle2, Download, FileSpreadsheet, Landmark, Paperclip, ReceiptText, Send, Upload } from 'lucide-react'
+import { BadgeDollarSign, Calculator, CheckCircle2, Download, FileSpreadsheet, Landmark, Mail, Paperclip, ReceiptText, Send, Upload } from 'lucide-react'
 import { addDoc, arrayUnion, collection, doc, onSnapshot, serverTimestamp, setDoc, writeBatch, type DocumentData } from 'firebase/firestore'
 import { getBytes, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
 import { db, storage } from '../lib/firebase'
@@ -11,7 +11,7 @@ import { parseOfx, readOfxFile } from '../lib/ofx'
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const dateTimeBR = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
 type AnyRecord = { id: string } & DocumentData
-type BusyAction = '' | 'download' | 'send' | 'statement'
+type BusyAction = '' | 'download' | 'send' | 'statement' | 'email'
 type Attachment = { name?: string; path?: string; url?: string; size?: number; type?: string }
 type PaidMovement = { planId: string; type: 'Repasse de Alvará' | 'Comissão de Agente'; process: string; beneficiary: string; unit: string; installment: number; paidDate: string; value: number; status: string }
 
@@ -29,6 +29,25 @@ function timestampToDateTime(value: unknown) {
 function safeName(value: string) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'arquivo' }
 function toBlob(bytes: Uint8Array) { const buffer = new ArrayBuffer(bytes.byteLength); new Uint8Array(buffer).set(bytes); return new Blob([buffer], { type: 'application/zip' }) }
 function downloadBlob(blob: Blob, fileName: string) { const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = fileName; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url) }
+function competenceLabel(value: string) {
+  const [year, month] = value.split('-').map(Number)
+  if (!year || !month) return value
+  const label = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(new Date(year, month - 1, 1))
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+const ACCOUNTING_EMAIL_TO = ['fiscal@contabilidadequality.com.br']
+const ACCOUNTING_EMAIL_CC = ['socorro@marquesemuller.adv.br', 'fernandoazeredo64@gmail.com']
+
+function gmailComposeUrl(to: string[], cc: string[], subject: string, body: string) {
+  const enc = encodeURIComponent
+  return `https://mail.google.com/mail/?view=cm&fs=1&to=${enc(to.join(','))}&cc=${enc(cc.join(','))}&su=${enc(subject)}&body=${enc(body)}`
+}
+
+function mailtoComposeUrl(to: string[], cc: string[], subject: string, body: string) {
+  const enc = encodeURIComponent
+  return `mailto:${to.join(',')}?cc=${enc(cc.join(','))}&subject=${enc(subject)}&body=${enc(body)}`
+}
 function attachmentsOf(item: AnyRecord): Attachment[] { return Array.isArray(item.attachments) ? item.attachments as Attachment[] : [] }
 function statusLabel(value: string) {
   const labels: Record<string, string> = { aprovado: 'Aprovado', pago: 'Pago', arquivado: 'Arquivado', recebido_tesouraria: 'Recebido pela Tesouraria', encerrado: 'Encerrado / Arquivado', parcialmente_pago: 'Parcialmente pago' }
@@ -314,6 +333,71 @@ export function AccountingPageStorageV2() {
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível gerar o ZIP.') } finally { setBusy('') }
   }
 
+  async function prepareAccountingEmail() {
+    if (!profile) return
+    if (totalEntries === 0) { setMessage('Nenhum lançamento apto foi encontrado.'); return }
+
+    let reconciliationOverrideReason = ''
+    if (!reconciliationClosed) {
+      if (profile.role !== 'master') {
+        setMessage('A Conciliação Bancária desta competência ainda não foi fechada. Finalize a conciliação antes de preparar o e-mail para a Contabilidade.')
+        return
+      }
+      const reason = window.prompt('A Conciliação Bancária desta competência ainda não foi fechada. Como Administrador Master, informe a justificativa para preparar o e-mail excepcionalmente:')
+      if (!reason?.trim()) return
+      reconciliationOverrideReason = reason.trim()
+    }
+
+    const warning = statement ? '' : '\n\nATENÇÃO: o extrato bancário não está anexado e não será incluído no pacote.'
+    if (!window.confirm(`Preparar o e-mail da competência ${competenceLabel(competence)} para fiscal@contabilidadequality.com.br?${warning}\n\nIsso NÃO registrará o envio como concluído.`)) return
+
+    // Abre imediatamente para evitar bloqueio do navegador após os awaits.
+    const popup = window.open('about:blank', '_blank')
+    setBusy('email'); setMessage('Preparando o pacote para a Contabilidade...')
+    try {
+      const { blob, fileName } = await buildPackage()
+      const packagePath = `envios-contabilidade/${competence}/${safeName(unit)}/${fileName}`
+      const target = storageRef(storage, packagePath)
+      await uploadBytes(target, blob, {
+        contentType: 'application/zip',
+        contentDisposition: `attachment; filename="${fileName}"`,
+      })
+      const downloadUrl = await getDownloadURL(target)
+
+      const subject = `Movimento Contábil — ${competenceLabel(competence)} — FLÁVIO MARQUES ADVOGADOS ASSOCIADOS`
+      const body = [
+        'Prezados,',
+        '',
+        `Segue o movimento contábil referente à competência ${competenceLabel(competence)}.`,
+        '',
+        'O pacote contém a planilha de movimentação contábil, documentos de Despesas, documentos de Receitas, Repasses de Alvarás, Comissões de Agentes, Pendências e o Extrato Bancário, quando anexado.',
+        '',
+        'Pacote para download:',
+        downloadUrl,
+        '',
+        'Atenciosamente,',
+        'FLÁVIO MARQUES ADVOGADOS ASSOCIADOS',
+      ].join('\n')
+
+      await audit(
+        'E-mail para a Contabilidade preparado',
+        `${competence} · ${unit} · Para: ${ACCOUNTING_EMAIL_TO.join(', ')} · Cópia: ${ACCOUNTING_EMAIL_CC.join(', ')} · ${fileName}${reconciliationOverrideReason ? ` · Exceção Master: ${reconciliationOverrideReason}` : ''}`
+      )
+
+      const gmailUrl = gmailComposeUrl(ACCOUNTING_EMAIL_TO, ACCOUNTING_EMAIL_CC, subject, body)
+      if (popup) popup.location.href = gmailUrl
+      else window.location.href = mailtoComposeUrl(ACCOUNTING_EMAIL_TO, ACCOUNTING_EMAIL_CC, subject, body)
+
+      setMessage('E-mail preparado. Confira a mensagem, envie no Gmail e depois use “Registrar envio à Contabilidade” para confirmar oficialmente o envio.')
+    } catch (error) {
+      popup?.close()
+      console.error(error)
+      setMessage(error instanceof Error ? error.message : 'Não foi possível preparar o e-mail para a Contabilidade.')
+    } finally {
+      setBusy('')
+    }
+  }
+
   async function sendMovement() {
     if (totalEntries === 0) { setMessage('Nenhum lançamento apto foi encontrado.'); return }
     let reconciliationOverride = false
@@ -364,7 +448,7 @@ export function AccountingPageStorageV2() {
       <div className="accounting-config"><label><span>Competência</span><input type="month" value={competence} onChange={(e) => setCompetence(e.target.value)} /></label><label><span>Unidade</span><select value={unit} onChange={(e) => setUnit(e.target.value)}><option>Todas</option><option>RJ</option><option>SP</option></select></label><label><span>Movimento</span><select value={movement} onChange={(e) => setMovement(e.target.value)}><option>Movimento completo</option><option>Somente Despesas</option><option>Somente Recebimentos</option><option>Somente Repasses / Comissões</option></select></label></div>
       <div className="readiness-grid accounting-six"><article><ReceiptText /><span>Despesas aptas</span><strong>{expenseCount}</strong><small>{money.format(expenseTotal)}</small></article><article><BadgeDollarSign /><span>Receitas aptas</span><strong>{receivableCount}</strong><small>{money.format(revenueTotal)}</small></article><article><Send /><span>Repasses pagos</span><strong>{transferCount}</strong><small>{money.format(transferTotal)}</small></article><article><Calculator /><span>Comissões pagas</span><strong>{commissionCount}</strong><small>{money.format(commissionTotal)}</small></article><article><Paperclip /><span>Documentos</span><strong>{documentCount}</strong><small>{missingDocs.length} lançamento(s) sem anexo</small></article><article className={statement ? 'storage-ready-card' : ''}><Landmark /><span>Extrato bancário</span><strong>{statement ? 'Anexado' : 'Não anexado'}</strong><small>{statement?.fileName || 'Opcional para gerar o ZIP'}</small></article></div>
       <div className="bank-statement-box"><div><Landmark size={21} /><div><strong>Extrato consolidado do banco</strong><span>Opcional para gerar o pacote mensal. Se anexado, será incluído no ZIP. Aceita PDF, OFX, CSV e Excel.</span>{statement && <small><CheckCircle2 size={13} /> {statement.fileName}</small>}</div></div><label className="secondary-button accounting-file-button"><Upload size={17} /> {busy === 'statement' ? 'Enviando...' : statement ? 'Substituir extrato' : 'Anexar extrato'}<input type="file" hidden accept=".pdf,.ofx,.csv,.xlsx,.xls" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadStatement(file); e.currentTarget.value = '' }} /></label></div>
-      <div className="storage-ready-box"><FileSpreadsheet size={18} /><span><strong>Pacote para a Contabilidade:</strong> planilha Excel com Resumo, Despesas, Receitas, Repasses de Alvarás, Comissões de Agentes, Documentos e Pendências + anexos. O extrato bancário é incluído somente quando estiver anexado.</span></div>
+      <div className="storage-ready-box"><FileSpreadsheet size={18} /><div className="accounting-package-copy"><span><strong>Pacote para a Contabilidade:</strong> planilha Excel com Resumo, Despesas, Receitas, Repasses de Alvarás, Comissões de Agentes, Documentos, Pendências e Conciliação Bancária + anexos. O extrato bancário é incluído somente quando estiver anexado.</span><button className="primary-button" type="button" disabled={Boolean(busy)} onClick={() => void prepareAccountingEmail()}><Mail size={17} /> {busy === 'email' ? 'Preparando e-mail...' : 'Preparar e-mail para o contador'}</button><small>Para: fiscal@contabilidadequality.com.br · Cópia: socorro@marquesemuller.adv.br; fernandoazeredo64@gmail.com</small></div></div>
       <div className="accounting-feedback success"><strong>Regra contábil operacional:</strong> Repasse de Alvará é dinheiro de terceiro e não entra como despesa operacional/DRE. A saída aparece na competência da data efetiva de pagamento da parcela.</div>
       {message && <div className={`accounting-feedback ${message.includes('sucesso') || message.includes('gerado') || message.includes('anexado') ? 'success' : 'warning'}`} role="status">{message}</div>}
       <div className="accounting-actions"><button className="secondary-button" type="button" disabled={Boolean(busy)} onClick={() => void downloadPackage()}><Download size={17} /> {busy === 'download' ? 'Montando ZIP...' : 'Baixar ZIP completo'}</button><button className="revenue-button" type="button" disabled={Boolean(busy)} onClick={() => void sendMovement()}><Calculator size={17} /> {busy === 'send' ? 'Registrando...' : 'Registrar envio à Contabilidade'}</button></div>
