@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { addDoc, collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
-import { AlertTriangle, CheckCircle2, Landmark, Link2, LockKeyhole, RefreshCw, Search, Undo2 } from 'lucide-react'
-import { db } from '../lib/firebase'
+import { addDoc, arrayUnion, collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc, writeBatch, type DocumentData } from 'firebase/firestore'
+import { AlertTriangle, CheckCircle2, Landmark, Link2, LockKeyhole, RefreshCw, Search, Undo2, Upload } from 'lucide-react'
+import { db, storage } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
 import { DEFAULT_BANK_ACCOUNT_ID, normalizeBankAccountId } from '../data/bankAccounts'
+import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
+import { parseOfx, readOfxFile } from '../lib/ofx'
 import './BankReconciliationPage.css'
 
 type AnyRecord = { id: string } & DocumentData
@@ -42,6 +44,10 @@ function txDescription(tx: AnyRecord) {
   return String(tx.memo || tx.name || tx.refNum || tx.type || 'Movimento bancário')
 }
 
+function safeName(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'arquivo'
+}
+
 export function BankReconciliationPage() {
   const { profile } = useAuth()
   const [competence, setCompetence] = useState(new Date().toISOString().slice(0, 7))
@@ -49,6 +55,7 @@ export function BankReconciliationPage() {
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
+  const [statementBusy, setStatementBusy] = useState(false)
 
   const transactions = useLiveCollection('bankTransactions')
   const statements = useLiveCollection('bankStatements')
@@ -64,6 +71,8 @@ export function BankReconciliationPage() {
   const period = periods.find((item) => item.id === periodId)
   const closed = period?.status === 'fechada'
   const isMaster = profile?.role === 'master'
+  const statementId = `${competence}__Todas`
+  const statement = statements.find((item) => item.id === statementId) ?? null
 
   const candidates = useMemo<Candidate[]>(() => {
     const rows: Candidate[] = []
@@ -211,6 +220,115 @@ export function BankReconciliationPage() {
     })
   }
 
+  async function uploadStatement(file: File) {
+    if (!profile || file.size > 30 * 1024 * 1024) {
+      if (file.size > 30 * 1024 * 1024) setMessage('O extrato ultrapassa o limite de 30 MB.')
+      return
+    }
+
+    setStatementBusy(true)
+    setMessage('')
+    try {
+      const isOfx = /\.ofx$/i.test(file.name)
+      const parsedOfx = isOfx ? parseOfx(await readOfxFile(file)) : null
+      if (isOfx && !parsedOfx?.transactions.length) throw new Error('O arquivo OFX não contém movimentações bancárias reconhecíveis.')
+
+      if (parsedOfx) {
+        const affectedMonths = Array.from(new Set(parsedOfx.transactions.map((item) => item.date.slice(0, 7))))
+        const previousCoveredMonths = Array.isArray(statement?.coveredMonths) ? statement.coveredMonths.map(String) : (statement ? [competence] : [])
+        const monthsThatWillChange = Array.from(new Set([...affectedMonths, ...previousCoveredMonths]))
+        const closedMonths = monthsThatWillChange.filter((month) => periods.some((item) => item.id === `${month}__itau` && item.status === 'fechada'))
+        if (closedMonths.length) {
+          setMessage(`Não é possível substituir/importar o OFX porque a Conciliação Bancária está fechada em: ${closedMonths.join(', ')}. O Administrador Master deve reabrir a competência antes.`)
+          return
+        }
+      }
+
+      const path = `extratos-bancarios/${competence}/Todas/${Date.now()}-${safeName(file.name)}`
+      const target = storageRef(storage, path)
+      await uploadBytes(target, file, { contentType: file.type || 'application/octet-stream' })
+      const downloadUrl = await getDownloadURL(target)
+
+      let importedTransactionCount = 0
+      let ofxBankId = ''
+      let ofxAccountId = ''
+      let activeVersionId: string | null = null
+      let coveredMonths: string[] = []
+      let discardedTransactionCount = 0
+      let balanceCount = 0
+      let automaticInvestmentCount = 0
+      let reconcilableCount = 0
+
+      if (parsedOfx) {
+        const parsed = parsedOfx
+        activeVersionId = `${statementId}__${Date.now()}__${safeName(file.name)}`
+        coveredMonths = Array.from(new Set(parsed.transactions.map((item) => item.date.slice(0, 7))))
+        discardedTransactionCount = parsed.discardedCount
+        balanceCount = parsed.balanceCount
+        automaticInvestmentCount = parsed.automaticInvestmentCount
+        reconcilableCount = parsed.reconcilableCount
+
+        const ops = parsed.transactions.map((transaction) => {
+          const transactionCompetence = transaction.date.slice(0, 7)
+          const reconciliationPeriodId = `${transactionCompetence}__itau`
+          const transactionId = `itau__${transaction.identityKey}`
+          return { transaction, transactionCompetence, reconciliationPeriodId, transactionId }
+        })
+
+        for (let start = 0; start < ops.length; start += 400) {
+          const batch = writeBatch(db)
+          ops.slice(start, start + 400).forEach(({ transaction, transactionCompetence, reconciliationPeriodId, transactionId }) => {
+            batch.set(doc(db, 'bankTransactions', transactionId), {
+              ...transaction,
+              competence: transactionCompetence,
+              reconciliationPeriodId,
+              unit: 'Todas',
+              bankAccountId: 'itau',
+              bankId: parsed.bankId,
+              branchId: parsed.branchId,
+              accountId: parsed.accountId,
+              currency: parsed.currency,
+              statementVersions: arrayUnion(activeVersionId),
+              lastStatementId: statementId,
+              lastStatementStoragePath: path,
+              lastImportedBy: profile.uid,
+              lastImportedByName: profile.displayName,
+              lastImportedByEmail: profile.email,
+              lastImportedAt: serverTimestamp(),
+            }, { merge: true })
+          })
+          await batch.commit()
+        }
+
+        importedTransactionCount = parsed.transactions.length
+        ofxBankId = parsed.bankId
+        ofxAccountId = parsed.accountId
+      }
+
+      await setDoc(doc(db, 'bankStatements', statementId), {
+        competence, unit: 'Todas', fileName: file.name, storagePath: path, downloadUrl, size: file.size,
+        type: file.type || 'application/octet-stream', bankAccountId: isOfx ? 'itau' : null,
+        importedTransactionCount, discardedTransactionCount,
+        balanceCount, automaticInvestmentCount, reconcilableCount,
+        ofxBankId: ofxBankId || null, ofxAccountId: ofxAccountId || null,
+        activeVersionId, coveredMonths,
+        previousVersionId: statement?.activeVersionId || null,
+        previousStoragePath: statement?.storagePath || null,
+        uploadedBy: profile.uid, uploadedByName: profile.displayName, uploadedByEmail: profile.email, uploadedAt: serverTimestamp(),
+      })
+
+      await audit('Extrato bancário consolidado anexado', `${competence} · Todas · ${file.name}${importedTransactionCount ? ` · ${importedTransactionCount} movimentação(ões) OFX importada(s)` : ''}`, statementId)
+      setMessage(importedTransactionCount
+        ? `Extrato OFX anexado com sucesso. ${reconcilableCount} movimento(s) conciliável(is), ${balanceCount} linha(s) de saldo e ${automaticInvestmentCount} movimentação(ões) automática(s) de aplicação/resgate/rendimento foram identificados.`
+        : 'Extrato consolidado anexado com sucesso. Ele será incluído automaticamente no ZIP da Contabilidade.')
+    } catch (error) {
+      console.error(error)
+      setMessage('Não foi possível enviar o extrato consolidado.')
+    } finally {
+      setStatementBusy(false)
+    }
+  }
+
   async function reconcile(tx: AnyRecord, candidate: Candidate) {
     if (!profile || closed) return
     setBusy(tx.id); setMessage('')
@@ -310,6 +428,7 @@ export function BankReconciliationPage() {
     </div>
 
     <section className="page-card reconciliation-panel">
+      <div className="bank-statement-box"><div><Landmark size={21} /><div><strong>Extrato consolidado do banco</strong><span>Opcional para gerar o pacote mensal. Se anexado, será incluído no ZIP. Aceita PDF, OFX, CSV e Excel.</span>{statement && <small><CheckCircle2 size={13} /> {statement.fileName}</small>}</div></div><label className="secondary-button accounting-file-button"><Upload size={17} /> {statementBusy ? 'Enviando...' : statement ? 'Substituir extrato' : 'Anexar extrato'}<input type="file" hidden accept=".pdf,.ofx,.csv,.xlsx,.xls" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadStatement(file); e.currentTarget.value = '' }} /></label></div>
       <div className="reconciliation-toolbar">
         <label><span>Competência</span><input type="month" value={competence} onChange={(e) => setCompetence(e.target.value)} /></label>
         <label><span>Status</span><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option>Todos</option><option>Conciliado</option><option>Correspondência provável</option><option>Sem correspondência</option></select></label>
@@ -337,7 +456,7 @@ export function BankReconciliationPage() {
 
       {message && <div className="accounting-feedback" role="status">{message}</div>}
 
-      {monthTransactions.length === 0 ? <div className="module-empty"><Landmark size={34} /><strong>Nenhum OFX importado para esta competência</strong><span>Anexe o extrato OFX do Itaú na tela Contabilidade.</span></div> : <div className="reconciliation-list">
+      {monthTransactions.length === 0 ? <div className="module-empty"><Landmark size={34} /><strong>Nenhum OFX importado para esta competência</strong><span>Anexe o extrato OFX do Itaú acima.</span></div> : <div className="reconciliation-list">
         {filteredTransactions.map((tx) => {
           const reconciliation = reconciliationByTransaction.get(tx.id)
           const status = rowStatus(tx)
