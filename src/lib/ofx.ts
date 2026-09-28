@@ -2,6 +2,7 @@ export type OfxTransaction = {
   fitId: string
   sourceIndex: number
   identityKey: string
+  movementClass: 'conciliavel' | 'saldo' | 'aplicacao_automatica'
   date: string
   amount: number
   type: string
@@ -18,6 +19,9 @@ export type ParsedOfx = {
   currency: string
   transactions: OfxTransaction[]
   discardedCount: number
+  balanceCount: number
+  automaticInvestmentCount: number
+  reconcilableCount: number
 }
 
 function field(block: string, tag: string) {
@@ -52,12 +56,22 @@ function numberFromOfx(value: string) {
   return Number.isFinite(number) ? number : 0
 }
 
+function replacementCount(value: string) {
+  return (value.match(/\uFFFD/g) || []).length
+}
+
 export async function readOfxFile(file: File) {
   const bytes = new Uint8Array(await file.arrayBuffer())
-  const latin1 = new TextDecoder('windows-1252').decode(bytes)
-  const header = latin1.slice(0, 2048)
-  const declaresUtf8 = /CHARSET\s*:\s*(UTF-?8|65001)/i.test(header)
-  return declaresUtf8 ? new TextDecoder('utf-8').decode(bytes) : latin1
+
+  // Alguns OFX reais do Itaú declaram CHARSET:1252, mas o conteúdo está em UTF-8.
+  // Primeiro tentamos UTF-8 estrito; só usamos Windows-1252 quando UTF-8 não é válido.
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    const utf8 = new TextDecoder('utf-8').decode(bytes)
+    const latin1 = new TextDecoder('windows-1252').decode(bytes)
+    return replacementCount(utf8) <= replacementCount(latin1) ? utf8 : latin1
+  }
 }
 
 function normalizeIdentityText(value: string) {
@@ -71,6 +85,33 @@ function hashIdentity(value: string) {
     hash = Math.imul(hash, 16777619)
   }
   return (hash >>> 0).toString(36)
+}
+
+function classifyMovement(item: { type: string; memo: string; name: string }) {
+  const text = normalizeIdentityText([item.type, item.memo, item.name].filter(Boolean).join(' '))
+
+  const balancePatterns = [
+    'SALDO TOTAL DISPONIVEL',
+    'SALDO MOVIMENTACAO CONTA',
+    'SALDO MOVIMENTACAO',
+    'SALDO DISPONIVEL',
+    'SALDO CONTA CORRENTE',
+    'SALDO DO DIA',
+  ]
+  if (balancePatterns.some((pattern) => text.includes(pattern))) return 'saldo' as const
+
+  const automaticInvestmentPatterns = [
+    'APLICACAO AUTOMATICA',
+    'APLIC AUTOMATICA',
+    'RESGATE AUTOMATICO',
+    'RESGATE APLICACAO',
+    'RENDIMENTO AUTOMATICO',
+    'REND APLIC AUTOM',
+    'REMUNERACAO APLICACAO',
+  ]
+  if (automaticInvestmentPatterns.some((pattern) => text.includes(pattern))) return 'aplicacao_automatica' as const
+
+  return 'conciliavel' as const
 }
 
 export function parseOfx(text: string): ParsedOfx {
@@ -96,23 +137,42 @@ export function parseOfx(text: string): ParsedOfx {
   })
 
   const validRows = parsedRows.filter((item) => item.date && item.amount !== 0)
+
+  const fitIdFrequency = new Map<string, number>()
+  validRows.forEach((item) => {
+    const fitId = normalizeIdentityText(item.fitId)
+    if (fitId && fitId !== 'SEM-FITID') fitIdFrequency.set(fitId, (fitIdFrequency.get(fitId) ?? 0) + 1)
+  })
+
   const occurrence = new Map<string, number>()
   const transactions = validRows.map((item) => {
-    const signature = [
+    const normalizedFitId = normalizeIdentityText(item.fitId)
+    const detailSignature = [
       item.date,
       item.amount.toFixed(2),
-      normalizeIdentityText(item.fitId),
+      normalizedFitId,
       normalizeIdentityText(item.type),
       normalizeIdentityText(item.memo),
       normalizeIdentityText(item.name),
       normalizeIdentityText(item.refNum),
       normalizeIdentityText(item.checkNum),
     ].join('|')
-    const count = (occurrence.get(signature) ?? 0) + 1
-    occurrence.set(signature, count)
+
+    let identityKey: string
+    if (normalizedFitId && normalizedFitId !== 'SEM-FITID' && fitIdFrequency.get(normalizedFitId) === 1) {
+      // No OFX real do Itaú o FITID é a identidade bancária mais estável entre exportações sobrepostas.
+      identityKey = `FITID__${hashIdentity(normalizedFitId)}`
+    } else {
+      // Fallback para FITID ausente/repetido sem depender da posição da linha no arquivo.
+      const count = (occurrence.get(detailSignature) ?? 0) + 1
+      occurrence.set(detailSignature, count)
+      identityKey = `DET__${hashIdentity(detailSignature)}__${String(count).padStart(2, '0')}`
+    }
+
     return {
       ...item,
-      identityKey: `${item.date}__${hashIdentity(signature)}__${String(count).padStart(2, '0')}`,
+      identityKey,
+      movementClass: classifyMovement(item),
     }
   })
 
@@ -123,5 +183,8 @@ export function parseOfx(text: string): ParsedOfx {
     currency: field(source, 'CURDEF') || 'BRL',
     transactions,
     discardedCount: parsedRows.length - validRows.length,
+    balanceCount: transactions.filter((item) => item.movementClass === 'saldo').length,
+    automaticInvestmentCount: transactions.filter((item) => item.movementClass === 'aplicacao_automatica').length,
+    reconcilableCount: transactions.filter((item) => item.movementClass === 'conciliavel').length,
   }
 }
