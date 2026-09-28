@@ -144,12 +144,19 @@ export function BankReconciliationPage() {
     statements.map((item) => String(item.activeVersionId || '')).filter(Boolean)
   ), [statements])
 
-  const monthTransactions = useMemo(() => transactions
+  const activeMonthRows = useMemo(() => transactions
     .filter((item) => String(item.competence) === competence
       && String(item.bankAccountId || DEFAULT_BANK_ACCOUNT_ID) === DEFAULT_BANK_ACCOUNT_ID
       && Array.isArray(item.statementVersions)
-      && item.statementVersions.some((version: unknown) => activeStatementVersions.has(String(version))))
-    .sort((a, b) => String(a.date).localeCompare(String(b.date))), [transactions, competence, activeStatementVersions])
+      && item.statementVersions.some((version: unknown) => activeStatementVersions.has(String(version)))),
+    [transactions, competence, activeStatementVersions])
+
+  const monthTransactions = useMemo(() => activeMonthRows
+    .filter((item) => String(item.movementClass || 'conciliavel') === 'conciliavel')
+    .sort((a, b) => String(a.date).localeCompare(String(b.date))), [activeMonthRows])
+
+  const informationalBalanceCount = activeMonthRows.filter((item) => item.movementClass === 'saldo').length
+  const automaticInvestmentCount = activeMonthRows.filter((item) => item.movementClass === 'aplicacao_automatica').length
 
   const activeTransactionIds = useMemo(() => new Set(monthTransactions.map((item) => item.id)), [monthTransactions])
   const monthReconciliations = useMemo(() => reconciliations.filter((item) =>
@@ -310,11 +317,13 @@ export function BankReconciliationPage() {
       </div>
 
       <div className="reconciliation-summary">
-        <article><Landmark /><span>Movimentos no banco</span><strong>{monthTransactions.length}</strong></article>
+        <article><Landmark /><span>Movimentos conciliáveis</span><strong>{monthTransactions.length}</strong></article>
         <article><CheckCircle2 /><span>Conciliados</span><strong>{summary.conciliados}</strong></article>
         <article><Link2 /><span>Correspondência provável</span><strong>{summary.provaveis}</strong></article>
         <article><AlertTriangle /><span>Sem correspondência</span><strong>{summary.sem}</strong></article>
         <article><AlertTriangle /><span>Lançamento não localizado no banco</span><strong>{unmatchedSystem.length}</strong></article>
+        <article><Landmark /><span>Saldos informativos ignorados</span><strong>{informationalBalanceCount}</strong></article>
+        <article><RefreshCw /><span>Aplicações automáticas ignoradas</span><strong>{automaticInvestmentCount}</strong></article>
       </div>
 
       <div className={closed ? 'reconciliation-state is-closed' : 'reconciliation-state'}>
