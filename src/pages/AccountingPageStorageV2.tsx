@@ -308,6 +308,9 @@ export function AccountingPageStorageV2() {
     setMessage('Montando planilha Excel e incorporando documentos ao ZIP...')
     const workbook = createXlsx(workbookSheets())
     const entries: Array<{ name: string; content: string | Uint8Array }> = [{ name: `Movimento_Contabilidade_${competence}_${safeName(unit)}.xlsx`, content: workbook }]
+    const failedFiles: string[] = []
+    let statementIncluded = false
+
     if (statement?.storagePath) {
       try {
         let statementBytes: Uint8Array
@@ -319,28 +322,54 @@ export function AccountingPageStorageV2() {
           statementBytes = new Uint8Array(await getBytes(storageRef(storage, String(statement.storagePath))))
         }
         entries.push({ name: `Extrato_Bancario/${safeName(String(statement.fileName ?? 'Extrato_Consolidado'))}`, content: statementBytes })
+        statementIncluded = true
       } catch (error) {
         console.warn('Extrato bancário não incluído no ZIP:', error)
+        failedFiles.push(`Extrato bancário: ${String(statement.fileName || 'arquivo')}`)
       }
     }
+
     for (let index = 0; index < selectedExpenses.length; index += 1) for (const file of attachmentsOf(selectedExpenses[index])) {
-      try { entries.push({ name: `Documentos_Despesas/${String(index + 1).padStart(3, '0')}_${safeName(String(selectedExpenses[index].fornecedor || selectedExpenses[index].nome || selectedExpenses[index].id))}/${safeName(file.name || 'documento')}`, content: await bytesFromAttachment(file) }) } catch (error) { console.warn('Documento de despesa não incluído:', file, error) }
+      try {
+        entries.push({ name: `Documentos_Despesas/${String(index + 1).padStart(3, '0')}_${safeName(String(selectedExpenses[index].fornecedor || selectedExpenses[index].nome || selectedExpenses[index].id))}/${safeName(file.name || 'documento')}`, content: await bytesFromAttachment(file) })
+      } catch (error) {
+        console.warn('Documento de despesa não incluído:', file, error)
+        failedFiles.push(`Documento de despesa: ${file.name || 'documento'}`)
+      }
     }
+
     for (let index = 0; index < selectedReceivables.length; index += 1) for (const file of attachmentsOf(selectedReceivables[index])) {
-      try { entries.push({ name: `Documentos_Receitas/${String(index + 1).padStart(3, '0')}_${safeName(String(selectedReceivables[index].processo || selectedReceivables[index].reclamante || selectedReceivables[index].id))}/${safeName(file.name || 'documento')}`, content: await bytesFromAttachment(file) }) } catch (error) { console.warn('Documento de receita não incluído:', file, error) }
+      try {
+        entries.push({ name: `Documentos_Receitas/${String(index + 1).padStart(3, '0')}_${safeName(String(selectedReceivables[index].processo || selectedReceivables[index].reclamante || selectedReceivables[index].id))}/${safeName(file.name || 'documento')}`, content: await bytesFromAttachment(file) })
+      } catch (error) {
+        console.warn('Documento de receita não incluído:', file, error)
+        failedFiles.push(`Documento de receita: ${file.name || 'documento'}`)
+      }
     }
+
     const bytes = createZip(entries)
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-    return { blob: toBlob(bytes), fileName: `Contabilidade_${competence}_${safeName(unit)}_${stamp}.zip` }
+    return {
+      blob: toBlob(bytes),
+      fileName: `Contabilidade_${competence}_${safeName(unit)}_${stamp}.zip`,
+      statementIncluded,
+      failedFiles,
+    }
   }
 
   async function downloadPackage() {
     setBusy('download'); setMessage('')
     try {
-      const { blob, fileName } = await buildPackage()
+      const { blob, fileName, statementIncluded, failedFiles } = await buildPackage()
       downloadBlob(blob, fileName)
-      await audit('Pacote completo da Contabilidade baixado', `${competence} · ${unit} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões) · extrato ${statement ? 'anexado' : 'não anexado'}`)
-      setMessage(`ZIP completo gerado: ${fileName}${statement ? '' : ' (sem extrato bancário)'}`)
+      const incomplete = failedFiles.length > 0
+      await audit(
+        incomplete ? 'Pacote da Contabilidade baixado com arquivos ausentes' : 'Pacote completo da Contabilidade baixado',
+        `${competence} · ${unit} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões) · extrato ${statementIncluded ? 'incluído' : statement ? 'FALHOU' : 'não anexado'}${incomplete ? ` · Falhas: ${failedFiles.join(' | ')}` : ''}`
+      )
+      setMessage(incomplete
+        ? `PACOTE INCOMPLETO: ${fileName}. Não foi possível incluir: ${failedFiles.join('; ')}.`
+        : `ZIP completo gerado: ${fileName}${statement ? '' : ' (sem extrato bancário anexado)'}`)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível gerar o ZIP.') } finally { setBusy('') }
   }
 
@@ -355,7 +384,15 @@ export function AccountingPageStorageV2() {
     const popup = window.open('about:blank', '_blank')
     setBusy('email'); setMessage('Preparando o pacote para a Contabilidade...')
     try {
-      const { blob, fileName } = await buildPackage()
+      const { blob, fileName, statementIncluded, failedFiles } = await buildPackage()
+      if (failedFiles.length > 0) {
+        const proceed = window.confirm(`ATENÇÃO — PACOTE INCOMPLETO.\n\nNão foi possível incluir:\n- ${failedFiles.join('\n- ')}\n\nDeseja preparar o e-mail mesmo assim?`)
+        if (!proceed) {
+          popup?.close()
+          setMessage(`Envio cancelado. Corrija os arquivos que não entraram no pacote: ${failedFiles.join('; ')}.`)
+          return
+        }
+      }
       const packagePath = `envios-contabilidade/${competence}/${safeName(unit)}/${fileName}`
       const target = storageRef(storage, packagePath)
       await uploadBytes(target, blob, {
@@ -370,7 +407,9 @@ export function AccountingPageStorageV2() {
         '',
         `Segue o movimento contábil referente à competência ${competenceLabel(competence)}.`,
         '',
-        'O pacote contém a planilha de movimentação contábil, documentos de Despesas, documentos de Receitas, Repasses de Alvarás, Comissões de Agentes, Pendências e o Extrato Bancário, quando anexado.',
+        failedFiles.length === 0
+          ? `O pacote contém a planilha de movimentação contábil e os documentos disponíveis.${statementIncluded ? ' O extrato bancário foi incluído.' : ' Não há extrato bancário anexado nesta competência.'}`
+          : `ATENÇÃO: o pacote foi gerado com pendência. Não foi possível incluir: ${failedFiles.join('; ')}.`,
         '',
         'Pacote para download:',
         downloadUrl,
@@ -388,7 +427,9 @@ export function AccountingPageStorageV2() {
       if (popup) popup.location.href = gmailUrl
       else window.location.href = mailtoComposeUrl(ACCOUNTING_EMAIL_TO, ACCOUNTING_EMAIL_CC, subject, body)
 
-      setMessage('E-mail preparado. Confira a mensagem, envie no Gmail e depois use “Registrar envio à Contabilidade” para confirmar oficialmente o envio.')
+      setMessage(failedFiles.length
+        ? `E-mail preparado com AVISO DE PACOTE INCOMPLETO. Arquivos não incluídos: ${failedFiles.join('; ')}.`
+        : 'E-mail preparado. Confira a mensagem, envie no Gmail e depois use “Registrar envio à Contabilidade” para confirmar oficialmente o envio.')
     } catch (error) {
       popup?.close()
       console.error(error)
