@@ -1,0 +1,38 @@
+name: Deploy Online - Conciliacao Bancaria FM
+
+on:
+  push:
+    branches:
+      - feat/conciliacao-bancaria-fm
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Instalar dependencias
+        run: npm install --no-package-lock
+
+      - name: Gerar build
+        run: npm run build
+
+      - name: Autenticar no Google Cloud / Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TESOURARIA_FM_NOVO }}
+
+      - name: Instalar Firebase CLI
+        run: npm install --global firebase-tools
+
+      - name: Publicar regras e Hosting do FM NOVO
+        run: firebase deploy --only firestore:rules,firestore:indexes,storage,hosting --project tesouraria-fm-novo --non-interactive
