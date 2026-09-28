@@ -14,3 +14,6 @@
 .unmatched-system-list{display:grid;gap:8px}.unmatched-system-list article{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:9px}.unmatched-system-list span{color:var(--muted);font-size:12px}
 @media(max-width:1050px){.reconciliation-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.reconciliation-row{grid-template-columns:1fr 130px}.reconciliation-match{grid-column:1/-1}}
 @media(max-width:760px){.reconciliation-toolbar{grid-template-columns:1fr}.reconciliation-summary{grid-template-columns:1fr}.reconciliation-row{grid-template-columns:1fr}.reconciliation-amount{text-align:left}.candidate,.matched-detail,.unmatched-system-list article{align-items:flex-start;flex-direction:column}}
+
+.bank-statement-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+@media(max-width:760px){.bank-statement-actions{width:100%}.bank-statement-actions>*{width:100%;justify-content:center}}
