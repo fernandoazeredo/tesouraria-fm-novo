@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BadgeDollarSign, Calculator, CheckCircle2, Download, FileSpreadsheet, Landmark, Paperclip, ReceiptText, Send, Upload } from 'lucide-react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, writeBatch, type DocumentData } from 'firebase/firestore'
-import { deleteObject, getBytes, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
+import { getBytes, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
 import { db, storage } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
 import { createZip } from '../lib/simpleZip'
 import { createXlsx, type XlsxSheet } from '../lib/simpleXlsx'
-import { parseOfx } from '../lib/ofx'
+import { parseOfx, readOfxFile } from '../lib/ofx'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const dateTimeBR = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
@@ -127,7 +127,6 @@ export function AccountingPageStorageV2() {
     if (!profile || file.size > 30 * 1024 * 1024) { if (file.size > 30 * 1024 * 1024) setMessage('O extrato ultrapassa o limite de 30 MB.'); return }
     setBusy('statement'); setMessage('')
     try {
-      if (statement?.storagePath) { try { await deleteObject(storageRef(storage, String(statement.storagePath))) } catch {} }
       const path = `extratos-bancarios/${competence}/${safeName(unit)}/${Date.now()}-${safeName(file.name)}`
       const target = storageRef(storage, path)
       await uploadBytes(target, file, { contentType: file.type || 'application/octet-stream' })
@@ -135,37 +134,58 @@ export function AccountingPageStorageV2() {
       let importedTransactionCount = 0
       let ofxBankId = ''
       let ofxAccountId = ''
-      if (/\\.ofx$/i.test(file.name)) {
-        const parsed = parseOfx(await file.text())
+      if (/\.ofx$/i.test(file.name)) {
+        const parsed = parseOfx(await readOfxFile(file))
         if (!parsed.transactions.length) throw new Error('O arquivo OFX não contém movimentações bancárias reconhecíveis.')
-        const batch = writeBatch(db)
-        parsed.transactions.forEach((transaction) => {
-          const transactionId = `${competence}__itau__${safeName(transaction.fitId)}`
-          batch.set(doc(db, 'bankTransactions', transactionId), {
-            ...transaction,
-            competence,
-            unit,
-            bankAccountId: 'itau',
-            bankId: parsed.bankId,
-            branchId: parsed.branchId,
-            accountId: parsed.accountId,
-            currency: parsed.currency,
-            statementId,
-            statementStoragePath: path,
-            importedBy: profile.uid,
-            importedByName: profile.displayName,
-            importedByEmail: profile.email,
-            importedAt: serverTimestamp(),
-          }, { merge: true })
+
+        const oldActive = bankTransactions.filter((item) => String(item.statementId || '') === statementId && item.statementActive !== false)
+        const deactivateOps = oldActive.map((item) => ({ ref: doc(db, 'bankTransactions', item.id) }))
+        for (let start = 0; start < deactivateOps.length; start += 400) {
+          const batch = writeBatch(db)
+          deactivateOps.slice(start, start + 400).forEach(({ ref }) => batch.set(ref, { statementActive: false }, { merge: true }))
+          await batch.commit()
+        }
+
+        const ops = parsed.transactions.map((transaction) => {
+          const transactionCompetence = transaction.date.slice(0, 7)
+          const reconciliationPeriodId = `${transactionCompetence}__itau`
+          const transactionId = `${transactionCompetence}__itau__${safeName(transaction.fitId)}__${String(transaction.sourceIndex + 1).padStart(4, '0')}`
+          return { transaction, transactionCompetence, reconciliationPeriodId, transactionId }
         })
-        await batch.commit()
+
+        for (let start = 0; start < ops.length; start += 400) {
+          const batch = writeBatch(db)
+          ops.slice(start, start + 400).forEach(({ transaction, transactionCompetence, reconciliationPeriodId, transactionId }) => {
+            batch.set(doc(db, 'bankTransactions', transactionId), {
+              ...transaction,
+              competence: transactionCompetence,
+              sourceStatementCompetence: competence,
+              reconciliationPeriodId,
+              unit,
+              bankAccountId: 'itau',
+              bankId: parsed.bankId,
+              branchId: parsed.branchId,
+              accountId: parsed.accountId,
+              currency: parsed.currency,
+              statementId,
+              statementStoragePath: path,
+              statementActive: true,
+              importedBy: profile.uid,
+              importedByName: profile.displayName,
+              importedByEmail: profile.email,
+              importedAt: serverTimestamp(),
+            }, { merge: true })
+          })
+          await batch.commit()
+        }
+
         importedTransactionCount = parsed.transactions.length
         ofxBankId = parsed.bankId
         ofxAccountId = parsed.accountId
       }
       await setDoc(doc(db, 'bankStatements', statementId), {
         competence, unit, fileName: file.name, storagePath: path, downloadUrl, size: file.size,
-        type: file.type || 'application/octet-stream', bankAccountId: /\\.ofx$/i.test(file.name) ? 'itau' : null,
+        type: file.type || 'application/octet-stream', bankAccountId: /\.ofx$/i.test(file.name) ? 'itau' : null,
         importedTransactionCount, ofxBankId: ofxBankId || null, ofxAccountId: ofxAccountId || null,
         uploadedBy: profile.uid, uploadedByName: profile.displayName, uploadedByEmail: profile.email, uploadedAt: serverTimestamp(),
       })
