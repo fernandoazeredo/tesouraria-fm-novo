@@ -293,7 +293,7 @@ service cloud.firestore {
       allow update: if masterRestoreMode()
         || societaryDirectorUpdate()
         || societaryTreasuryUpdate();
-      allow delete: if false;
+      allow delete: if masterRestoreMode();
     }
 
     match /fiscalNotes/{document=**} {
