@@ -1,7 +1,7 @@
 import { getApps, initializeApp } from 'firebase/app'
-import { getAuth } from 'firebase/auth'
-import { getFirestore, initializeFirestore } from 'firebase/firestore'
-import { getStorage } from 'firebase/storage'
+import { connectAuthEmulator, getAuth } from 'firebase/auth'
+import { connectFirestoreEmulator, getFirestore, initializeFirestore } from 'firebase/firestore'
+import { connectStorageEmulator, getStorage } from 'firebase/storage'
 
 /**
  * Configuração pública do Firebase Web App do TESOURARIA FM NOVO.
@@ -38,3 +38,16 @@ export const db = firestoreDb
 
 export const storage = getStorage(firebaseApp)
 export const firebaseProjectId = firebaseConfig.projectId
+
+export const usingFirebaseEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true'
+
+type EmulatorGlobal = typeof globalThis & { __FM_FIREBASE_EMULATORS_CONNECTED__?: boolean }
+const emulatorGlobal = globalThis as EmulatorGlobal
+
+if (usingFirebaseEmulators && !emulatorGlobal.__FM_FIREBASE_EMULATORS_CONNECTED__) {
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })
+  connectFirestoreEmulator(db, '127.0.0.1', 8080)
+  connectStorageEmulator(storage, '127.0.0.1', 9199)
+  emulatorGlobal.__FM_FIREBASE_EMULATORS_CONNECTED__ = true
+  console.info('[FM NOVO] Firebase Emulator Suite ATIVO — nenhum dado deve ir para a produção.')
+}
