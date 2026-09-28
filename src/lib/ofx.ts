@@ -91,6 +91,9 @@ function classifyMovement(item: { type: string; memo: string; name: string }) {
   const text = normalizeIdentityText([item.type, item.memo, item.name].filter(Boolean).join(' '))
 
   const balancePatterns = [
+    'SALDO ANTERIOR',
+    'SALDO APLIC AUT',
+    'SDO APLIC AUT MAIS',
     'SALDO TOTAL DISPONIVEL',
     'SALDO TOTAL DISPONIVEL DIA',
     'SALDO MOVIMENTACAO CONTA',
@@ -106,11 +109,13 @@ function classifyMovement(item: { type: string; memo: string; name: string }) {
     'APLIC AUTOMATICA',
     'APLIC AUT MAIS',
     'APL APLIC AUT',
+    'APLICACAO CDB DI',
     'RESGATE AUTOMATICO',
     'RESGATE APLICACAO',
     'RESGATE CDB',
     'RENDIMENTO AUTOMATICO',
     'REND APLIC AUTOM',
+    'REND PAGO APLIC AUT APR',
     'REMUNERACAO APLICACAO',
   ]
   if (automaticInvestmentPatterns.some((pattern) => text.includes(pattern))) return 'aplicacao_automatica' as const
