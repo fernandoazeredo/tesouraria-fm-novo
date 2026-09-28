@@ -1,6 +1,7 @@
 export type OfxTransaction = {
   fitId: string
   sourceIndex: number
+  identityKey: string
   date: string
   amount: number
   type: string
@@ -16,6 +17,7 @@ export type ParsedOfx = {
   accountId: string
   currency: string
   transactions: OfxTransaction[]
+  discardedCount: number
 }
 
 function field(block: string, tag: string) {
@@ -58,18 +60,32 @@ export async function readOfxFile(file: File) {
   return declaresUtf8 ? new TextDecoder('utf-8').decode(bytes) : latin1
 }
 
+function normalizeIdentityText(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toUpperCase()
+}
+
+function hashIdentity(value: string) {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36)
+}
+
 export function parseOfx(text: string): ParsedOfx {
   const source = text.replace(/^\uFEFF/, '')
   const blocks = source.match(/<STMTTRN>[\s\S]*?<\/STMTTRN>/gi)
     ?? source.split(/<STMTTRN>/i).slice(1).map((part) => part.split(/<\/BANKTRANLIST>/i)[0])
 
-  const transactions = blocks.map((block, index) => {
+  const parsedRows = blocks.map((block, index) => {
     const amount = numberFromOfx(field(block, 'TRNAMT'))
-    const fitId = field(block, 'FITID') || `SEM-FITID-${index + 1}-${dateFromOfx(field(block, 'DTPOSTED'))}-${amount.toFixed(2)}`
+    const date = dateFromOfx(field(block, 'DTPOSTED'))
+    const fitId = field(block, 'FITID') || 'SEM-FITID'
     return {
       fitId,
       sourceIndex: index,
-      date: dateFromOfx(field(block, 'DTPOSTED')),
+      date,
       amount,
       type: field(block, 'TRNTYPE'),
       memo: field(block, 'MEMO'),
@@ -77,7 +93,28 @@ export function parseOfx(text: string): ParsedOfx {
       refNum: field(block, 'REFNUM'),
       checkNum: field(block, 'CHECKNUM'),
     }
-  }).filter((item) => item.date && item.amount !== 0)
+  })
+
+  const validRows = parsedRows.filter((item) => item.date && item.amount !== 0)
+  const occurrence = new Map<string, number>()
+  const transactions = validRows.map((item) => {
+    const signature = [
+      item.date,
+      item.amount.toFixed(2),
+      normalizeIdentityText(item.fitId),
+      normalizeIdentityText(item.type),
+      normalizeIdentityText(item.memo),
+      normalizeIdentityText(item.name),
+      normalizeIdentityText(item.refNum),
+      normalizeIdentityText(item.checkNum),
+    ].join('|')
+    const count = (occurrence.get(signature) ?? 0) + 1
+    occurrence.set(signature, count)
+    return {
+      ...item,
+      identityKey: `${item.date}__${hashIdentity(signature)}__${String(count).padStart(2, '0')}`,
+    }
+  })
 
   return {
     bankId: field(source, 'BANKID'),
@@ -85,5 +122,6 @@ export function parseOfx(text: string): ParsedOfx {
     accountId: field(source, 'ACCTID'),
     currency: field(source, 'CURDEF') || 'BRL',
     transactions,
+    discardedCount: parsedRows.length - validRows.length,
   }
 }
