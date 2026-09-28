@@ -36,8 +36,8 @@ function competenceLabel(value: string) {
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
-const ACCOUNTING_EMAIL_TO = ['fernandoazeredo64@gmail.com']
-const ACCOUNTING_EMAIL_CC: string[] = []
+const ACCOUNTING_EMAIL_TO = ['fiscal@contabilidadequality.com.br']
+const ACCOUNTING_EMAIL_CC = ['socorro@marquesemuller.adv.br', 'fernandoazeredo64@gmail.com']
 
 function gmailComposeUrl(to: string[], cc: string[], subject: string, body: string) {
   const enc = encodeURIComponent
@@ -378,7 +378,7 @@ export function AccountingPageStorageV2() {
     if (totalEntries === 0) { setMessage('Nenhum lançamento apto foi encontrado.'); return }
 
     const warning = statement ? '' : '\n\nATENÇÃO: o extrato bancário não está anexado e não será incluído no pacote.'
-    if (!window.confirm(`Preparar o e-mail da competência ${competenceLabel(competence)} para fernandoazeredo64@gmail.com?${warning}\n\nIsso NÃO registrará o envio como concluído.`)) return
+    if (!window.confirm(`Preparar o e-mail da competência ${competenceLabel(competence)} para fiscal@contabilidadequality.com.br, com cópia para socorro@marquesemuller.adv.br e fernandoazeredo64@gmail.com?${warning}\n\nIsso NÃO registrará o envio como concluído.`)) return
 
     // Abre imediatamente para evitar bloqueio do navegador após os awaits.
     const popup = window.open('about:blank', '_blank')
@@ -473,7 +473,7 @@ export function AccountingPageStorageV2() {
     <section className="page-card accounting-panel">
       <div className="accounting-config"><label><span>Competência</span><input type="month" value={competence} onChange={(e) => setCompetence(e.target.value)} /></label><label><span>Unidade</span><select value={unit} onChange={(e) => setUnit(e.target.value)}><option>Todas</option><option>RJ</option><option>SP</option></select></label><label><span>Movimento</span><select value={movement} onChange={(e) => setMovement(e.target.value)}><option>Movimento completo</option><option>Somente Despesas</option><option>Somente Recebimentos</option><option>Somente Repasses / Comissões</option></select></label></div>
       <div className="readiness-grid accounting-six"><article><ReceiptText /><span>Despesas aptas</span><strong>{expenseCount}</strong><small>{money.format(expenseTotal)}</small></article><article><BadgeDollarSign /><span>Receitas aptas</span><strong>{receivableCount}</strong><small>{money.format(revenueTotal)}</small></article><article><Send /><span>Repasses pagos</span><strong>{transferCount}</strong><small>{money.format(transferTotal)}</small></article><article><Calculator /><span>Comissões pagas</span><strong>{commissionCount}</strong><small>{money.format(commissionTotal)}</small></article><article><Paperclip /><span>Documentos</span><strong>{documentCount}</strong><small>{missingDocs.length} lançamento(s) sem anexo</small></article><article className={statement ? 'storage-ready-card' : ''}><Landmark /><span>Extrato bancário</span><strong>{statement ? 'Anexado' : 'Não anexado'}</strong><small>{statement?.fileName || 'Opcional para gerar o ZIP'}</small></article></div>
-      <div className="storage-ready-box"><FileSpreadsheet size={18} /><div className="accounting-package-copy"><span><strong>Pacote para a Contabilidade:</strong> planilha Excel com Resumo, Despesas, Receitas, Repasses de Alvarás, Comissões de Agentes, Documentos, Pendências e Conciliação Bancária + anexos. O extrato bancário é incluído somente quando estiver anexado.</span><button className="primary-button" type="button" disabled={Boolean(busy)} onClick={() => void prepareAccountingEmail()}><Mail size={17} /> {busy === 'email' ? 'Preparando e-mail...' : 'Preparar e-mail para o contador'}</button><small>Para: fernandoazeredo64@gmail.com · Cópia: nenhuma</small></div></div>
+      <div className="storage-ready-box"><FileSpreadsheet size={18} /><div className="accounting-package-copy"><span><strong>Pacote para a Contabilidade:</strong> planilha Excel com Resumo, Despesas, Receitas, Repasses de Alvarás, Comissões de Agentes, Documentos, Pendências e Conciliação Bancária + anexos. O extrato bancário é incluído somente quando estiver anexado.</span><button className="primary-button" type="button" disabled={Boolean(busy)} onClick={() => void prepareAccountingEmail()}><Mail size={17} /> {busy === 'email' ? 'Preparando e-mail...' : 'Preparar e-mail para o contador'}</button><small>Para: fiscal@contabilidadequality.com.br · Cópia: socorro@marquesemuller.adv.br, fernandoazeredo64@gmail.com</small></div></div>
       <div className="accounting-feedback success"><strong>Regra contábil operacional:</strong> Repasse de Alvará é dinheiro de terceiro e não entra como despesa operacional/DRE. A saída aparece na competência da data efetiva de pagamento da parcela.</div>
       {message && <div className={`accounting-feedback ${message.includes('sucesso') || message.includes('gerado') || message.includes('anexado') ? 'success' : 'warning'}`} role="status">{message}</div>}
       <div className="accounting-actions"><button className="secondary-button" type="button" disabled={Boolean(busy)} onClick={() => void downloadPackage()}><Download size={17} /> {busy === 'download' ? 'Montando ZIP...' : 'Baixar ZIP completo'}</button><button className="revenue-button" type="button" disabled={Boolean(busy)} onClick={() => void sendMovement()}><Calculator size={17} /> {busy === 'send' ? 'Registrando...' : 'Registrar envio à Contabilidade'}</button></div>
