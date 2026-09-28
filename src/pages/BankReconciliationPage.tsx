@@ -95,7 +95,7 @@ export function BankReconciliationPage() {
         type: 'Receita',
         date,
         amount: Math.abs(toNumber(item.valorAlvara)),
-        label: String(item.processo || item.reclamante || 'Receita'),
+        label: String(item.descricao || item.description || item.processo || item.reclamante || item.origem || 'Receita'),
         bankAccountId: normalizeBankAccountId(String(item.receivingBankAccountId || '')),
       })
     }
