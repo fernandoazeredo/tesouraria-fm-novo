@@ -339,7 +339,7 @@ export function BankReconciliationPage() {
   }
 
   async function deleteStatementCompletely() {
-    if (!profile || !statement) return
+    if (!profile || !statement || !isMaster) return
     if (!window.confirm(`Apagar definitivamente o extrato "${statement.fileName}"?\n\nIsso removerá o arquivo, as movimentações importadas por ele e os ZIPs já gerados desta competência. Esta ação não pode ser desfeita.`)) return
 
     const statementVersionPrefix = `${statementId}__`
@@ -393,18 +393,10 @@ export function BankReconciliationPage() {
       }
 
       // Remove todas as cópias históricas do extrato da competência/unidade.
-      try {
-        await deleteStorageTree(`extratos-bancarios/${competence}/Todas`)
-      } catch (error) {
-        console.warn('Algum arquivo histórico do extrato já não existia:', error)
-      }
+      await deleteStorageTree(`extratos-bancarios/${competence}/Todas`)
 
       // Remove ZIPs já gerados que poderiam conter o extrato apagado.
-      try {
-        await deleteStorageTree(`envios-contabilidade/${competence}`)
-      } catch (error) {
-        console.warn('Nenhum ZIP anterior encontrado ou já removido:', error)
-      }
+      await deleteStorageTree(`envios-contabilidade/${competence}`)
 
       await deleteDoc(doc(db, 'bankStatements', statementId))
       await audit(
@@ -520,7 +512,7 @@ export function BankReconciliationPage() {
     </div>
 
     <section className="page-card reconciliation-panel">
-      <div className="bank-statement-box"><div><Landmark size={21} /><div><strong>Extrato consolidado do banco</strong><span>Opcional para gerar o pacote mensal. Se anexado, será incluído no ZIP. Aceita PDF, OFX, CSV e Excel.</span>{statement && <small><CheckCircle2 size={13} /> {statement.fileName}</small>}</div></div><div className="bank-statement-actions"><label className="secondary-button accounting-file-button"><Upload size={17} /> {statementBusy ? 'Enviando...' : statement ? 'Substituir extrato' : 'Anexar extrato'}<input type="file" hidden accept=".pdf,.ofx,.csv,.xlsx,.xls" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadStatement(file); e.currentTarget.value = '' }} /></label>{statement && <button className="expense-button" type="button" disabled={statementBusy} onClick={() => void deleteStatementCompletely()}><Trash2 size={17} /> {statementBusy ? 'Processando...' : 'Apagar extrato'}</button>}</div></div>
+      <div className="bank-statement-box"><div><Landmark size={21} /><div><strong>Extrato consolidado do banco</strong><span>Opcional para gerar o pacote mensal. Se anexado, será incluído no ZIP. Aceita PDF, OFX, CSV e Excel.</span>{statement && <small><CheckCircle2 size={13} /> {statement.fileName}</small>}</div></div><div className="bank-statement-actions"><label className="secondary-button accounting-file-button"><Upload size={17} /> {statementBusy ? 'Enviando...' : statement ? 'Substituir extrato' : 'Anexar extrato'}<input type="file" hidden accept=".pdf,.ofx,.csv,.xlsx,.xls" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadStatement(file); e.currentTarget.value = '' }} /></label>{statement && isMaster && <button className="expense-button" type="button" disabled={statementBusy} onClick={() => void deleteStatementCompletely()}><Trash2 size={17} /> {statementBusy ? 'Processando...' : 'Apagar extrato'}</button>}</div></div>
       <div className="reconciliation-toolbar">
         <label><span>Competência</span><input type="month" value={competence} onChange={(e) => setCompetence(e.target.value)} /></label>
         <label><span>Status</span><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option>Todos</option><option>Conciliado</option><option>Correspondência provável</option><option>Sem correspondência</option></select></label>
