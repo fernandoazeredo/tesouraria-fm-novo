@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BadgeDollarSign, Calculator, CheckCircle2, Download, FileSpreadsheet, Landmark, Paperclip, ReceiptText, Send, Upload } from 'lucide-react'
-import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, writeBatch, type DocumentData } from 'firebase/firestore'
+import { addDoc, arrayUnion, collection, doc, onSnapshot, serverTimestamp, setDoc, writeBatch, type DocumentData } from 'firebase/firestore'
 import { getBytes, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
 import { db, storage } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
@@ -112,8 +112,15 @@ export function AccountingPageStorageV2() {
   const reconciliationPeriodId = `${competence}__itau`
   const reconciliationPeriod = reconciliationPeriods.find((item) => item.id === reconciliationPeriodId) ?? null
   const reconciliationClosed = reconciliationPeriod?.status === 'fechada'
-  const monthBankTransactions = bankTransactions.filter((item) => String(item.competence) === competence && String(item.bankAccountId || 'itau') === 'itau' && (!statement?.storagePath || String(item.statementStoragePath || '') === String(statement.storagePath))).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
-  const monthReconciliations = bankReconciliations.filter((item) => String(item.competence) === competence)
+  const activeStatementVersions = new Set(statements.map((item) => String(item.activeVersionId || '')).filter(Boolean))
+  const monthBankTransactions = bankTransactions.filter((item) =>
+    String(item.competence) === competence
+    && String(item.bankAccountId || 'itau') === 'itau'
+    && Array.isArray(item.statementVersions)
+    && item.statementVersions.some((version: unknown) => activeStatementVersions.has(String(version)))
+  ).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
+  const activeTransactionIds = new Set(monthBankTransactions.map((item) => item.id))
+  const monthReconciliations = bankReconciliations.filter((item) => String(item.competence) === competence && activeTransactionIds.has(String(item.bankTransactionId)))
   const reconciliationByTransaction = new Map(monthReconciliations.map((item) => [String(item.bankTransactionId), item]))
   const documentCount = [...selectedExpenses, ...selectedReceivables].reduce((sum, item) => sum + attachmentsOf(item).length, 0)
   const missingDocs = [...selectedExpenses.map((item) => ({ type: 'Despesa', item })), ...selectedReceivables.map((item) => ({ type: 'Receita', item }))].filter(({ item }) => attachmentsOf(item).length === 0)
@@ -133,7 +140,9 @@ export function AccountingPageStorageV2() {
 
       if (parsedOfx) {
         const affectedMonths = Array.from(new Set(parsedOfx.transactions.map((item) => item.date.slice(0, 7))))
-        const closedMonths = affectedMonths.filter((month) => reconciliationPeriods.some((item) => item.id === `${month}__itau` && item.status === 'fechada'))
+        const previousCoveredMonths = Array.isArray(statement?.coveredMonths) ? statement.coveredMonths.map(String) : (statement ? [competence] : [])
+        const monthsThatWillChange = Array.from(new Set([...affectedMonths, ...previousCoveredMonths]))
+        const closedMonths = monthsThatWillChange.filter((month) => reconciliationPeriods.some((item) => item.id === `${month}__itau` && item.status === 'fechada'))
         if (closedMonths.length) {
           setMessage(`Não é possível substituir/importar o OFX porque a Conciliação Bancária está fechada em: ${closedMonths.join(', ')}. O Administrador Master deve reabrir a competência antes.`)
           return
@@ -147,21 +156,19 @@ export function AccountingPageStorageV2() {
       let importedTransactionCount = 0
       let ofxBankId = ''
       let ofxAccountId = ''
+      let activeVersionId: string | null = null
+      let coveredMonths: string[] = []
+      let discardedTransactionCount = 0
       if (parsedOfx) {
         const parsed = parsedOfx
-
-        const oldActive = bankTransactions.filter((item) => String(item.statementId || '') === statementId && item.statementActive !== false)
-        const deactivateOps = oldActive.map((item) => ({ ref: doc(db, 'bankTransactions', item.id) }))
-        for (let start = 0; start < deactivateOps.length; start += 400) {
-          const batch = writeBatch(db)
-          deactivateOps.slice(start, start + 400).forEach(({ ref }) => batch.set(ref, { statementActive: false }, { merge: true }))
-          await batch.commit()
-        }
+        activeVersionId = `${statementId}__${Date.now()}__${safeName(file.name)}`
+        coveredMonths = Array.from(new Set(parsed.transactions.map((item) => item.date.slice(0, 7))))
+        discardedTransactionCount = parsed.discardedCount
 
         const ops = parsed.transactions.map((transaction) => {
           const transactionCompetence = transaction.date.slice(0, 7)
           const reconciliationPeriodId = `${transactionCompetence}__itau`
-          const transactionId = `${transactionCompetence}__itau__${safeName(transaction.fitId)}__${String(transaction.sourceIndex + 1).padStart(4, '0')}`
+          const transactionId = `itau__${transaction.identityKey}`
           return { transaction, transactionCompetence, reconciliationPeriodId, transactionId }
         })
 
@@ -171,7 +178,6 @@ export function AccountingPageStorageV2() {
             batch.set(doc(db, 'bankTransactions', transactionId), {
               ...transaction,
               competence: transactionCompetence,
-              sourceStatementCompetence: competence,
               reconciliationPeriodId,
               unit,
               bankAccountId: 'itau',
@@ -179,13 +185,13 @@ export function AccountingPageStorageV2() {
               branchId: parsed.branchId,
               accountId: parsed.accountId,
               currency: parsed.currency,
-              statementId,
-              statementStoragePath: path,
-              statementActive: true,
-              importedBy: profile.uid,
-              importedByName: profile.displayName,
-              importedByEmail: profile.email,
-              importedAt: serverTimestamp(),
+              statementVersions: arrayUnion(activeVersionId),
+              lastStatementId: statementId,
+              lastStatementStoragePath: path,
+              lastImportedBy: profile.uid,
+              lastImportedByName: profile.displayName,
+              lastImportedByEmail: profile.email,
+              lastImportedAt: serverTimestamp(),
             }, { merge: true })
           })
           await batch.commit()
@@ -195,15 +201,23 @@ export function AccountingPageStorageV2() {
         ofxBankId = parsed.bankId
         ofxAccountId = parsed.accountId
       }
+
+      // Este ponteiro só muda depois que TODAS as transações do novo OFX foram gravadas.
+      // Se qualquer lote falhar, o extrato anterior continua sendo a versão ativa.
       await setDoc(doc(db, 'bankStatements', statementId), {
         competence, unit, fileName: file.name, storagePath: path, downloadUrl, size: file.size,
         type: file.type || 'application/octet-stream', bankAccountId: isOfx ? 'itau' : null,
-        importedTransactionCount, ofxBankId: ofxBankId || null, ofxAccountId: ofxAccountId || null,
+        importedTransactionCount, discardedTransactionCount,
+        ofxBankId: ofxBankId || null, ofxAccountId: ofxAccountId || null,
+        activeVersionId,
+        coveredMonths,
+        previousVersionId: statement?.activeVersionId || null,
+        previousStoragePath: statement?.storagePath || null,
         uploadedBy: profile.uid, uploadedByName: profile.displayName, uploadedByEmail: profile.email, uploadedAt: serverTimestamp(),
       })
       await audit('Extrato bancário consolidado anexado', `${competence} · ${unit} · ${file.name}${importedTransactionCount ? ` · ${importedTransactionCount} movimentação(ões) OFX importada(s)` : ''}`, statementId)
       setMessage(importedTransactionCount
-        ? `Extrato OFX anexado com sucesso. ${importedTransactionCount} movimentação(ões) foram importadas para a Conciliação Bancária.`
+        ? `Extrato OFX anexado com sucesso. ${importedTransactionCount} movimentação(ões) foram importadas para a Conciliação Bancária.${discardedTransactionCount ? ` Atenção: ${discardedTransactionCount} linha(s) inválida(s) foram ignoradas.` : ''}`
         : 'Extrato consolidado anexado com sucesso. Ele será incluído automaticamente no ZIP da Contabilidade.')
     } catch (error) { console.error(error); setMessage('Não foi possível enviar o extrato consolidado.') } finally { setBusy('') }
   }
