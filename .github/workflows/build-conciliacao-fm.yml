@@ -1,5 +1,7 @@
 name: Build - Conciliacao Bancaria FM
 
+# Valida o estado atual completo da branch
+
 on:
   push:
     branches:
