@@ -88,7 +88,7 @@ function hashIdentity(value: string) {
 }
 
 function classifyMovement(item: { type: string; memo: string; name: string }) {
-  const text = normalizeIdentityText([item.type, item.memo, item.name].filter(Boolean).join(' '))
+  const text = normalizeIdentityText([item.type, item.memo, item.name].filter(Boolean).join(' ')).replace(/\./g, '')
 
   const balancePatterns = [
     'SALDO ANTERIOR',
