@@ -7,8 +7,18 @@
 .financial-calendar-summary article{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:5px}
 .financial-calendar-summary span,.financial-calendar-summary small{color:#6b7280;font-size:12px}
 .financial-calendar-summary strong{font-size:21px;color:#1f2937}
-.expense-calendar-value{color:#9a3412!important}
+.expense-calendar-value{color:#b91c1c!important}
 .revenue-calendar-value{color:#1d4ed8!important}
+.result-calendar-value.positive{color:#1d4ed8!important}
+.result-calendar-value.negative{color:#b91c1c!important}
+.result-calendar-value.neutral{color:#6b7280!important}
+.financial-mini-chart{width:100%;height:8px;margin-top:7px;background:#e5e7eb;border-radius:999px;overflow:hidden}
+.financial-mini-bar{display:block;height:100%;min-width:0;border-radius:999px;transition:width .25s ease}
+.financial-mini-bar.revenue-bar{background:#2563eb}
+.financial-mini-bar.expense-bar{background:#dc2626}
+.financial-mini-bar.result-bar.positive{background:#2563eb}
+.financial-mini-bar.result-bar.negative{background:#dc2626}
+.financial-mini-bar.result-bar.neutral{background:#9ca3af}
 .financial-calendar-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px;align-items:start}
 .financial-day-card{background:#fff;border:1px solid #d6d3d1;border-radius:16px;padding:15px;display:flex;flex-direction:column;gap:12px;min-height:92px;box-shadow:0 8px 24px rgba(15,23,42,.04)}
 .financial-day-card>header{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #1f2937;padding-bottom:9px}
