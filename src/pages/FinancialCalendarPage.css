@@ -25,6 +25,7 @@
 .financial-day-card>header h2{margin:0;font-size:21px;color:#111827}
 .financial-day-card>header span{font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
 .financial-day-section{border-radius:12px;padding:11px;display:flex;flex-direction:column;gap:9px}
+.financial-day-empty{min-height:56px;display:flex;align-items:center;justify-content:center;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#64748b;font-size:13px;font-weight:700;letter-spacing:.01em}
 .financial-day-expenses{background:#fff7ed;border:1px solid #c2410c;color:#7c2d12}
 .financial-day-revenues{background:#eff6ff;border:1px solid #1d4ed8;color:#1e3a8a}
 .financial-day-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
