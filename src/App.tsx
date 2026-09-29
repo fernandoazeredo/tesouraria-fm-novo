@@ -3,6 +3,7 @@ import {
   BarChart3,
   BookOpenCheck,
   Calculator,
+  CalendarDays,
   CircleDollarSign,
   FileCheck2,
   FileText,
@@ -35,6 +36,7 @@ import { DashboardPageEnhanced } from './pages/DashboardPageEnhanced'
 import { ApprovalsPageEnhanced } from './pages/ApprovalsPageEnhanced'
 import { AccountingPageStorageV2 } from './pages/AccountingPageStorageV2'
 import { BankReconciliationPage } from './pages/BankReconciliationPage'
+import { FinancialCalendarPage } from './pages/FinancialCalendarPage'
 import { DreGerencialPageV2 } from './pages/DreGerencialPageV2'
 import { HowToPageEnhanced, TipsPageEnhanced } from './pages/HelpPagesEnhanced'
 import { UsersPageKitFernando } from './pages/UsersPageKitFernando'
@@ -84,6 +86,7 @@ const menu: MenuItem[] = [
   { to: '/dre-gerencial', label: 'DRE Gerencial', icon: BarChart3, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/plano-contas', label: 'Plano de Contas', icon: BookOpenCheck, roles: ['master'] },
   { to: '/contabilidade', label: 'Contabilidade', icon: Calculator, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
+  { to: '/calendario-financeiro', label: 'Calendário Financeiro', icon: CalendarDays, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/conciliacao-bancaria', label: 'Conciliação Bancária', icon: Landmark, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/documentos', label: 'Arquivo de Documentos', icon: FolderArchive, roles: ['master', 'diretor', 'gerente', 'tesouraria', 'operador'] },
   { to: '/usuarios', label: 'Usuários', icon: Users, roles: ['master'] },
@@ -248,6 +251,7 @@ function AppShell() {
           <Route path="/dre-gerencial" element={<DreGerencialPageV2 />} />
           <Route path="/plano-contas" element={<AccountsPageFernando />} />
           <Route path="/contabilidade" element={<AccountingPageStorageV2 />} />
+          <Route path="/calendario-financeiro" element={<FinancialCalendarPage />} />
           <Route path="/conciliacao-bancaria" element={<BankReconciliationPage />} />
           <Route path="/documentos" element={<DocumentsPageStorage />} />
           <Route path="/usuarios" element={<UsersPageKitFernando />} />
