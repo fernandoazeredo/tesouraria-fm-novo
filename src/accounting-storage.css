@@ -13,3 +13,10 @@
   .accounting-share-box { align-items:stretch; }
   .accounting-share-actions, .accounting-share-actions > * { width:100%; }
 }
+
+.accounting-package-copy { display:grid; gap:10px; width:100%; }
+.accounting-package-copy .primary-button { width:max-content; max-width:100%; }
+.accounting-package-copy small { color:var(--muted); font-size:11px; }
+@media (max-width:760px) {
+  .accounting-package-copy .primary-button { width:100%; justify-content:center; }
+}

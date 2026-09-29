@@ -1,0 +1,53 @@
+name: Deploy Firestore Rules - Conciliacao FM
+
+on:
+  push:
+    branches:
+      - feat/conciliacao-bancaria-fm
+
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+
+      - name: Autenticar no Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TESOURARIA_FM_NOVO }}
+
+      - name: Publicar regras Firestore pela API
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCESS_TOKEN="$(gcloud auth application-default print-access-token)"
+          python3 - <<'PY'
+          import json
+          content = open("firestore.rules", "r", encoding="utf-8").read()
+          with open("/tmp/ruleset.json", "w", encoding="utf-8") as f:
+              json.dump({"source":{"files":[{"name":"firestore.rules","content":content}]}}, f)
+          PY
+
+          RESPONSE="$(curl -fsS -X POST             "https://firebaserules.googleapis.com/v1/projects/tesouraria-fm-novo/rulesets"             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/ruleset.json)"
+
+          RULESET_NAME="$(printf '%s' "$RESPONSE" | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
+          echo "Ruleset criado: $RULESET_NAME"
+
+          python3 - "$RULESET_NAME" <<'PY'
+          import json, sys
+          release_name = "projects/tesouraria-fm-novo/releases/cloud.firestore"
+          with open("/tmp/release.json", "w", encoding="utf-8") as f:
+              json.dump({
+                  "release": {
+                      "name": release_name,
+                      "rulesetName": sys.argv[1]
+                  },
+                  "updateMask": "rulesetName"
+              }, f)
+          PY
+
+          curl -fsS -X PATCH             "https://firebaserules.googleapis.com/v1/projects/tesouraria-fm-novo/releases/cloud.firestore"             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/release.json

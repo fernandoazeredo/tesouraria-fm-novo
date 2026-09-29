@@ -76,6 +76,15 @@ service firebase.storage {
       allow delete: if financialWriter();
     }
 
+    // Pacotes preparados para envio à Contabilidade por link.
+    // O link de download usa token do Firebase Storage; não há exclusão automática.
+    match /envios-contabilidade/{allPaths=**} {
+      allow read: if financialReader();
+      allow create, update: if financialWriter()
+        && request.resource.size <= 250 * 1024 * 1024;
+      allow delete: if financialWriter();
+    }
+
     // Estrutura antiga mantida somente para leitura/limpeza de pacotes já existentes.
     match /pacotes-contabeis/{allPaths=**} {
       allow read: if financialReader();

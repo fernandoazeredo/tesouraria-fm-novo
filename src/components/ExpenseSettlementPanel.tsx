@@ -34,10 +34,31 @@ export function ExpenseSettlementPanel() {
       setHost(null)
       return
     }
-    const locate = () => setHost(document.querySelector<HTMLElement>('.main-content'))
-    locate()
-    const timer = window.setTimeout(locate, 0)
-    return () => window.clearTimeout(timer)
+
+    const locate = () => {
+      const element = document.querySelector<HTMLElement>('.main-content')
+      if (element) setHost(element)
+      return Boolean(element)
+    }
+
+    if (locate()) return
+
+    // Em F5/acesso direto, o componente pode montar antes de .main-content existir.
+    // O observer mantém o painel sincronizado sem depender de navegação prévia.
+    const observer = new MutationObserver(() => {
+      if (locate()) observer.disconnect()
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+
+    const fallback = window.setTimeout(() => {
+      locate()
+      observer.disconnect()
+    }, 3000)
+
+    return () => {
+      observer.disconnect()
+      window.clearTimeout(fallback)
+    }
   }, [location.pathname])
 
   useEffect(() => {

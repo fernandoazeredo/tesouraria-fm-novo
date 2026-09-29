@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "firebase:deploy": "npm run build && firebase deploy"
+    "firebase:deploy": "npm run build && firebase deploy",
+    "dev:emulator": "vite --mode emulator",
+    "emulators:start": "firebase emulators:start --only auth,firestore,storage"
   },
   "dependencies": {
     "firebase": "12.16.0",

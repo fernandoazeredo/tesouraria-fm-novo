@@ -27,6 +27,10 @@ const BACKUP_COLLECTIONS = [
   'settings',
   'chartOfAccounts',
   'bankStatements',
+  'bankTransactions',
+  'bankReconciliations',
+  'bankReconciliationPeriods',
+  'societaryTransfers',
 ] as const
 
 const PROTECTED_COLLECTIONS = new Set<string>(['users', 'settings', 'chartOfAccounts'])
@@ -183,32 +187,67 @@ export function UtilitiesPage() {
     if (phrase.trim().toUpperCase() !== 'APAGAR TUDO') return
     setBusy('wipe')
     setMessage('')
+
+    const restoreControl = doc(db, 'systemControl', 'restore')
+    let restoreWindowOpened = false
+    const failedCollections: string[] = []
+
     try {
       await buildBackup(true)
 
+      await setDoc(restoreControl, {
+        uid: masterProfile.uid,
+        email: masterProfile.email,
+        startedAt: serverTimestamp(),
+        expiresAt: Timestamp.fromMillis(Date.now() + 10 * 60 * 1000),
+      })
+      restoreWindowOpened = true
+
       for (const name of WIPE_COLLECTIONS) {
-        const snapshot = await getDocs(collection(db, name))
-        for (const item of snapshot.docs) {
-          const data = item.data()
-          for (const path of attachmentPaths(data)) {
-            try {
-              await deleteObject(storageRef(storage, path))
-            } catch (error) {
-              const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: string }).code) : ''
-              if (code !== 'storage/object-not-found' && code !== 'storage/unauthorized') console.warn('Falha ao remover arquivo do Storage:', path, error)
+        try {
+          const snapshot = await getDocs(collection(db, name))
+          for (const item of snapshot.docs) {
+            const data = item.data()
+
+            for (const path of attachmentPaths(data)) {
+              try {
+                await deleteObject(storageRef(storage, path))
+              } catch (error) {
+                const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: string }).code) : ''
+                if (code !== 'storage/object-not-found' && code !== 'storage/unauthorized') {
+                  console.warn('Falha ao remover arquivo do Storage:', path, error)
+                }
+              }
             }
+
+            await deleteDoc(doc(db, name, item.id))
           }
-          await deleteDoc(doc(db, name, item.id))
+        } catch (error) {
+          console.error(`Falha ao limpar coleção ${name}:`, error)
+          failedCollections.push(name)
         }
       }
 
-      setConfirmWipe(false)
-      setPhrase('')
-      setMessage('Limpeza concluída. Usuários, Configurações e o Plano de Contas atual foram preservados. Antes da exclusão, um backup JSON foi baixado automaticamente.')
+      if (failedCollections.length) {
+        setMessage(`Limpeza concluída parcialmente. Não foi possível apagar: ${failedCollections.join(', ')}. Usuários, Configurações e o Plano de Contas atual foram preservados. Um backup JSON foi baixado antes da operação.`)
+      } else {
+        setMessage('Limpeza concluída. Usuários, Configurações e o Plano de Contas atual foram preservados. Antes da exclusão, um backup JSON foi baixado automaticamente.')
+      }
     } catch (error) {
       console.error(error)
-      setMessage('A limpeza não foi concluída integralmente. Usuários, Configurações e Plano de Contas não são removidos por esta operação.')
+      setMessage(error instanceof Error
+        ? `A limpeza não foi concluída integralmente: ${error.message}`
+        : 'A limpeza não foi concluída integralmente. Usuários, Configurações e Plano de Contas não são removidos por esta operação.')
     } finally {
+      if (restoreWindowOpened) {
+        try {
+          await deleteDoc(restoreControl)
+        } catch (error) {
+          console.error('Não foi possível encerrar a janela de restauração:', error)
+        }
+      }
+      setConfirmWipe(false)
+      setPhrase('')
       setBusy('')
     }
   }

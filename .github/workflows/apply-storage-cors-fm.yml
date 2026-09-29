@@ -1,0 +1,54 @@
+name: Apply Storage CORS - FM
+
+on:
+  push:
+    branches:
+      - feat/conciliacao-bancaria-fm
+
+jobs:
+  cors:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TESOURARIA_FM_NOVO }}
+
+      - name: Set CORS on Firebase Storage bucket
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > /tmp/cors.json <<'EOF'
+          [
+            {
+              "origin": [
+                "https://tesouraria-fm-novo.web.app",
+                "https://tesouraria-fm-novo.firebaseapp.com"
+              ],
+              "method": ["GET", "HEAD"],
+              "responseHeader": [
+                "Content-Type",
+                "Content-Length",
+                "Content-Disposition",
+                "ETag",
+                "x-goog-meta-firebasestoragedownloadtokens"
+              ],
+              "maxAgeSeconds": 3600
+            }
+          ]
+          EOF
+
+          gcloud storage buckets update gs://tesouraria-fm-novo.firebasestorage.app --cors-file=/tmp/cors.json
+
+      - name: Verify CORS
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud storage buckets describe gs://tesouraria-fm-novo.firebasestorage.app --format="yaml(cors_config)"

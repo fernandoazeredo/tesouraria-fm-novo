@@ -1,0 +1,64 @@
+name: Deploy Storage Rules - Email Contabilidade FM
+
+on:
+  push:
+    branches:
+      - feat/conciliacao-bancaria-fm
+
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+
+      - name: Autenticar no Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TESOURARIA_FM_NOVO }}
+
+      - name: Publicar regras Storage pela API
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCESS_TOKEN="$(gcloud auth application-default print-access-token)"
+
+          python3 - <<'PY'
+          import json
+          content = open("storage.rules", "r", encoding="utf-8").read()
+          with open("/tmp/storage-ruleset.json", "w", encoding="utf-8") as f:
+              json.dump({"source":{"files":[{"name":"storage.rules","content":content}]}}, f)
+          PY
+
+          RESPONSE="$(curl -fsS -X POST             "https://firebaserules.googleapis.com/v1/projects/tesouraria-fm-novo/rulesets"             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/storage-ruleset.json)"
+
+          RULESET_NAME="$(printf '%s' "$RESPONSE" | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
+          echo "Ruleset criado: $RULESET_NAME"
+
+          RELEASES="$(curl -fsS             "https://firebaserules.googleapis.com/v1/projects/tesouraria-fm-novo/releases?pageSize=100"             -H "Authorization: Bearer $ACCESS_TOKEN")"
+
+          RELEASE_NAME="$(printf '%s' "$RELEASES" | python3 -c 'import json,sys; data=json.load(sys.stdin); names=[r["name"] for r in data.get("releases",[]) if "/firebase.storage/" in r.get("name","")]; print(names[0] if names else "")')"
+
+          if [ -z "$RELEASE_NAME" ]; then
+            echo "Release do Firebase Storage não encontrada."
+            exit 1
+          fi
+
+          echo "Release encontrada: $RELEASE_NAME"
+
+          python3 - "$RULESET_NAME" "$RELEASE_NAME" <<'PY'
+          import json, sys
+          with open("/tmp/storage-release.json", "w", encoding="utf-8") as f:
+              json.dump({
+                  "release": {
+                      "name": sys.argv[2],
+                      "rulesetName": sys.argv[1]
+                  },
+                  "updateMask": "rulesetName"
+              }, f)
+          PY
+
+          curl -fsS -X PATCH             "https://firebaserules.googleapis.com/v1/$RELEASE_NAME"             -H "Authorization: Bearer $ACCESS_TOKEN"             -H "Content-Type: application/json"             --data-binary @/tmp/storage-release.json

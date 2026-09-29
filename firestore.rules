@@ -196,6 +196,27 @@ service cloud.firestore {
         && request.resource.data.status in ['pago', 'rejeitado'];
     }
 
+    function bankPeriodOpen(periodId) {
+      return periodId != null
+        && (
+          !exists(/databases/$(database)/documents/bankReconciliationPeriods/$(periodId))
+          || get(/databases/$(database)/documents/bankReconciliationPeriods/$(periodId)).data.status != 'fechada'
+        );
+    }
+
+    function canCloseBankPeriod() {
+      return hasRole(['master', 'gerente', 'tesouraria'])
+        && resource.data.status == 'aberta'
+        && request.resource.data.status == 'fechada';
+    }
+
+    function canReopenBankPeriod() {
+      return isPrimaryAdminEmail()
+        && hasRole(['master'])
+        && resource.data.status == 'fechada'
+        && request.resource.data.status == 'aberta';
+    }
+
     match /systemControl/{document=**} {
       allow read, create, update, delete: if isPrimaryAdminEmail();
     }
@@ -272,7 +293,7 @@ service cloud.firestore {
       allow update: if masterRestoreMode()
         || societaryDirectorUpdate()
         || societaryTreasuryUpdate();
-      allow delete: if false;
+      allow delete: if masterRestoreMode();
     }
 
     match /fiscalNotes/{document=**} {
@@ -315,6 +336,47 @@ service cloud.firestore {
       allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
       allow create, update: if masterRestoreMode() || hasRole(['master', 'gerente', 'tesouraria']);
       allow delete: if masterRestoreMode() || hasRole(['master', 'gerente', 'tesouraria']);
+    }
+
+    match /bankTransactions/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create, update: if masterRestoreMode()
+        || (
+          hasRole(['master', 'gerente', 'tesouraria'])
+          && bankPeriodOpen(request.resource.data.reconciliationPeriodId)
+        );
+      allow delete: if masterRestoreMode()
+        || (
+          isPrimaryAdminEmail()
+          && hasRole(['master'])
+          && bankPeriodOpen(resource.data.reconciliationPeriodId)
+        );
+    }
+
+    match /bankReconciliations/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create: if masterRestoreMode()
+        || (
+          hasRole(['master', 'gerente', 'tesouraria'])
+          && bankPeriodOpen(request.resource.data.periodId)
+        );
+      allow delete: if masterRestoreMode()
+        || (
+          hasRole(['master', 'gerente', 'tesouraria'])
+          && bankPeriodOpen(resource.data.periodId)
+        );
+      allow update: if masterRestoreMode();
+    }
+
+    match /bankReconciliationPeriods/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create: if masterRestoreMode()
+        || (
+          hasRole(['master', 'gerente', 'tesouraria'])
+          && request.resource.data.status == 'fechada'
+        );
+      allow update: if masterRestoreMode() || canCloseBankPeriod() || canReopenBankPeriod();
+      allow delete: if masterRestoreMode();
     }
 
     match /auditLogs/{document=**} {
