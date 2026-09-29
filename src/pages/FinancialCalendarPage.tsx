@@ -227,6 +227,8 @@ export function FinancialCalendarPage() {
               <div className="financial-day-section-head"><h3>Receitas</h3><strong>{money.format(dayRevenueTotal)}</strong></div>
               <div className="financial-movement-list">{dayReceivables.map((item) => <RevenueMovement key={item.id} item={item} />)}</div>
             </section>}
+
+            {dayExpenses.length === 0 && dayReceivables.length === 0 && <div className="financial-day-empty">Sem movimento</div>}
           </article>
         })}
       </section>}
