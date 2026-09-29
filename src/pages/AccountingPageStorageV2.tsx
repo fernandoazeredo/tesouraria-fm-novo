@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthContext'
 import { createZip } from '../lib/simpleZip'
 import { createXlsx, type XlsxSheet } from '../lib/simpleXlsx'
 import { parseOfx, readOfxFile } from '../lib/ofx'
+import { createTextPdf } from '../lib/simplePdf'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const dateTimeBR = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
@@ -78,6 +79,75 @@ function paidMovements(plans: AnyRecord[], type: PaidMovement['type'], competenc
     }
   }
   return rows.sort((a, b) => a.paidDate.localeCompare(b.paidDate) || a.process.localeCompare(b.process))
+}
+
+function displayValue(value: unknown) {
+  if (value == null || value === '') return '—'
+  return String(value)
+}
+
+function expenseDemonstrativeLines(item: AnyRecord) {
+  const bank = item.paymentBankAccount || {}
+  const lines = [
+    'FLÁVIO MARQUES ADVOGADOS ASSOCIADOS',
+    'DEMONSTRATIVO DE DESPESAS',
+    '',
+    `Competência: ${displayValue(item.competencia)}`,
+    `Unidade: ${displayValue(item.unidade)}`,
+    `Responsável: ${displayValue(item.nome)}`,
+    `Fornecedor / Favorecido: ${displayValue(item.fornecedor)}`,
+    `CPF / CNPJ: ${displayValue(item.documento)}`,
+    `Plano de Contas: ${displayValue(item.expenseAccountCode || item.classificacaoContabil)} - ${displayValue(item.expenseAccountName)}`,
+    `DRE: ${displayValue(item.expenseAccountDre)}`,
+    `Status: ${statusLabel(String(item.status || ''))}`,
+    `Valor total: ${money.format(toNumber(item.valorTotal))}`,
+    `Data do pagamento: ${displayValue(item.paymentDate)}`,
+    `Forma de pagamento: ${displayValue(item.paymentMethod)}`,
+    `Conta de pagamento: ${displayValue(bank.bank)} · Ag. ${displayValue(bank.agency)} · C/C ${displayValue(bank.account)}`,
+    `Observações: ${displayValue(item.observacoes)}`,
+    '',
+    'ITENS / HISTÓRICO',
+  ]
+  const items = Array.isArray(item.items) ? item.items : []
+  items.forEach((row: any, index: number) => {
+    lines.push(`${index + 1}. ${displayValue(row?.historico)} — ${money.format(toNumber(row?.valor))}`)
+  })
+  lines.push('', `Documentos comprobatórios anexados: ${attachmentsOf(item).length}`)
+  return lines
+}
+
+function receivableDemonstrativeLines(item: AnyRecord) {
+  const bank = item.receivingBankAccount || {}
+  const lines = [
+    'FLÁVIO MARQUES ADVOGADOS ASSOCIADOS',
+    'DEMONSTRATIVO DE RECEBIMENTO DE HONORÁRIOS',
+    '',
+    `Data: ${displayValue(item.data)}`,
+    `Unidade: ${displayValue(item.unidade)}`,
+    `Natureza: ${displayValue(item.natureza)}`,
+    `Processo: ${displayValue(item.processo)}`,
+    `Reclamante: ${displayValue(item.reclamante)}`,
+    `Reclamada: ${displayValue(item.reclamada)}`,
+    `Origem: ${displayValue(item.origem)}`,
+    `Forma de recebimento: ${displayValue(item.formaRecebimento)}`,
+    `Plano de Contas: ${displayValue(item.revenueAccountCode || item.classificacaoContabil)} - ${displayValue(item.revenueAccountName)}`,
+    `DRE: ${displayValue(item.revenueAccountDre)}`,
+    `Status: ${statusLabel(String(item.status || ''))}`,
+    `Valor do alvará: ${money.format(toNumber(item.valorAlvara))}`,
+    `Base de cálculo: ${money.format(toNumber(item.baseCalculo))}`,
+    `Total de deduções: ${money.format(toNumber(item.totalDeducoes))}`,
+    `Valor líquido do cliente: ${money.format(toNumber(item.valorLiquidoCliente))}`,
+    `Conta de recebimento: ${displayValue(bank.bank)} · Ag. ${displayValue(bank.agency)} · C/C ${displayValue(bank.account)}`,
+    '',
+    'COMPOSIÇÃO FINANCEIRA',
+  ]
+  const components = Array.isArray(item.components) ? item.components : []
+  components.forEach((row: any, index: number) => {
+    const detail = row?.detalhe ? ` — ${row.detalhe}` : ''
+    lines.push(`${index + 1}. ${displayValue(row?.nome)}${detail}: ${money.format(toNumber(row?.valor))}`)
+  })
+  lines.push('', `Documentos comprobatórios anexados: ${attachmentsOf(item).length}`)
+  return lines
 }
 
 async function bytesFromAttachment(file: Attachment) {
@@ -305,7 +375,7 @@ export function AccountingPageStorageV2() {
 
   async function buildPackage() {
     if (totalEntries === 0) throw new Error('Nenhum lançamento apto foi encontrado para a competência e filtros selecionados.')
-    setMessage('Montando planilha Excel e incorporando documentos ao ZIP...')
+    setMessage('Montando planilha Excel, demonstrativos e documentos comprobatórios no ZIP...')
     const workbook = createXlsx(workbookSheets())
     const entries: Array<{ name: string; content: string | Uint8Array }> = [{ name: `Movimento_Contabilidade_${competence}_${safeName(unit)}.xlsx`, content: workbook }]
     const failedFiles: string[] = []
@@ -329,21 +399,37 @@ export function AccountingPageStorageV2() {
       }
     }
 
-    for (let index = 0; index < selectedExpenses.length; index += 1) for (const file of attachmentsOf(selectedExpenses[index])) {
-      try {
-        entries.push({ name: `Documentos_Despesas/${String(index + 1).padStart(3, '0')}_${safeName(String(selectedExpenses[index].fornecedor || selectedExpenses[index].nome || selectedExpenses[index].id))}/${safeName(file.name || 'documento')}`, content: await bytesFromAttachment(file) })
-      } catch (error) {
-        console.warn('Documento de despesa não incluído:', file, error)
-        failedFiles.push(`Documento de despesa: ${file.name || 'documento'}`)
+    for (let index = 0; index < selectedExpenses.length; index += 1) {
+      const item = selectedExpenses[index]
+      const folder = `Documentos_Despesas/${String(index + 1).padStart(3, '0')}_${safeName(String(item.fornecedor || item.nome || item.id))}`
+      entries.push({
+        name: `${folder}/Demonstrativo_da_Despesa.pdf`,
+        content: createTextPdf('DEMONSTRATIVO DE DESPESAS', expenseDemonstrativeLines(item)),
+      })
+      for (const file of attachmentsOf(item)) {
+        try {
+          entries.push({ name: `${folder}/${safeName(file.name || 'documento')}`, content: await bytesFromAttachment(file) })
+        } catch (error) {
+          console.warn('Documento de despesa não incluído:', file, error)
+          failedFiles.push(`Documento de despesa: ${file.name || 'documento'}`)
+        }
       }
     }
 
-    for (let index = 0; index < selectedReceivables.length; index += 1) for (const file of attachmentsOf(selectedReceivables[index])) {
-      try {
-        entries.push({ name: `Documentos_Receitas/${String(index + 1).padStart(3, '0')}_${safeName(String(selectedReceivables[index].processo || selectedReceivables[index].reclamante || selectedReceivables[index].id))}/${safeName(file.name || 'documento')}`, content: await bytesFromAttachment(file) })
-      } catch (error) {
-        console.warn('Documento de receita não incluído:', file, error)
-        failedFiles.push(`Documento de receita: ${file.name || 'documento'}`)
+    for (let index = 0; index < selectedReceivables.length; index += 1) {
+      const item = selectedReceivables[index]
+      const folder = `Documentos_Receitas/${String(index + 1).padStart(3, '0')}_${safeName(String(item.processo || item.reclamante || item.id))}`
+      entries.push({
+        name: `${folder}/Demonstrativo_de_Recebimento.pdf`,
+        content: createTextPdf('DEMONSTRATIVO DE RECEBIMENTO DE HONORÁRIOS', receivableDemonstrativeLines(item)),
+      })
+      for (const file of attachmentsOf(item)) {
+        try {
+          entries.push({ name: `${folder}/${safeName(file.name || 'documento')}`, content: await bytesFromAttachment(file) })
+        } catch (error) {
+          console.warn('Documento de receita não incluído:', file, error)
+          failedFiles.push(`Documento de receita: ${file.name || 'documento'}`)
+        }
       }
     }
 
