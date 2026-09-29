@@ -163,6 +163,12 @@ export function FinancialCalendarPage() {
   const monthReceivables = [...receivablesByDay.values()].flat()
   const expenseTotal = monthExpenses.reduce((sum, item) => sum + toNumber(item.valorTotal), 0)
   const revenueTotal = monthReceivables.reduce((sum, item) => sum + toNumber(item.valorAlvara || item.valorLiquidoCliente), 0)
+  const resultTotal = revenueTotal - expenseTotal
+  const summaryScale = Math.max(revenueTotal, expenseTotal, Math.abs(resultTotal), 1)
+  const revenueBar = (revenueTotal / summaryScale) * 100
+  const expenseBar = (expenseTotal / summaryScale) * 100
+  const resultBar = (Math.abs(resultTotal) / summaryScale) * 100
+  const resultTone = resultTotal > 0 ? 'positive' : resultTotal < 0 ? 'negative' : 'neutral'
   const loading = loadingExpenses || loadingReceivables
 
   return <>
@@ -177,9 +183,26 @@ export function FinancialCalendarPage() {
     </section>
 
     <section className="financial-calendar-summary">
-      <article><span>Receitas do mês</span><strong className="revenue-calendar-value">{money.format(revenueTotal)}</strong><small>{monthReceivables.length} lançamento(s)</small></article>
-      <article><span>Despesas do mês</span><strong className="expense-calendar-value">{money.format(expenseTotal)}</strong><small>{monthExpenses.length} lançamento(s)</small></article>
-      <article><span>Resultado do mês</span><strong>{money.format(revenueTotal - expenseTotal)}</strong><small>Receitas menos despesas</small></article>
+      <article>
+        <span>Receitas do mês</span>
+        <strong className="revenue-calendar-value">{money.format(revenueTotal)}</strong>
+        <small>{monthReceivables.length} lançamento(s)</small>
+        <div className="financial-mini-chart" aria-label="Gráfico de receitas do mês"><i className="financial-mini-bar revenue-bar" style={{ width: `${revenueBar}%` }} /></div>
+      </article>
+      <article>
+        <span>Despesas do mês</span>
+        <strong className="expense-calendar-value">{money.format(expenseTotal)}</strong>
+        <small>{monthExpenses.length} lançamento(s)</small>
+        <div className="financial-mini-chart" aria-label="Gráfico de despesas do mês"><i className="financial-mini-bar expense-bar" style={{ width: `${expenseBar}%` }} /></div>
+      </article>
+      <article>
+        <span>Resultado do mês</span>
+        <strong className={`result-calendar-value ${resultTone}`}>{money.format(resultTotal)}</strong>
+        <small>Receitas menos despesas</small>
+        <div className="financial-mini-chart" aria-label={`Gráfico do resultado do mês: ${resultTone === 'positive' ? 'positivo' : resultTone === 'negative' ? 'negativo' : 'zerado'}`}>
+          <i className={`financial-mini-bar result-bar ${resultTone}`} style={{ width: `${resultBar}%` }} />
+        </div>
+      </article>
     </section>
 
     {loading ? <section className="page-card module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando calendário financeiro</strong></section> :
