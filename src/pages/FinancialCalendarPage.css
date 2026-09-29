@@ -1,8 +1,8 @@
 .financial-calendar-heading{margin-bottom:18px}
 .financial-calendar-toolbar{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;margin-bottom:16px}
 .financial-calendar-toolbar>div{display:flex;align-items:center;justify-content:center;gap:10px;text-transform:capitalize}
-.financial-calendar-toolbar>div strong{font-size:20px;color:#1f2937}
-.financial-calendar-toolbar>div span{font-size:12px;color:#6b7280}
+.financial-calendar-toolbar>div strong{font-size:20px;color:var(--text)}
+.financial-calendar-toolbar>div span{font-size:12px;color:var(--muted)}
 .financial-calendar-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:20px}
 .financial-calendar-summary article{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:5px}
 .financial-calendar-summary span,.financial-calendar-summary small{color:#6b7280;font-size:12px}
@@ -25,7 +25,7 @@
 .financial-day-card>header h2{margin:0;font-size:21px;color:#111827}
 .financial-day-card>header span{font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
 .financial-day-section{border-radius:12px;padding:11px;display:flex;flex-direction:column;gap:9px}
-.financial-day-empty{min-height:56px;display:flex;align-items:center;justify-content:center;border:1px dashed #cbd5e1;border-radius:10px;background:#f8fafc;color:#64748b;font-size:13px;font-weight:700;letter-spacing:.01em}
+.financial-day-empty{min-height:72px;display:flex;align-items:center;justify-content:center;text-align:center;border:1px dashed #f59e0b;border-radius:10px;background:#fff7ed;color:#ea580c;font-size:15px;font-weight:800;letter-spacing:.01em}
 .financial-day-expenses{background:#fff7ed;border:1px solid #c2410c;color:#7c2d12}
 .financial-day-revenues{background:#eff6ff;border:1px solid #1d4ed8;color:#1e3a8a}
 .financial-day-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
@@ -51,3 +51,13 @@
   .financial-calendar-summary{grid-template-columns:1fr}
   .financial-calendar-grid{grid-template-columns:1fr}
 }
+
+html[data-theme='dark'] .financial-calendar-toolbar>div strong,
+body.dark .financial-calendar-toolbar>div strong,
+.dark-theme .financial-calendar-toolbar>div strong{color:#f8fafc}
+html[data-theme='dark'] .financial-calendar-toolbar>div span,
+body.dark .financial-calendar-toolbar>div span,
+.dark-theme .financial-calendar-toolbar>div span{color:#cbd5e1}
+html[data-theme='dark'] .financial-day-empty,
+body.dark .financial-day-empty,
+.dark-theme .financial-day-empty{background:#2a2118;border-color:#f59e0b;color:#fb923c}
