@@ -35,6 +35,11 @@ service firebase.storage {
       return isPrimaryAdminEmail() || isManagerEmail() || isTreasuryEmail();
     }
 
+    function activeUser() {
+      return signedIn()
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+
     function validAttachmentSize() {
       return request.resource == null || request.resource.size <= 20 * 1024 * 1024;
     }
@@ -62,9 +67,9 @@ service firebase.storage {
     }
 
     match /demonstrativos/{allPaths=**} {
-      allow read: if signedIn();
-      allow create, update: if signedIn() && validAttachmentSize();
-      allow delete: if isPrimaryAdminEmail();
+      allow read: if activeUser();
+      allow create: if activeUser() && validAttachmentSize();
+      allow update, delete: if false;
     }
 
     // Extrato consolidado mensal usado no ZIP da Contabilidade.
