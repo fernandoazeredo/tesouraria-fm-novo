@@ -63,14 +63,18 @@ function parseBRL(value: string) {
   return Number.isFinite(number) ? number : 0
 }
 
-function formatCurrencyFromDigits(value: string) {
-  const digits = value.replace(/\D/g, '')
-  return digits ? money.format(Number(digits) / 100) : ''
+function normalizeCurrencyEntry(value: string) {
+  return value.replace(/[^\d.,]/g, '')
+}
+
+function formatCurrencyEntry(value: string) {
+  const number = parseBRL(value)
+  return number > 0 ? number.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
 }
 
 function asCurrencyInput(value: unknown) {
   const number = toNumber(value)
-  return number ? money.format(number) : ''
+  return number ? number.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
 }
 
 function safeFileName(value: string) {
@@ -102,10 +106,16 @@ async function writeAudit(profile: ReturnType<typeof useAuth>['profile'], action
 }
 
 
-function printExpenseExtract(records: AnyRecord[]) {
+function printExpenseExtract(records: AnyRecord[], classificationMap: Map<string, AnyRecord>) {
+  const accountLabel = (item: AnyRecord) => {
+    const classification = classificationMap.get(`expense__${item.id}`)
+    const code = String(classification?.accountCode || item.expenseAccountCode || item.classificacaoContabil || '').trim()
+    const name = String(classification?.accountName || item.expenseAccountName || '').trim()
+    return code ? `${code}${name ? ` - ${name}` : ''}` : '—'
+  }
   const rows = records
     .filter((item) => ['aprovado', 'pago', 'arquivado'].includes(String(item.status ?? '')))
-    .map((item) => `<tr><td>${String(item.competencia || '—')}</td><td>${String(item.fornecedor || item.nome || '—')}</td><td>${String(item.expenseAccountCode || item.classificacaoContabil || '—')}</td><td>${String(item.status || '—')}</td><td class="num">${money.format(toNumber(item.valorTotal))}</td></tr>`)
+    .map((item) => `<tr><td>${String(item.competencia || '—')}</td><td>${String(item.fornecedor || item.nome || '—')}</td><td>${accountLabel(item)}</td><td>${String(item.status || '—')}</td><td class="num">${money.format(toNumber(item.valorTotal))}</td></tr>`)
     .join('')
   const total = records
     .filter((item) => ['aprovado', 'pago', 'arquivado'].includes(String(item.status ?? '')))
@@ -331,7 +341,7 @@ function ExpenseModal({ record, onClose }: { record?: AnyRecord | null; onClose:
 
     <div className="form-grid compact-grid"><label><span>Unidade</span><select value={unidade} onChange={(e) => setUnidade(e.target.value as 'RJ' | 'SP')}><option>RJ</option><option>SP</option></select></label><label className="span-2"><span>Nome / Responsável</span><input data-required-key="expense-name" value={nome} onChange={(e) => setNome(e.target.value)} /></label><label><span>Competência</span><input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} /></label><label className="span-2"><span>Fornecedor / Favorecido</span><input value={fornecedor} onChange={(e) => setFornecedor(e.target.value)} /></label><label><span>CPF / CNPJ</span><input value={documento} onChange={(e) => setDocumento(e.target.value)} /></label></div>
 
-    <div className="legacy-table expense-table"><div className="legacy-row legacy-head"><span>DATA</span><span>HISTÓRICO</span><span>VALOR</span><span></span></div>{items.map((item, index) => <div className="legacy-row" key={index}><input type="date" value={item.data} onChange={(e) => updateItem(index, 'data', e.target.value)} /><input data-required-key={`expense-history-${index}`} value={item.historico} onChange={(e) => updateItem(index, 'historico', e.target.value)} /><input data-required-key={`expense-value-${index}`} inputMode="numeric" value={item.valor} onChange={(e) => updateItem(index, 'valor', formatCurrencyFromDigits(e.target.value))} placeholder="R$ 0,00" /><button type="button" className="row-remove" onClick={() => setItems((current) => current.length > 1 ? current.filter((_, i) => i !== index) : current)}><Trash2 size={15} /></button></div>)}</div>
+    <div className="legacy-table expense-table"><div className="legacy-row legacy-head"><span>DATA</span><span>HISTÓRICO</span><span>VALOR</span><span></span></div>{items.map((item, index) => <div className="legacy-row" key={index}><input type="date" value={item.data} onChange={(e) => updateItem(index, 'data', e.target.value)} /><input data-required-key={`expense-history-${index}`} value={item.historico} onChange={(e) => updateItem(index, 'historico', e.target.value)} /><div className="money-input-with-preview"><input data-required-key={`expense-value-${index}`} inputMode="decimal" value={item.valor} onChange={(e) => updateItem(index, 'valor', normalizeCurrencyEntry(e.target.value))} onBlur={(e) => updateItem(index, 'valor', formatCurrencyEntry(e.target.value))} placeholder="0,00" /><small>{money.format(parseBRL(item.valor))}</small></div><button type="button" className="row-remove" onClick={() => setItems((current) => current.length > 1 ? current.filter((_, i) => i !== index) : current)}><Trash2 size={15} /></button></div>)}</div>
     <button type="button" className="add-row-button expense-text" onClick={() => setItems((current) => [...current, { data: '', historico: '', valor: '' }])}><Plus size={16} /> Adicionar linha</button>
 
     <div className="form-grid compact-grid section-gap"><label className="span-2"><span>Detalhamento complementar <small>(opcional)</small></span><input value={subcategoria} onChange={(e) => setSubcategoria(e.target.value)} /></label><label className="span-3"><span>OBS.</span><textarea rows={3} value={observacoes} onChange={(e) => setObservacoes(e.target.value)} /></label></div>
@@ -363,7 +373,14 @@ export function ExpensesPageStorage() {
   const [attachmentTarget, setAttachmentTarget] = useState<AnyRecord | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [search, setSearch] = useState('')
+  const [managerialClassifications, setManagerialClassifications] = useState<AnyRecord[]>([])
   const { records, loading } = useExpenses()
+
+  useEffect(() => onSnapshot(collection(db, 'managerialClassifications'), (snapshot) => {
+    setManagerialClassifications(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })))
+  }), [])
+
+  const managerialClassificationMap = useMemo(() => new Map(managerialClassifications.map((item) => [item.id, item])), [managerialClassifications])
 
   useEffect(() => {
     if (params.get('novo') === '1') {
@@ -400,7 +417,7 @@ export function ExpensesPageStorage() {
   }
 
   return <>
-    <Header onNew={() => { setEditing(null); setOpen(true) }} onExtract={() => printExpenseExtract(records)} />
+    <Header onNew={() => { setEditing(null); setOpen(true) }} onExtract={() => printExpenseExtract(records, managerialClassificationMap)} />
     <ExpenseManagementDashboard records={records} loading={loading} />
     <section className="page-card module-card expense-module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por responsável, fornecedor, competência, código ou conta" /></div><button className="secondary-button"><Filter size={17} /> Filtros</button></div>
       {loading ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando despesas</strong></div> : filtered.length === 0 ? <div className="module-empty"><ReceiptText size={34} /><strong>Nenhuma despesa encontrada</strong><span>Clique em Nova Despesa para preencher o primeiro demonstrativo.</span></div> : <div className="data-table review-expenses-table"><div className="data-row data-head"><span>Competência</span><span>Responsável / Favorecido</span><span>Plano de Contas</span><span>Status</span><span className="numeric">Valor</span><span>Ações</span></div>{filtered.map((item) => {
