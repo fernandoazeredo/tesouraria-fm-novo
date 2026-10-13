@@ -106,11 +106,24 @@ function revenueCashDate(record: AnyRecord) {
 }
 
 function toNumber(value: unknown) {
-  const number = Number(value)
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  const raw = String(value ?? '').trim().replace(/R\$/gi, '').replace(/\s/g, '')
+  if (!raw) return 0
+  let normalized = raw
+  if (raw.includes(',') && raw.includes('.')) normalized = raw.lastIndexOf(',') > raw.lastIndexOf('.') ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/,/g, '')
+  else if (raw.includes(',')) normalized = raw.replace(/\./g, '').replace(',', '.')
+  const number = Number(normalized)
   return Number.isFinite(number) ? number : 0
 }
 
-function revenueAmount(record: AnyRecord) {
+function revenueAmount(record: AnyRecord, classification?: AnyRecord) {
+  const gross = toNumber(record.valorAlvara)
+  const type = normalizeStatus(record.tipoRecebimento)
+  const legacyOtherRevenue = !String(record.processo ?? '').trim() && gross > 0
+  const classifiedAsOtherRevenue = classification?.accountDre === 'Outras Receitas Não Operacionais'
+
+  if (type === 'outras_receitas' || legacyOtherRevenue || classifiedAsOtherRevenue) return gross
+
   const direct = toNumber(record.invoiceValue)
   if (direct > 0) return direct
   const components = Array.isArray(record.components) ? record.components as DocumentData[] : []
@@ -250,7 +263,7 @@ export function DreRegimeViewEnhancer() {
       if (!date) continue
       if (regime === 'competencia' && !['recebido_tesouraria', 'encerrado'].includes(status)) continue
       if (regime === 'caixa' && ['rascunho', 'rejeitado', 'cancelado', 'excluido', 'pendente'].includes(status)) continue
-      result.push({ id: item.id, type: 'revenue', date, unit: String(item.unidade ?? 'RJ'), amount: revenueAmount(item), group })
+      result.push({ id: item.id, type: 'revenue', date, unit: String(item.unidade ?? 'RJ'), amount: revenueAmount(item, classification), group })
     }
 
     return result
