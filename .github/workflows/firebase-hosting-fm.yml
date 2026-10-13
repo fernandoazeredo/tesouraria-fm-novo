@@ -41,4 +41,4 @@ jobs:
         run: npm install --global firebase-tools
 
       - name: Publicar Hosting e regras do Firestore do FM NOVO
-        run: firebase deploy --only hosting,firestore:rules --project tesouraria-fm-novo --non-interactive
+        run: firebase deploy --only hosting,firestore:rules,storage --project tesouraria-fm-novo --non-interactive
