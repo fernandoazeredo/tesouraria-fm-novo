@@ -242,33 +242,34 @@ export function ApprovalsPageEnhanced() {
         })
       } else if (item.type === 'commission') {
         await updateDoc(doc(db, 'agentCommissions', item.record.id), {
-          status: 'rejeitado',
+          status,
           installments: pendingInstallments(item.record),
           approvalNote: reason.trim(),
-          approvedBy: profile.uid,
-          approvedByName: profile.displayName,
-          approvedByEmail: profile.email,
-          approvedAt: serverTimestamp(),
+          decisionBy: profile.uid,
+          decisionByName: profile.displayName,
+          decisionByEmail: profile.email,
+          decisionAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         })
       } else if (item.type === 'alvaraTransfer') {
         await updateDoc(doc(db, 'alvaraTransfers', item.record.id), {
-          status: 'rejeitado',
+          status,
           installments: pendingInstallments(item.record),
           approvalNote: reason.trim(),
-          approvedBy: profile.uid,
-          approvedByName: profile.displayName,
-          approvedByEmail: profile.email,
-          approvedAt: serverTimestamp(),
+          decisionBy: profile.uid,
+          decisionByName: profile.displayName,
+          decisionByEmail: profile.email,
+          decisionAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         })
       } else {
         await updateDoc(doc(db, 'societaryTransfers', item.record.id), {
-          status: 'rejeitado',
-          rejectionReason: reason.trim(),
-          rejectedBy: profile.uid,
-          rejectedByName: profile.displayName,
-          rejectedAt: serverTimestamp(),
+          status,
+          rejectionReason: status === 'rejeitado' ? reason.trim() : null,
+          returnReason: status === 'devolvido' ? reason.trim() : null,
+          decisionBy: profile.uid,
+          decisionByName: profile.displayName,
+          decisionAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         })
       }
