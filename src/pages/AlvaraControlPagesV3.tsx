@@ -4,6 +4,7 @@ import { BadgeDollarSign, CheckCircle2, FileText, RefreshCw, Search, Send, Users
 import { db } from '../lib/firebase'
 import { isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
 import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
+import { isEffectiveAlvaraReceivable } from '../lib/receivableClassification'
 
 type AnyRecord = { id: string } & DocumentData
 type PaymentKind = 'client' | 'agent'
@@ -59,19 +60,6 @@ function componentOf(item: AnyRecord, name: string) {
 }
 function componentValue(item: AnyRecord, name: string) { return toNumber(componentOf(item, name)?.valor) }
 function componentPercent(item: AnyRecord, name: string) { return toNumber(componentOf(item, name)?.percentual) }
-function normalizeText(value: unknown) {
-  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
-}
-
-function isAlvaraReceivable(item: AnyRecord) {
-  const type = normalizeText(item.tipoRecebimento)
-  if (type === 'outras_receitas' || type === 'acordo_trabalhista') return false
-  return normalizeText(item.origem).includes('alvara')
-}
-
-function eligibleReceivable(item: AnyRecord) {
-  return ['recebido_tesouraria', 'encerrado'].includes(String(item.status ?? '')) && isAlvaraReceivable(item)
-}
 
 function addMonths(dateValue: string, months: number) {
   if (!dateValue) return ''
@@ -309,7 +297,7 @@ function PaymentControlPage({ kind }: { kind: PaymentKind }) {
   const [search, setSearch] = useState('')
   const [target, setTarget] = useState<AnyRecord | null>(null)
   const planMap = useMemo(() => new Map(plans.map((item) => [item.id, item])), [plans])
-  const eligibleReceivables = useMemo(() => receivables.filter(eligibleReceivable), [receivables])
+  const eligibleReceivables = useMemo(() => receivables.filter(isEffectiveAlvaraReceivable), [receivables])
   const sources = useMemo(() => eligibleReceivables.filter((item) => {
     const amount = sourceAmount(item, kind)
     if (amount <= 0) return false
