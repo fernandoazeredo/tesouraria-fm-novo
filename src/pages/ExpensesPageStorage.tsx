@@ -101,8 +101,23 @@ async function writeAudit(profile: ReturnType<typeof useAuth>['profile'], action
   })
 }
 
-function Header({ onNew }: { onNew: () => void }) {
-  return <div className="page-heading"><div><span className="eyebrow">Tesouraria</span><h1>Despesas</h1><p>Criação, documentos, movimentação financeira, correção e acompanhamento do demonstrativo.</p></div><div className="quick-actions"><button className="outline-expense-button" type="button"><FileText size={18} /> Extrato de Despesas</button><button className="expense-button" type="button" onClick={onNew}><Plus size={18} /> Nova Despesa</button></div></div>
+
+function printExpenseExtract(records: AnyRecord[]) {
+  const rows = records
+    .filter((item) => ['aprovado', 'pago', 'arquivado'].includes(String(item.status ?? '')))
+    .map((item) => `<tr><td>${String(item.competencia || '—')}</td><td>${String(item.fornecedor || item.nome || '—')}</td><td>${String(item.expenseAccountCode || item.classificacaoContabil || '—')}</td><td>${String(item.status || '—')}</td><td class="num">${money.format(toNumber(item.valorTotal))}</td></tr>`)
+    .join('')
+  const total = records
+    .filter((item) => ['aprovado', 'pago', 'arquivado'].includes(String(item.status ?? '')))
+    .reduce((sum, item) => sum + toNumber(item.valorTotal), 0)
+  const w = window.open('', '_blank', 'width=1100,height=820')
+  if (!w) { window.alert('O navegador bloqueou a janela do extrato. Libere pop-ups para este site e tente novamente.'); return }
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Extrato de Despesas</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,Helvetica,sans-serif;color:#17202b;font-size:11px}h1{text-align:center}table{width:100%;border-collapse:collapse}th{background:#7f1d1d;color:#fff;padding:8px;text-align:left}td{padding:7px;border-bottom:1px solid #ddd}.num{text-align:right}.total{font-weight:700;font-size:13px;margin-top:14px;text-align:right}</style></head><body><h1>Extrato de Despesas</h1><table><thead><tr><th>Competência</th><th>Favorecido</th><th>Conta</th><th>Status</th><th>Valor</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Nenhuma despesa efetiva.</td></tr>'}</tbody></table><div class="total">Total: ${money.format(total)}</div></body></html>`)
+  w.document.close()
+}
+
+function Header({ onNew, onExtract }: { onNew: () => void; onExtract: () => void }) {
+  return <div className="page-heading"><div><span className="eyebrow">Tesouraria</span><h1>Despesas</h1><p>Criação, documentos, movimentação financeira, correção e acompanhamento do demonstrativo.</p></div><div className="quick-actions"><button className="outline-expense-button" type="button" onClick={onExtract}><FileText size={18} /> Extrato de Despesas</button><button className="expense-button" type="button" onClick={onNew}><Plus size={18} /> Nova Despesa</button></div></div>
 }
 
 function ExpenseModal({ record, onClose }: { record?: AnyRecord | null; onClose: () => void }) {
@@ -385,7 +400,7 @@ export function ExpensesPageStorage() {
   }
 
   return <>
-    <Header onNew={() => { setEditing(null); setOpen(true) }} />
+    <Header onNew={() => { setEditing(null); setOpen(true) }} onExtract={() => printExpenseExtract(records)} />
     <ExpenseManagementDashboard records={records} loading={loading} />
     <section className="page-card module-card expense-module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por responsável, fornecedor, competência, código ou conta" /></div><button className="secondary-button"><Filter size={17} /> Filtros</button></div>
       {loading ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando despesas</strong></div> : filtered.length === 0 ? <div className="module-empty"><ReceiptText size={34} /><strong>Nenhuma despesa encontrada</strong><span>Clique em Nova Despesa para preencher o primeiro demonstrativo.</span></div> : <div className="data-table review-expenses-table"><div className="data-row data-head"><span>Competência</span><span>Responsável / Favorecido</span><span>Plano de Contas</span><span>Status</span><span className="numeric">Valor</span><span>Ações</span></div>{filtered.map((item) => {
