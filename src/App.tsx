@@ -209,6 +209,44 @@ function Configuracoes() {
   )
 }
 
+function VersionUpdateNotice() {
+  const [available, setAvailable] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const currentScript = document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/index-"]')?.src || ''
+    const currentPath = currentScript ? new URL(currentScript, window.location.origin).pathname : ''
+
+    async function checkVersion() {
+      try {
+        const response = await fetch(`/index.html?version-check=${Date.now()}`, { cache: 'no-store' })
+        if (!response.ok) return
+        const html = await response.text()
+        const match = html.match(/<script[^>]+src=["']([^"']*\/assets\/index-[^"']+\.js)["']/i)
+        if (!match?.[1] || !currentPath) return
+        const latestPath = new URL(match[1], window.location.origin).pathname
+        if (!cancelled && latestPath !== currentPath) setAvailable(true)
+      } catch {
+        // Falha de rede não deve interromper o uso do sistema.
+      }
+    }
+
+    void checkVersion()
+    const timer = window.setInterval(() => void checkVersion(), 60000)
+    const onVisibility = () => { if (document.visibilityState === 'visible') void checkVersion() }
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [])
+
+  if (!available) return null
+  return <div className="version-update-notice" role="status"><span><strong>Nova versão disponível.</strong> Atualize para usar a versão mais recente do sistema.</span><button type="button" onClick={() => window.location.reload()}>Atualizar agora</button></div>
+}
+
 function AppShell() {
   const { profile, logout } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -224,6 +262,7 @@ function AppShell() {
 
   return (
     <div className="app-shell">
+      <VersionUpdateNotice />
       <WorkflowStatusEnhancer />
       <SocietaryTransferSync />
       <header className="mobile-app-header">
