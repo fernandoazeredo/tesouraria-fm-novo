@@ -127,13 +127,14 @@ function netDue(source: AnyRecord, plan?: AnyRecord) { return plan && (plan.netA
 function nextInstallment(plan?: AnyRecord) { return planInstallments(plan).filter((item) => !item.paid).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] }
 function statusLabel(plan?: AnyRecord) {
   if (!plan) return 'Aguardando programação'
-  const labels: Record<string, string> = { aguardando_aprovacao: 'Aguardando aprovação', aprovado: 'Aprovado', rejeitado: 'Rejeitado', parcialmente_pago: 'Parcialmente pago', pago: 'Pago integralmente' }
+  const labels: Record<string, string> = { aguardando_aprovacao: 'Aguardando aprovação', aprovado: 'Aprovado', devolvido: 'Devolvido', rejeitado: 'Rejeitado', parcialmente_pago: 'Parcialmente pago', pago: 'Pago integralmente' }
   return labels[String(plan.status ?? '')] || String(plan.status ?? '')
 }
 function statusClass(plan?: AnyRecord) {
   if (!plan) return 'workflow-neutral'
   if (plan.status === 'pago' || plan.status === 'aprovado') return 'workflow-success'
   if (plan.status === 'rejeitado') return 'workflow-danger'
+  if (plan.status === 'devolvido') return 'workflow-warning'
   if (plan.status === 'aguardando_aprovacao') return 'workflow-warning'
   if (plan.status === 'parcialmente_pago') return 'workflow-info'
   return 'workflow-neutral'
@@ -186,7 +187,7 @@ function CommissionModal({ source, plan, onClose }: { source: AnyRecord; plan?: 
   const canOperate = profile?.role === 'master' || profile?.role === 'tesouraria'
   const canApprove = profile?.role === 'master' || Boolean(profile && isOfficialDirectorEmail(profile.email) && profile.role === 'diretor')
   const gross = sourceGrossCommission(source)
-  const editable = !plan || plan.status === 'rejeitado'
+  const editable = !plan || ['rejeitado', 'devolvido'].includes(String(plan.status))
   const execution = Boolean(plan && ['aprovado', 'parcialmente_pago', 'pago'].includes(String(plan.status)))
   const [accountingAccount, setAccountingAccount] = useState(String(plan?.accountingAccount || ''))
   const [deductions, setDeductions] = useState<Deduction[]>(() => normalizeDeductions(plan))
