@@ -58,6 +58,7 @@ import './accounting-storage.css'
 import './accounts-fernando.css'
 import './storage-documents.css'
 
+// Rotas financeiras críticas versionadas: Calendário Financeiro e Conciliação Bancária.
 const companyData = {
   razaoSocial: 'FLÁVIO MARQUES ADVOGADOS ASSOCIADOS',
   cnpj: '04.344.462/0001-87',
