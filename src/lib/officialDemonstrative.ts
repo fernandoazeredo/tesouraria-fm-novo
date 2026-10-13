@@ -225,10 +225,18 @@ export async function ensureOfficialDemonstrative(
       ? createRevenueDemonstrativePdf(record)
       : createPaymentDemonstrativePdf(kind, record)
 
-  const path = pathFor(kind, record.id)
+  const path = String(existing?.path || record.demonstrativePath || pathFor(kind, record.id))
   const target = storageRef(storage, path)
-  await uploadBytes(target, bytes, { contentType: 'application/pdf', customMetadata: { immutable: 'true', kind } })
-  const url = await getDownloadURL(target)
+  // PDFs imutáveis: reutilizar o arquivo já existente em caso de geração parcial.
+  let url: string
+  try {
+    url = await getDownloadURL(target)
+  } catch (error) {
+    const code = (error as { code?: string })?.code
+    if (code && code !== 'storage/object-not-found') throw error
+    await uploadBytes(target, bytes, { contentType: 'application/pdf', customMetadata: { immutable: 'true', kind } })
+    url = await getDownloadURL(target)
+  }
   const meta: DemonstrativeMeta = {
     name: 'demonstrativo.pdf',
     path,
