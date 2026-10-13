@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
 import { BadgeDollarSign, CheckCircle2, FileText, RefreshCw, Search, Send, Users, X } from 'lucide-react'
 import { db } from '../lib/firebase'
+import { ensureOfficialDemonstrative } from '../lib/officialDemonstrative'
 import { isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
 import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 import { isEffectiveAlvaraReceivable } from '../lib/receivableClassification'
@@ -267,7 +268,10 @@ function PaymentPlanModal({ source, plan, kind, collectionName, onClose }: { sou
     const nextStatus = paidCount === 0 ? 'aprovado' : paidCount === finalized.length ? 'pago' : 'parcialmente_pago'
     setBusy(true)
     try {
-      await setDoc(doc(db, collectionName, source.id), { installments: finalized, status: nextStatus, paidValue: finalized.reduce((total, item) => total + (item.paid ? toNumber(item.value) : 0), 0), updatedBy: profile.uid, updatedByName: profile.displayName, updatedAt: serverTimestamp() }, { merge: true })
+      const paidValue = finalized.reduce((total, item) => total + (item.paid ? toNumber(item.value) : 0), 0)
+      const finalizedPlan = { ...plan, id: source.id, installments: finalized, status: nextStatus, paidValue, updatedBy: profile.uid, updatedByName: profile.displayName }
+      await setDoc(doc(db, collectionName, source.id), { installments: finalized, status: nextStatus, paidValue, updatedBy: profile.uid, updatedByName: profile.displayName, updatedAt: serverTimestamp() }, { merge: true })
+      if (nextStatus === 'pago') await ensureOfficialDemonstrative(kind === 'client' ? 'alvaraTransfer' : 'commission', finalizedPlan, { collectionName, generatedBy: profile.uid })
       for (let index = 0; index < finalized.length; index += 1) {
         if (finalized[index].paid && !previous[index]?.paid) await audit(profile, moduleName, `Parcela ${finalized[index].number} paga`, `Processo ${source.processo || '—'} — ${sourceBeneficiary(source, kind)} — ${money.format(finalized[index].value)} em ${dateBr(finalized[index].paidDate)}`, source.id)
         if (!finalized[index].paid && previous[index]?.paid) await audit(profile, moduleName, `Pagamento da parcela ${finalized[index].number} desmarcado`, `Processo ${source.processo || '—'} — ${money.format(finalized[index].value)}`, source.id)
