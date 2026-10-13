@@ -45,6 +45,7 @@ type Settings = {
 type Draft = { percent: string; value: string }
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+// Formatação pt-BR usada apenas nos campos editáveis da tela.
 const moneyInput = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const today = () => new Date().toISOString().slice(0, 10)
 const DEFAULT_SETTINGS: Settings = {
