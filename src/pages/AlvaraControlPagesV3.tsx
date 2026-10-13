@@ -117,13 +117,14 @@ function planPaidValue(plan?: AnyRecord) { return planInstallments(plan).reduce(
 function nextInstallment(plan?: AnyRecord) { return planInstallments(plan).filter((item) => !item.paid).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] }
 function statusLabel(plan?: AnyRecord) {
   if (!plan) return 'Aguardando programação'
-  const labels: Record<string, string> = { aguardando_aprovacao: 'Aguardando aprovação', aprovado: 'Aprovado', rejeitado: 'Rejeitado', parcialmente_pago: 'Parcialmente pago', pago: 'Pago integralmente' }
+  const labels: Record<string, string> = { aguardando_aprovacao: 'Aguardando aprovação', aprovado: 'Aprovado', devolvido: 'Devolvido', rejeitado: 'Rejeitado', parcialmente_pago: 'Parcialmente pago', pago: 'Pago integralmente' }
   return labels[String(plan.status ?? '')] || String(plan.status ?? 'Aguardando programação')
 }
 function statusClass(plan?: AnyRecord) {
   if (!plan) return 'workflow-neutral'
   if (plan.status === 'pago' || plan.status === 'aprovado') return 'workflow-success'
   if (plan.status === 'rejeitado') return 'workflow-danger'
+  if (plan.status === 'devolvido') return 'workflow-warning'
   if (plan.status === 'aguardando_aprovacao') return 'workflow-warning'
   if (plan.status === 'parcialmente_pago') return 'workflow-info'
   return 'workflow-neutral'
@@ -284,7 +285,7 @@ function PaymentPlanModal({ source, plan, kind, collectionName, onClose }: { sou
     <label className="obligation-notes"><span>Observações</span><textarea rows={3} value={notes} disabled={isExecutionStage || !canOperate || plan?.status === 'aguardando_aprovacao'} onChange={(event) => setNotes(event.target.value)} /></label>
     {plan?.status === 'aguardando_aprovacao' && <div className="obligation-approval-box"><strong>Aprovação do pagamento</strong><span>A aprovação é do repasse/comissão, não do recebimento do Alvará. Todas as parcelas passam de “Aguardando aprovação” para “Aprovada”.</span><textarea rows={2} placeholder="Observação da aprovação / motivo da rejeição (opcional)" value={approvalNote} disabled={!canApprove} onChange={(event) => setApprovalNote(event.target.value)} /></div>}
     {plan?.approvalNote && plan.status !== 'aguardando_aprovacao' && <div className="obligation-approval-note"><strong>Observação da decisão:</strong> {plan.approvalNote}</div>}
-    <div className="modal-actions"><button className="secondary-button" type="button" onClick={onClose}>Fechar</button>{canOperate && (!plan || plan.status === 'rejeitado') && <button className="revenue-button" type="button" disabled={busy} onClick={() => void saveSchedule()}><Send size={16} /> Enviar para aprovação</button>}{canApprove && plan?.status === 'aguardando_aprovacao' && <><button className="expense-button" type="button" disabled={busy} onClick={() => void decide('rejeitado')}>Rejeitar</button><button className="revenue-button" type="button" disabled={busy} onClick={() => void decide('aprovado')}><CheckCircle2 size={16} /> Aprovar pagamento</button></>}{canOperate && plan && ['aprovado', 'parcialmente_pago'].includes(String(plan.status)) && <button className="revenue-button" type="button" disabled={busy} onClick={() => void saveExecution()}><CheckCircle2 size={16} /> Salvar pagamentos</button>}</div>
+    <div className="modal-actions"><button className="secondary-button" type="button" onClick={onClose}>Fechar</button>{canOperate && (!plan || ['rejeitado', 'devolvido'].includes(String(plan.status))) && <button className="revenue-button" type="button" disabled={busy} onClick={() => void saveSchedule()}><Send size={16} /> Enviar para aprovação</button>}{canApprove && plan?.status === 'aguardando_aprovacao' && <><button className="expense-button" type="button" disabled={busy} onClick={() => void decide('rejeitado')}>Rejeitar</button><button className="revenue-button" type="button" disabled={busy} onClick={() => void decide('aprovado')}><CheckCircle2 size={16} /> Aprovar pagamento</button></>}{canOperate && plan && ['aprovado', 'parcialmente_pago'].includes(String(plan.status)) && <button className="revenue-button" type="button" disabled={busy} onClick={() => void saveExecution()}><CheckCircle2 size={16} /> Salvar pagamentos</button>}</div>
   </section></div>
 }
 
