@@ -36,7 +36,7 @@ export const BANK_ACCOUNTS: BankAccount[] = [
 
 export const DEFAULT_BANK_ACCOUNT_ID: BankAccount['id'] = 'itau'
 
-function normalizeBankAccountId(id: string | null | undefined): 'itau' | 'bb' | 'cef' {
+export function normalizeBankAccountId(id: string | null | undefined): 'itau' | 'bb' | 'cef' {
   if (id === 'bb' || id === 'bb-pf') return 'bb'
   if (id === 'cef' || id === 'cef-pf') return 'cef'
   return 'itau'
