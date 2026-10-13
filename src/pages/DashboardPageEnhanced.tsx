@@ -3,6 +3,7 @@ import { BadgeDollarSign, ReceiptText } from 'lucide-react'
 import { collection, onSnapshot, type DocumentData } from 'firebase/firestore'
 import { Link } from 'react-router-dom'
 import { db } from '../lib/firebase'
+import { isEffectiveAlvaraReceivable } from '../lib/receivableClassification'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 type AnyRecord = { id: string } & DocumentData
@@ -20,22 +21,13 @@ function toNumber(value: unknown) {
   return Number.isFinite(number) ? number : 0
 }
 
-function normalize(value: unknown) {
-  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
-}
-
-function isAlvara(item: AnyRecord) {
-  const type = normalize(item.tipoRecebimento)
-  if (type === 'outras_receitas' || type === 'acordo_trabalhista') return false
-  return normalize(item.origem).includes('alvara')
-}
 
 export function DashboardPageEnhanced() {
   const expenses = useLiveCollection('expenses')
   const receivables = useLiveCollection('receivables')
   const approved = expenses.filter((item) => ['aprovado', 'pago', 'arquivado'].includes(String(item.status)))
   const rejected = expenses.filter((item) => item.status === 'rejeitado')
-  const effectiveReceivables = receivables.filter((item) => ['recebido_tesouraria', 'encerrado'].includes(String(item.status)) && isAlvara(item))
+  const effectiveReceivables = receivables.filter(isEffectiveAlvaraReceivable)
   const expenseTotal = approved.reduce((sum, item) => sum + toNumber(item.valorTotal), 0)
   const rejectedTotal = rejected.reduce((sum, item) => sum + toNumber(item.valorTotal), 0)
   const revenueTotal = effectiveReceivables.reduce((sum, item) => sum + toNumber(item.valorAlvara), 0)
