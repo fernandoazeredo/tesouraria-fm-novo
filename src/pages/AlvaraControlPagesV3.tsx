@@ -59,7 +59,19 @@ function componentOf(item: AnyRecord, name: string) {
 }
 function componentValue(item: AnyRecord, name: string) { return toNumber(componentOf(item, name)?.valor) }
 function componentPercent(item: AnyRecord, name: string) { return toNumber(componentOf(item, name)?.percentual) }
-function eligibleReceivable(item: AnyRecord) { return ['recebido_tesouraria', 'encerrado'].includes(String(item.status ?? '')) }
+function normalizeText(value: unknown) {
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+}
+
+function isAlvaraReceivable(item: AnyRecord) {
+  const type = normalizeText(item.tipoRecebimento)
+  if (type === 'outras_receitas' || type === 'acordo_trabalhista') return false
+  return normalizeText(item.origem).includes('alvara')
+}
+
+function eligibleReceivable(item: AnyRecord) {
+  return ['recebido_tesouraria', 'encerrado'].includes(String(item.status ?? '')) && isAlvaraReceivable(item)
+}
 
 function addMonths(dateValue: string, months: number) {
   if (!dateValue) return ''
