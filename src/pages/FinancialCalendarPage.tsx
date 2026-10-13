@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, type DocumentData } from 'firebase/firestore'
 import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink, FileText, Paperclip, RefreshCw } from 'lucide-react'
 import { db } from '../lib/firebase'
-import { createTextPdf } from '../lib/simplePdf'
 import { isEffectiveAlvaraReceivable } from '../lib/receivableClassification'
 import './FinancialCalendarPage.css'
 
@@ -13,7 +12,7 @@ const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL
 const dateFormatter = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const monthFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' })
 
-function useCollectionRecords(name: 'expenses' | 'receivables') {
+function useCollectionRecords(name: string) {
   const [records, setRecords] = useState<AnyRecord[]>([])
   const [loading, setLoading] = useState(true)
   useEffect(() => onSnapshot(collection(db, name), (snapshot) => {
@@ -51,54 +50,8 @@ function fileName(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'demonstrativo'
 }
 
-function downloadPdf(title: string, lines: string[], name: string) {
-  // Abre o demonstrativo para consulta no navegador. Isso funciona melhor em celular
-  // e em ambientes que bloqueiam downloads automáticos.
-  const reportWindow = window.open('', '_blank')
-  if (!reportWindow) {
-    window.alert('O navegador bloqueou a abertura do demonstrativo. Libere pop-ups para este site e tente novamente.')
-    return
-  }
-
-  const bytes = createTextPdf(title, lines)
-  const blob = new Blob([bytes], { type: 'application/pdf' })
-  const url = URL.createObjectURL(blob)
-  reportWindow.document.title = name
-  reportWindow.location.href = url
-  setTimeout(() => URL.revokeObjectURL(url), 60000)
-}
-
-function expensePdf(item: AnyRecord) {
-  downloadPdf('DEMONSTRATIVO DA DESPESA', [
-    'FLÁVIO MARQUES ADVOGADOS ASSOCIADOS',
-    `Data do pagamento: ${String(item.paymentDate || '—')}`,
-    `Competência: ${String(item.competencia || '—')}`,
-    `Unidade: ${String(item.unidade || '—')}`,
-    `Responsável: ${String(item.nome || '—')}`,
-    `Fornecedor / favorecido: ${String(item.fornecedor || '—')}`,
-    `CPF / CNPJ: ${String(item.documento || '—')}`,
-    `Plano de contas: ${String(item.expenseAccountCode || item.classificacaoContabil || '—')} · ${String(item.expenseAccountName || item.categoria || '')}`,
-    `Status: ${String(item.status || '—')}`,
-    `Valor total: ${money.format(toNumber(item.valorTotal))}`,
-    `Forma de pagamento: ${String(item.paymentMethod || '—')}`,
-    `Observações: ${String(item.observacoes || item.observation || '—')}`,
-    `Documentos comprobatórios: ${attachmentsOf(item).length}`,
-  ], `Demonstrativo_da_Despesa_${fileName(String(item.fornecedor || item.nome || item.id))}.pdf`)
-}
-
-function revenuePdf(item: AnyRecord) {
-  downloadPdf('DEMONSTRATIVO DE RECEBIMENTO', [
-    'FLÁVIO MARQUES ADVOGADOS ASSOCIADOS',
-    `Data do recebimento: ${String(item.receiptDate || item.data || '—')}`,
-    `Unidade: ${String(item.unidade || '—')}`,
-    `Processo: ${String(item.processo || '—')}`,
-    `Reclamante: ${String(item.reclamante || '—')}`,
-    `Reclamada: ${String(item.reclamada || '—')}`,
-    `Origem: ${String(item.origem || item.natureza || '—')}`,
-    `Status: ${String(item.status || '—')}`,
-    `Valor recebido: ${money.format(toNumber(item.valorAlvara || item.valorLiquidoCliente))}`,
-    `Documentos comprobatórios: ${attachmentsOf(item).length}`,
-  ], `Demonstrativo_de_Recebimento_${fileName(String(item.processo || item.reclamante || item.id))}.pdf`)
+function demonstrativeUrl(item: AnyRecord) {
+  return String(item.demonstrative?.url || item.demonstrativeUrl || '')
 }
 
 function ExpenseMovement({ item }: { item: AnyRecord }) {
@@ -109,7 +62,7 @@ function ExpenseMovement({ item }: { item: AnyRecord }) {
       <b>{money.format(toNumber(item.valorTotal))}</b>
     </div>
     <div className="financial-document-row">
-      <button type="button" onClick={() => expensePdf(item)}><FileText size={14} /> Demonstrativo</button>
+      {demonstrativeUrl(item) ? <a href={demonstrativeUrl(item)} target="_blank" rel="noreferrer"><FileText size={14} /> Demonstrativo</a> : <span><FileText size={14} /> Demonstrativo pendente</span>}
       {attachments.map((file, index) => file.url ? <a key={file.path || `${file.name}-${index}`} href={file.url} target="_blank" rel="noreferrer"><Paperclip size={13} /> {file.name || `Documento ${index + 1}`} <ExternalLink size={11} /></a> : null)}
     </div>
   </article>
@@ -123,15 +76,35 @@ function RevenueMovement({ item }: { item: AnyRecord }) {
       <b>{money.format(toNumber(item.valorAlvara || item.valorLiquidoCliente))}</b>
     </div>
     <div className="financial-document-row">
-      <button type="button" onClick={() => revenuePdf(item)}><FileText size={14} /> Demonstrativo</button>
+      {demonstrativeUrl(item) ? <a href={demonstrativeUrl(item)} target="_blank" rel="noreferrer"><FileText size={14} /> Demonstrativo</a> : <span><FileText size={14} /> Demonstrativo pendente</span>}
       {attachments.map((file, index) => file.url ? <a key={file.path || `${file.name}-${index}`} href={file.url} target="_blank" rel="noreferrer"><Paperclip size={13} /> {file.name || `Documento ${index + 1}`} <ExternalLink size={11} /></a> : null)}
     </div>
   </article>
 }
 
+type PayoutMovement = { id: string; kind: 'Repasse de Alvará' | 'Comissão de Agente' | 'Repasse Societário'; date: string; process: string; beneficiary: string; value: number; record: AnyRecord }
+
+function PayoutMovementCard({ item }: { item: PayoutMovement }) {
+  const attachments = attachmentsOf(item.record)
+  return <article className="financial-movement-card payout-movement">
+    <div className="financial-movement-main">
+      <div><strong>{item.kind}</strong><span>{item.process || '—'} · {item.beneficiary || '—'}</span></div>
+      <b>{money.format(item.value)}</b>
+    </div>
+    <div className="financial-document-row">
+      {demonstrativeUrl(item.record) ? <a href={demonstrativeUrl(item.record)} target="_blank" rel="noreferrer"><FileText size={14} /> Demonstrativo</a> : <span><FileText size={14} /> Demonstrativo pendente</span>}
+      {attachments.map((file, index) => file.url ? <a key={file.path || `${file.name}-${index}`} href={file.url} target="_blank" rel="noreferrer"><Paperclip size={13} /> {file.name || `Comprovante ${index + 1}`} <ExternalLink size={11} /></a> : null)}
+    </div>
+  </article>
+}
+
+
 export function FinancialCalendarPage() {
   const { records: expenses, loading: loadingExpenses } = useCollectionRecords('expenses')
   const { records: receivables, loading: loadingReceivables } = useCollectionRecords('receivables')
+  const { records: alvaraTransfers, loading: loadingTransfers } = useCollectionRecords('alvaraTransfers')
+  const { records: commissions, loading: loadingCommissions } = useCollectionRecords('agentCommissions')
+  const { records: societaryTransfers, loading: loadingSocietary } = useCollectionRecords('societaryTransfers')
   const today = new Date()
   const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1))
 
@@ -164,6 +137,34 @@ export function FinancialCalendarPage() {
     return grouped
   }, [receivables, selectedMonth])
 
+  const payoutsByDay = useMemo(() => {
+    const grouped = new Map<string, PayoutMovement[]>()
+    const add = (row: PayoutMovement) => {
+      const key = dateKey(row.date)
+      if (!key || !key.startsWith(selectedMonth)) return
+      grouped.set(key, [...(grouped.get(key) || []), row])
+    }
+    for (const plan of alvaraTransfers) {
+      const installments = Array.isArray(plan.installments) ? plan.installments : []
+      installments.forEach((installment: DocumentData, index: number) => {
+        if (!installment?.paid || !installment?.paidDate) return
+        add({ id: `alvara-${plan.id}-${index}`, kind: 'Repasse de Alvará', date: String(installment.paidDate), process: String(plan.processo || plan.sourceSnapshot?.processo || ''), beneficiary: String(plan.beneficiary || plan.sourceSnapshot?.titular || plan.sourceSnapshot?.reclamante || 'Cliente'), value: toNumber(installment.value), record: plan })
+      })
+    }
+    for (const plan of commissions) {
+      const installments = Array.isArray(plan.installments) ? plan.installments : []
+      installments.forEach((installment: DocumentData, index: number) => {
+        if (!installment?.paid || !installment?.paidDate) return
+        add({ id: `commission-${plan.id}-${index}`, kind: 'Comissão de Agente', date: String(installment.paidDate), process: String(plan.processo || plan.sourceSnapshot?.processo || ''), beneficiary: String(plan.beneficiary || plan.sourceSnapshot?.agentName || 'Agente'), value: toNumber(installment.value), record: plan })
+      })
+    }
+    for (const plan of societaryTransfers) {
+      if (plan.status !== 'pago' || !plan.paymentDate) continue
+      add({ id: `societary-${plan.id}`, kind: 'Repasse Societário', date: String(plan.paymentDate), process: String(plan.processo || ''), beneficiary: String(plan.beneficiary || 'Ana Müller'), value: toNumber(plan.paidValue || plan.transferValue), record: plan })
+    }
+    return grouped
+  }, [alvaraTransfers, commissions, selectedMonth, societaryTransfers])
+
   const monthExpenses = [...expensesByDay.values()].flat()
   const monthReceivables = [...receivablesByDay.values()].flat()
   const expenseTotal = monthExpenses.reduce((sum, item) => sum + toNumber(item.valorTotal), 0)
@@ -174,7 +175,7 @@ export function FinancialCalendarPage() {
   const expenseBar = (expenseTotal / summaryScale) * 100
   const resultBar = (Math.abs(resultTotal) / summaryScale) * 100
   const resultTone = resultTotal > 0 ? 'positive' : resultTotal < 0 ? 'negative' : 'neutral'
-  const loading = loadingExpenses || loadingReceivables
+  const loading = loadingExpenses || loadingReceivables || loadingTransfers || loadingCommissions || loadingSocietary
 
   return <>
     <div className="page-heading financial-calendar-heading">
@@ -217,6 +218,7 @@ export function FinancialCalendarPage() {
           const key = `${selectedMonth}-${String(day).padStart(2, '0')}`
           const dayExpenses = expensesByDay.get(key) || []
           const dayReceivables = receivablesByDay.get(key) || []
+          const dayPayouts = payoutsByDay.get(key) || []
           const dayExpenseTotal = dayExpenses.reduce((sum, item) => sum + toNumber(item.valorTotal), 0)
           const dayRevenueTotal = dayReceivables.reduce((sum, item) => sum + toNumber(item.valorAlvara || item.valorLiquidoCliente), 0)
 
@@ -233,7 +235,12 @@ export function FinancialCalendarPage() {
               <div className="financial-movement-list">{dayReceivables.map((item) => <RevenueMovement key={item.id} item={item} />)}</div>
             </section>}
 
-            {dayExpenses.length === 0 && dayReceivables.length === 0 && <div className="financial-day-empty">Sem movimento</div>}
+            {dayPayouts.length > 0 && <section className="financial-day-section financial-day-payouts">
+              <div className="financial-day-section-head"><h3>Repasses e Comissões Pagos</h3><strong>{money.format(dayPayouts.reduce((sum, item) => sum + item.value, 0))}</strong></div>
+              <div className="financial-movement-list">{dayPayouts.map((item) => <PayoutMovementCard key={item.id} item={item} />)}</div>
+            </section>}
+
+            {dayExpenses.length === 0 && dayReceivables.length === 0 && dayPayouts.length === 0 && <div className="financial-day-empty">Sem movimento</div>}
           </article>
         })}
       </section>}
