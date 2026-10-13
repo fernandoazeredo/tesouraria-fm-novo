@@ -25,6 +25,9 @@ function toNumber(value: unknown) {
 export function DashboardPageEnhanced() {
   const expenses = useLiveCollection('expenses')
   const receivables = useLiveCollection('receivables')
+  const agentCommissions = useLiveCollection('agentCommissions')
+  const alvaraTransfers = useLiveCollection('alvaraTransfers')
+  const societaryTransfers = useLiveCollection('societaryTransfers')
   const approved = expenses.filter((item) => ['aprovado', 'pago', 'arquivado'].includes(String(item.status)))
   const rejected = expenses.filter((item) => item.status === 'rejeitado')
   const effectiveReceivables = receivables.filter(isEffectiveAlvaraReceivable)
@@ -32,7 +35,11 @@ export function DashboardPageEnhanced() {
   const rejectedTotal = rejected.reduce((sum, item) => sum + toNumber(item.valorTotal), 0)
   const revenueTotal = effectiveReceivables.reduce((sum, item) => sum + toNumber(item.valorAlvara), 0)
   const balance = revenueTotal - expenseTotal
-  const pending = expenses.filter((item) => item.status === 'enviado_aprovacao' || item.status === 'em_analise').length
+  const pendingExpenses = expenses.filter((item) => item.status === 'enviado_aprovacao' || item.status === 'em_analise').length
+  const pendingCommissions = agentCommissions.filter((item) => item.status === 'aguardando_aprovacao').length
+  const pendingAlvaraTransfers = alvaraTransfers.filter((item) => item.status === 'aguardando_aprovacao').length
+  const pendingSocietaryTransfers = societaryTransfers.filter((item) => item.status === 'aguardando_aprovacao').length
+  const pending = pendingExpenses + pendingCommissions + pendingAlvaraTransfers + pendingSocietaryTransfers
 
   return <>
     <div className="page-heading"><div><span className="eyebrow">Visão gerencial</span><h1>Dashboard Financeira</h1><p>Retrato consolidado das receitas e das despesas efetivamente aprovadas.</p></div><div className="quick-actions"><Link className="expense-button button-link" to="/despesas?novo=1"><ReceiptText size={18} /> + Despesa</Link><Link className="revenue-button button-link" to="/alvaras?escolherReceita=1"><BadgeDollarSign size={18} /> + Receita</Link></div></div>
