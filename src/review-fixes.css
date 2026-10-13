@@ -167,3 +167,61 @@ html[data-theme="dark"] .sidebar .nav-link[href="/repasse-societario"].active,
 @media (max-width: 900px) {
   .review-expenses-table .data-row { min-width: 980px; }
 }
+
+/* Entrada monetária padronizada: valor digitado em reais + prévia formatada. */
+.money-input-with-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.money-input-with-preview > input { min-width: 0; flex: 1; }
+.money-input-with-preview > small {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Aviso de atualização quando o app permanece aberto durante um novo deploy. */
+.version-update-notice {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5000;
+  width: min(720px, calc(100% - 28px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid #93c5fd;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  box-shadow: 0 14px 40px rgba(15, 23, 42, .18);
+}
+.version-update-notice span { font-size: 13px; line-height: 1.4; }
+.version-update-notice button {
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 12px;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+[data-theme="dark"] .version-update-notice,
+.dark .version-update-notice {
+  background: #172554;
+  border-color: #3b82f6;
+  color: #dbeafe;
+}
+@media (max-width: 620px) {
+  .money-input-with-preview { align-items: stretch; flex-direction: column; gap: 3px; }
+  .version-update-notice { align-items: stretch; flex-direction: column; }
+  .version-update-notice button { width: 100%; }
+}
