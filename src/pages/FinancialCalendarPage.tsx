@@ -3,6 +3,7 @@ import { collection, onSnapshot, type DocumentData } from 'firebase/firestore'
 import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink, FileText, Paperclip, RefreshCw } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { createTextPdf } from '../lib/simplePdf'
+import { isEffectiveAlvaraReceivable } from '../lib/receivableClassification'
 import './FinancialCalendarPage.css'
 
 type AnyRecord = { id: string } & DocumentData
@@ -154,7 +155,7 @@ export function FinancialCalendarPage() {
   const receivablesByDay = useMemo(() => {
     const grouped = new Map<string, AnyRecord[]>()
     receivables
-      .filter((item) => ['recebido_tesouraria', 'encerrado'].includes(String(item.status)))
+      .filter(isEffectiveAlvaraReceivable)
       .forEach((item) => {
         const key = dateKey(item.receiptDate || item.data)
         if (!key || !key.startsWith(selectedMonth)) return
