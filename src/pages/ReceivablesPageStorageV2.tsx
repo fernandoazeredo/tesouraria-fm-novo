@@ -9,6 +9,7 @@ import { FinancialMovementCard } from '../components/FinancialMovementCard'
 import { WorkflowStatusBadge } from '../components/WorkflowStatusBadge'
 import { DEFAULT_BANK_ACCOUNT_ID, getBankAccount, type BankAccount } from '../data/bankAccounts'
 import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
+import { isEffectiveAlvaraReceivable } from '../lib/receivableClassification'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const decimalBR = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -370,16 +371,22 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
 
 
 function printRevenueExtract(records: AnyRecord[]) {
-  const rows = records
-    .filter((item) => ['recebido_tesouraria', 'encerrado'].includes(String(item.status ?? '')))
-    .map((item) => `<tr><td>${String(item.data || item.receiptDate || '—')}</td><td>${String(item.processo || '—')}</td><td>${String(item.reclamante || item.descricaoOrigem || item.descricao || '—')}</td><td>${String(item.status || '—')}</td><td class="num">${money.format(toNumber(item.valorAlvara))}</td></tr>`)
+  const effective = records.filter((item) => ['recebido_tesouraria', 'encerrado'].includes(String(item.status ?? '')))
+  const alvaras = effective.filter(isEffectiveAlvaraReceivable)
+  const otherRevenues = effective.filter((item) => !isEffectiveAlvaraReceivable(item))
+
+  const renderRows = (items: AnyRecord[]) => items
+    .map((item) => `<tr><td>${String(item.data || item.receiptDate || '—')}</td><td>${String(item.processo || '—')}</td><td>${String(item.reclamante || item.descricaoOrigem || item.descricao || item.origem || '—')}</td><td>${String(item.status || '—')}</td><td class="num">${money.format(toNumber(item.valorAlvara))}</td></tr>`)
     .join('')
-  const total = records
-    .filter((item) => ['recebido_tesouraria', 'encerrado'].includes(String(item.status ?? '')))
-    .reduce((sum, item) => sum + toNumber(item.valorAlvara), 0)
+
+  const alvaraTotal = alvaras.reduce((sum, item) => sum + toNumber(item.valorAlvara), 0)
+  const otherTotal = otherRevenues.reduce((sum, item) => sum + toNumber(item.valorAlvara), 0)
   const w = window.open('', '_blank', 'width=1100,height=820')
   if (!w) { window.alert('O navegador bloqueou a janela do extrato. Libere pop-ups para este site e tente novamente.'); return }
-  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Extrato de Receitas</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,Helvetica,sans-serif;color:#17202b;font-size:11px}h1{text-align:center}table{width:100%;border-collapse:collapse}th{background:#1d4ed8;color:#fff;padding:8px;text-align:left}td{padding:7px;border-bottom:1px solid #ddd}.num{text-align:right}.total{font-weight:700;font-size:13px;margin-top:14px;text-align:right}</style></head><body><h1>Extrato de Receitas</h1><table><thead><tr><th>Data</th><th>Processo</th><th>Cliente / Origem</th><th>Status</th><th>Valor</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Nenhuma receita efetiva.</td></tr>'}</tbody></table><div class="total">Total: ${money.format(total)}</div></body></html>`)
+
+  const table = (title: string, items: AnyRecord[], subtotal: number) => `<h2>${title}</h2><table><thead><tr><th>Data</th><th>Processo</th><th>Cliente / Origem</th><th>Status</th><th>Valor</th></tr></thead><tbody>${renderRows(items) || '<tr><td colspan="5">Nenhum lançamento.</td></tr>'}</tbody></table><div class="subtotal">Subtotal: ${money.format(subtotal)}</div>`
+
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Extrato de Receitas</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,Helvetica,sans-serif;color:#17202b;font-size:11px}h1{text-align:center}h2{margin-top:22px}table{width:100%;border-collapse:collapse}th{background:#1d4ed8;color:#fff;padding:8px;text-align:left}td{padding:7px;border-bottom:1px solid #ddd}.num{text-align:right}.subtotal{font-weight:700;font-size:13px;margin-top:10px;text-align:right}.note{margin:8px 0 18px;color:#5b6775}</style></head><body><h1>Extrato de Receitas</h1><div class="note">Alvarás e Outras Receitas são apresentados separadamente para manter o mesmo critério do Dashboard, Repasse de Alvarás e Calendário Financeiro.</div>${table('Alvarás', alvaras, alvaraTotal)}${table('Outras Receitas', otherRevenues, otherTotal)}</body></html>`)
   w.document.close()
 }
 
