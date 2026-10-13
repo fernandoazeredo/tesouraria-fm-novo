@@ -51,7 +51,13 @@ const drePreferredOrder = [
 ]
 
 function toNumber(value: unknown) {
-  const number = Number(value)
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  const raw = String(value ?? '').trim().replace(/R\$/gi, '').replace(/\s/g, '')
+  if (!raw) return 0
+  let normalizedValue = raw
+  if (raw.includes(',') && raw.includes('.')) normalizedValue = raw.lastIndexOf(',') > raw.lastIndexOf('.') ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/,/g, '')
+  else if (raw.includes(',')) normalizedValue = raw.replace(/\./g, '').replace(',', '.')
+  const number = Number(normalizedValue)
   return Number.isFinite(number) ? number : 0
 }
 
