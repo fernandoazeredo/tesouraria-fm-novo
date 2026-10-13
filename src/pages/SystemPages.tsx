@@ -39,6 +39,7 @@ import {
 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { db } from '../lib/firebase'
+import { ensureOfficialDemonstrative } from '../lib/officialDemonstrative'
 import { useAuth, type UserRole, type UserStatus } from '../auth/AuthContext'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -536,7 +537,11 @@ export function TreasuryPage() {
   const queue = records.filter((item) => item.status !== 'rascunho')
 
   async function changeStatus(item: AnyRecord, status: string) {
-    await updateDoc(doc(db, 'receivables', item.id), { status, updatedAt: serverTimestamp(), treasuryBy: profile?.uid, treasuryAt: serverTimestamp() })
+    const treasuryByName = profile?.displayName ?? profile?.email ?? null
+    await updateDoc(doc(db, 'receivables', item.id), { status, updatedAt: serverTimestamp(), treasuryBy: profile?.uid, treasuryByName, treasuryAt: serverTimestamp() })
+    if (status === 'recebido_tesouraria') {
+      await ensureOfficialDemonstrative('revenue', { ...item, status, treasuryBy: profile?.uid, treasuryByName }, { generatedBy: profile?.uid ?? null })
+    }
     await writeAudit(profile, `Recebimento atualizado: ${receivableStatusLabels[status] ?? status}`, 'Tesouraria — Recebimentos', `Processo ${item.processo ?? item.id}`, item.id)
   }
 
