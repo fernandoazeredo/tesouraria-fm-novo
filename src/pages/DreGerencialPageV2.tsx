@@ -76,10 +76,16 @@ function truncateText(value: string, limit = 60) {
   return text.length > limit ? `${text.slice(0, limit).trimEnd()}...` : text
 }
 
-function receivableManagementAmount(record: AnyRecord) {
+function receivableManagementAmount(record: AnyRecord, classification?: ClassificationRecord) {
+  const gross = toNumber(record.valorAlvara)
   const type = normalized(record.tipoRecebimento).replace(/\s+/g, '_')
-  const isLegacyOtherRevenue = !String(record.processo ?? '').trim() && toNumber(record.valorAlvara) > 0
-  if (type === 'outras_receitas' || isLegacyOtherRevenue) return toNumber(record.valorAlvara)
+  const isLegacyOtherRevenue = !String(record.processo ?? '').trim() && gross > 0
+  const classifiedAsOtherRevenue = classification?.accountDre === 'Outras Receitas Não Operacionais'
+
+  // Receitas antigas já classificadas como "Outras Receitas Não Operacionais"
+  // devem levar o valor bruto efetivamente recebido para a DRE.
+  if (type === 'outras_receitas' || isLegacyOtherRevenue || classifiedAsOtherRevenue) return gross
+
   const direct = toNumber(record.invoiceValue)
   if (direct > 0) return direct
   const components = Array.isArray(record.components) ? record.components as DocumentData[] : []
@@ -265,11 +271,12 @@ export function DreGerencialPageV2() {
     })
     const revenueRows = revenues.filter((item) => REVENUE_DRE_STATUSES.has(String(item.status ?? ''))).map((item) => {
       const date = String(item.receiptDate ?? item.data ?? '').slice(0, 10)
+      const classification = classificationMap.get(classificationKey('revenue', item.id))
       return {
         key: classificationKey('revenue', item.id), sourceType: 'revenue' as const, sourceId: item.id, source: item,
         date, competence: date.slice(0, 7), unit: String(item.unidade ?? 'RJ'),
         title: sourceCardTitle('revenue', item), description: sourceCardDescription('revenue', item), counterparty: sourceCounterparty('revenue', item),
-        amount: receivableManagementAmount(item), status: String(item.status ?? ''), classification: classificationMap.get(classificationKey('revenue', item.id)),
+        amount: receivableManagementAmount(item, classification), status: String(item.status ?? ''), classification,
       }
     })
     return [...expenseRows, ...revenueRows].sort((a, b) => b.date.localeCompare(a.date))
