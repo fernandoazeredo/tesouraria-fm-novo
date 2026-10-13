@@ -142,13 +142,13 @@ service cloud.firestore {
           || (isPrimaryAdminEmail() && hasRole(['master']))
         )
         && resource.data.status == 'aguardando_aprovacao'
-        && request.resource.data.status in ['aprovado', 'rejeitado'];
+        && request.resource.data.status in ['aprovado', 'devolvido', 'rejeitado'];
     }
 
     function paymentControlOperationalUpdate() {
       return hasRole(['master', 'tesouraria'])
         && (
-          (resource.data.status == 'rejeitado'
+          (resource.data.status in ['devolvido', 'rejeitado']
             && request.resource.data.status == 'aguardando_aprovacao')
           ||
           (resource.data.status == 'aprovado'
@@ -177,9 +177,9 @@ service cloud.firestore {
             && request.resource.data.status in ['apurado', 'aguardando_aprovacao', 'cancelado'])
           ||
           (resource.data.status == 'aguardando_aprovacao'
-            && request.resource.data.status in ['aprovado', 'rejeitado', 'cancelado'])
+            && request.resource.data.status in ['aprovado', 'devolvido', 'rejeitado', 'cancelado'])
           ||
-          (resource.data.status == 'rejeitado'
+          (resource.data.status in ['devolvido', 'rejeitado']
             && request.resource.data.status in ['apurado', 'aguardando_aprovacao', 'cancelado'])
           ||
           (resource.data.status == 'aprovado'
