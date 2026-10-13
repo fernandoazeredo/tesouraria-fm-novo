@@ -92,8 +92,13 @@ export function ExpenseSettlementPanel() {
         paidByName: finalized.paidByName,
         updatedAt: serverTimestamp(),
       })
-      await ensureOfficialDemonstrative('expense', finalized, { generatedBy: profile?.uid ?? null })
       await audit('Despesa marcada como paga', item)
+      try {
+        await ensureOfficialDemonstrative('expense', finalized, { generatedBy: profile?.uid ?? null })
+      } catch (documentError) {
+        console.error('Despesa paga, mas demonstrativo não foi gerado:', documentError)
+        window.alert('Pagamento confirmado. O demonstrativo PDF ficou pendente por erro de armazenamento. A Contabilidade poderá tentar sua geração retroativa após a correção das permissões.')
+      }
     } catch (error) {
       console.error(error)
       window.alert('Não foi possível marcar a despesa como paga. Confira sua permissão e tente novamente.')
