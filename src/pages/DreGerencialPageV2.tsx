@@ -71,7 +71,9 @@ function truncateText(value: string, limit = 60) {
 }
 
 function receivableManagementAmount(record: AnyRecord) {
-  if (record.tipoRecebimento === 'outras_receitas') return toNumber(record.valorAlvara)
+  const type = normalized(record.tipoRecebimento).replace(/\s+/g, '_')
+  const isLegacyOtherRevenue = !String(record.processo ?? '').trim() && toNumber(record.valorAlvara) > 0
+  if (type === 'outras_receitas' || isLegacyOtherRevenue) return toNumber(record.valorAlvara)
   const direct = toNumber(record.invoiceValue)
   if (direct > 0) return direct
   const components = Array.isArray(record.components) ? record.components as DocumentData[] : []
@@ -121,12 +123,12 @@ function sourceCardDescription(type: SourceType, item: AnyRecord) {
 function sourceExistingAccount(type: SourceType, item: AnyRecord) {
   const code = String(type === 'expense' ? item.expenseAccountCode ?? item.classificacaoContabil ?? '' : item.revenueAccountCode ?? item.classificacaoContabil ?? '')
   if (!code) return null
-  return officialChartOfAccounts.find((account) => account.code === code && account.kind === 'account') ?? null
+  return officialChartOfAccounts.find((account) => account.code === code && account.kind === 'account' && (type !== 'expense' || account.dre !== 'Não mostrar no DRE Gerencial')) ?? null
 }
 
 function accountByText(category: 'Receita' | 'Despesa', fragment: string) {
   const needle = normalized(fragment)
-  return officialChartOfAccounts.find((account) => account.kind === 'account' && account.category === category && normalized(account.name).includes(needle)) ?? null
+  return officialChartOfAccounts.find((account) => account.kind === 'account' && account.category === category && account.dre !== 'Não mostrar no DRE Gerencial' && normalized(account.name).includes(needle)) ?? null
 }
 
 function suggestAccount(type: SourceType, item: AnyRecord, classifications: ClassificationRecord[]): Suggestion {
@@ -194,7 +196,7 @@ function suggestAccount(type: SourceType, item: AnyRecord, classifications: Clas
   const tokens = new Set(text.split(' ').filter((token) => token.length >= 4))
   let best: { account: ChartOfAccount; score: number } | null = null
   for (const account of officialChartOfAccounts) {
-    if (account.kind !== 'account' || account.category !== category) continue
+    if (account.kind !== 'account' || account.category !== category || (type === 'expense' && account.dre === 'Não mostrar no DRE Gerencial')) continue
     const accountTokens = normalized(account.name).split(' ').filter((token) => token.length >= 4)
     const score = accountTokens.reduce((sum, token) => sum + (tokens.has(token) ? 1 : 0), 0)
     if (score > (best?.score ?? 0)) best = { account, score }
@@ -234,10 +236,17 @@ export function DreGerencialPageV2() {
   const [typeFilter, setTypeFilter] = useState<'all' | SourceType>('all')
   const [draftAccounts, setDraftAccounts] = useState<Record<string, string>>({})
   const [savingKey, setSavingKey] = useState('')
-  const [dreCompetence, setDreCompetence] = useState(new Date().toISOString().slice(0, 7))
+  const [dreCompetence, setDreCompetence] = useState('')
   const [dreUnit, setDreUnit] = useState('Todas')
 
   const classificationMap = useMemo(() => new Map(classifications.map((item) => [item.id, item])), [classifications])
+
+  function validDreClassification(item: UnifiedLaunch) {
+    if (!item.classification?.confirmed) return false
+    if (!item.classification.accountCode || !item.classification.accountDre) return false
+    if (item.sourceType === 'expense' && item.classification.accountDre === 'Não mostrar no DRE Gerencial') return false
+    return true
+  }
   const launches = useMemo<UnifiedLaunch[]>(() => {
     const expenseRows = expenses.filter((item) => EXPENSE_DRE_STATUSES.has(String(item.status ?? ''))).map((item) => {
       const date = String(Array.isArray(item.items) && item.items[0]?.data ? item.items[0].data : `${item.competencia || ''}-01`).slice(0, 10)
@@ -260,10 +269,10 @@ export function DreGerencialPageV2() {
     return [...expenseRows, ...revenueRows].sort((a, b) => b.date.localeCompare(a.date))
   }, [expenses, revenues, classificationMap])
 
-  const pendingCount = launches.filter((item) => !item.classification?.confirmed).length
+  const pendingCount = launches.filter((item) => !validDreClassification(item)).length
   const classifiedCount = launches.length - pendingCount
   const visibleClassificationRows = launches.filter((item) => {
-    const isClassified = Boolean(item.classification?.confirmed)
+    const isClassified = validDreClassification(item)
     if (classificationView === 'pending' ? isClassified : !isClassified) return false
     if (typeFilter !== 'all' && item.sourceType !== typeFilter) return false
     const haystack = normalized(`${item.title} ${item.description} ${item.counterparty} ${item.classification?.accountName ?? ''} ${item.classification?.accountCode ?? ''}`)
@@ -271,11 +280,12 @@ export function DreGerencialPageV2() {
   })
 
   function selectedAccountCode(item: UnifiedLaunch, suggestion: Suggestion) {
-    return draftAccounts[item.key] ?? item.classification?.accountCode ?? suggestion.account?.code ?? ''
+    const currentCode = validDreClassification(item) ? item.classification?.accountCode : ''
+    return draftAccounts[item.key] ?? currentCode ?? suggestion.account?.code ?? ''
   }
 
   async function confirmClassification(item: UnifiedLaunch, accountCode: string) {
-    const account = officialChartOfAccounts.find((row) => row.code === accountCode && row.kind === 'account' && row.category === (item.sourceType === 'expense' ? 'Despesa' : 'Receita'))
+    const account = officialChartOfAccounts.find((row) => row.code === accountCode && row.kind === 'account' && row.category === (item.sourceType === 'expense' ? 'Despesa' : 'Receita') && (item.sourceType !== 'expense' || row.dre !== 'Não mostrar no DRE Gerencial'))
     if (!account) { window.alert('Selecione uma conta válida do Plano de Contas.'); return }
     const suggestion = suggestAccount(item.sourceType, item.source, classifications)
     setSavingKey(item.key)
@@ -323,8 +333,8 @@ export function DreGerencialPageV2() {
   }
 
   const dreRows = useMemo(() => launches.filter((item) => {
-    if (!item.classification?.confirmed) return false
-    if (!item.classification.accountDre || item.classification.accountDre === 'Não mostrar no DRE Gerencial') return false
+    if (!validDreClassification(item)) return false
+    if (!item.classification?.accountDre || item.classification.accountDre === 'Não mostrar no DRE Gerencial') return false
     if (dreCompetence && item.competence !== dreCompetence) return false
     if (dreUnit !== 'Todas' && item.unit !== dreUnit) return false
     return item.sourceType === 'expense' ? EXPENSE_DRE_STATUSES.has(item.status) : REVENUE_DRE_STATUSES.has(item.status)
@@ -372,7 +382,7 @@ export function DreGerencialPageV2() {
       {loading ? <div className="module-empty"><RefreshCw className="spin" size={28} /><strong>Carregando lançamentos</strong></div> : visibleClassificationRows.length === 0 ? <div className="module-empty"><CheckCircle2 size={32} /><strong>{classificationView === 'pending' ? 'Nenhum lançamento pendente' : 'Nenhum lançamento classificado'}</strong><span>{classificationView === 'pending' ? 'Todos os lançamentos disponíveis já foram classificados.' : 'As classificações confirmadas aparecerão aqui.'}</span></div> : <div className="dre-classification-list">{visibleClassificationRows.map((item) => {
         const suggestion = suggestAccount(item.sourceType, item.source, classifications)
         const category = item.sourceType === 'expense' ? 'Despesa' : 'Receita'
-        const accounts = officialChartOfAccounts.filter((row) => row.kind === 'account' && row.category === category)
+        const accounts = officialChartOfAccounts.filter((row) => row.kind === 'account' && row.category === category && (item.sourceType !== 'expense' || row.dre !== 'Não mostrar no DRE Gerencial'))
         const accountCode = selectedAccountCode(item, suggestion)
         return <article className="dre-launch-row" key={item.key}>
           <div className="dre-launch-summary"><div className={`dre-type-badge ${item.sourceType}`}>{item.sourceType === 'expense' ? 'Despesa' : 'Receita'}</div><strong title={item.title}>{item.title}</strong><span title={item.description}>{truncateText(item.description || 'Sem descrição complementar')}</span><small>{readableDate(item.date)} · {item.unit} · {item.status || 'sem status'}</small></div>
@@ -388,7 +398,7 @@ export function DreGerencialPageV2() {
     </section> : <>
       <section className="page-card dre-report-card">
         <div className="dre-section-heading"><div><span className="eyebrow">Demonstrativo Gerencial</span><h2>Resultado do Período</h2><p>Somente lançamentos classificados e em status financeiro válido entram nesta visão.</p></div></div>
-        <div className="dre-report-filters"><label><span>Competência</span><input type="month" value={dreCompetence} onChange={(event) => setDreCompetence(event.target.value)} /></label><label><span>Unidade</span><select value={dreUnit} onChange={(event) => setDreUnit(event.target.value)}><option>Todas</option><option>RJ</option><option>SP</option></select></label></div>
+        <div className="dre-report-filters"><label><span>Competência</span><input type="month" value={dreCompetence} onChange={(event) => setDreCompetence(event.target.value)} /><small>{dreCompetence ? 'Filtrando somente a competência selecionada' : 'Todo o período'}</small></label><label><span>Unidade</span><select value={dreUnit} onChange={(event) => setDreUnit(event.target.value)}><option>Todas</option><option>RJ</option><option>SP</option></select></label></div>
         <div className="dre-kpis"><div><span>Receitas</span><strong>{money.format(totalRevenue)}</strong></div><div><span>Despesas</span><strong>{money.format(totalExpense)}</strong></div><div className={result >= 0 ? 'positive' : 'negative'}><span>Resultado Gerencial</span><strong>{money.format(result)}</strong></div><div><span>Lançamentos na DRE</span><strong>{dreRows.length}</strong></div></div>
 
         <div className="dre-statement"><div className="dre-statement-row head"><span>Grupo DRE</span><span>Lançamentos</span><span>Valor</span></div>{dreGroups.length === 0 ? <div className="dre-empty-statement">Nenhum lançamento classificado para os filtros selecionados.</div> : dreGroups.map(([label, values]) => {
