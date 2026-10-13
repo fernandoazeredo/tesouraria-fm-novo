@@ -368,6 +368,21 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
   </section></div>
 }
 
+
+function printRevenueExtract(records: AnyRecord[]) {
+  const rows = records
+    .filter((item) => ['recebido_tesouraria', 'encerrado'].includes(String(item.status ?? '')))
+    .map((item) => `<tr><td>${String(item.data || item.receiptDate || '—')}</td><td>${String(item.processo || '—')}</td><td>${String(item.reclamante || item.descricaoOrigem || item.descricao || '—')}</td><td>${String(item.status || '—')}</td><td class="num">${money.format(toNumber(item.valorAlvara))}</td></tr>`)
+    .join('')
+  const total = records
+    .filter((item) => ['recebido_tesouraria', 'encerrado'].includes(String(item.status ?? '')))
+    .reduce((sum, item) => sum + toNumber(item.valorAlvara), 0)
+  const w = window.open('', '_blank', 'width=1100,height=820')
+  if (!w) { window.alert('O navegador bloqueou a janela do extrato. Libere pop-ups para este site e tente novamente.'); return }
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Extrato de Receitas</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,Helvetica,sans-serif;color:#17202b;font-size:11px}h1{text-align:center}table{width:100%;border-collapse:collapse}th{background:#1d4ed8;color:#fff;padding:8px;text-align:left}td{padding:7px;border-bottom:1px solid #ddd}.num{text-align:right}.total{font-weight:700;font-size:13px;margin-top:14px;text-align:right}</style></head><body><h1>Extrato de Receitas</h1><table><thead><tr><th>Data</th><th>Processo</th><th>Cliente / Origem</th><th>Status</th><th>Valor</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Nenhuma receita efetiva.</td></tr>'}</tbody></table><div class="total">Total: ${money.format(total)}</div></body></html>`)
+  w.document.close()
+}
+
 export function ReceivablesPageStorageV2() {
   const [params, setParams] = useSearchParams()
   const [open, setOpen] = useState(params.get('novo') === '1')
@@ -379,7 +394,7 @@ export function ReceivablesPageStorageV2() {
   const close = () => { setOpen(false); setParams({}) }
 
   return <>
-    <div className="page-heading"><div><span className="eyebrow">Origem do recebimento</span><h1>Recebimento de Alvarás</h1><p>O departamento de origem preenche o demonstrativo, informa a conta em que o valor foi recebido e anexa os documentos que seguirão para a Tesouraria.</p></div><div className="quick-actions"><button className="outline-revenue-button" type="button"><FileText size={18} /> Extrato de Receitas</button><button className="revenue-button" type="button" onClick={() => setOpen(true)}><Plus size={18} /> Nova Receita</button></div></div>
+    <div className="page-heading"><div><span className="eyebrow">Origem do recebimento</span><h1>Recebimento de Alvarás</h1><p>O departamento de origem preenche o demonstrativo, informa a conta em que o valor foi recebido e anexa os documentos que seguirão para a Tesouraria.</p></div><div className="quick-actions"><button className="outline-revenue-button" type="button" onClick={() => printRevenueExtract(records)}><FileText size={18} /> Extrato de Receitas</button><button className="revenue-button" type="button" onClick={() => setOpen(true)}><Plus size={18} /> Nova Receita</button></div></div>
     <section className="page-card module-card revenue-module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por processo, partes, agente, banco ou conta de recebimento" /></div></div>{loading ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando receitas</strong></div> : filtered.length === 0 ? <div className="module-empty"><BadgeDollarSign size={34} /><strong>Nenhuma receita cadastrada</strong></div> : <div className="data-table receivable-integrated-table"><div className="data-row data-head"><span>Processo</span><span>Partes</span><span>Conta de Recebimento</span><span>Status</span><span className="numeric">Valor</span></div>{filtered.map((item) => { const attachments = attachmentsOf(item); const bank = item.receivingBankAccount; return <div className="data-row" key={item.id}><span><strong>{item.processo || '—'}</strong><small>{item.natureza || ''}</small></span><span><strong>{item.reclamante || '—'}</strong><small>{item.reclamada || ''}{item.agentName ? ` · Agente: ${item.agentName}` : ''}</small></span><span><strong>{bank?.bank || '—'}</strong><small>{bank ? `Ag. ${bank.agency} · C/C ${bank.account}` : 'Conta ainda não informada'}</small></span><span><WorkflowStatusBadge status={item.status} label={statusLabels[item.status] || item.status || '—'} /></span><span className="numeric revenue-text"><strong>{money.format(toNumber(item.valorAlvara))}</strong>{attachments.length > 0 && <button className="attachment-count-link" type="button" onClick={() => setAttachmentsTarget(item)}><Paperclip size={14} /> {attachments.length}</button>}</span></div> })}</div>}</section>
     {open && <ReceivableModal key="nova-receita-storage-v2" onClose={close} />}
     {attachmentsTarget && <div className="modal-backdrop"><section className="decision-modal" role="dialog" aria-modal="true"><div className="modal-toolbar"><div><span className="eyebrow">Documentos da receita</span><h2>{attachmentsTarget.processo || attachmentsTarget.reclamante || 'Recebimento'}</h2></div><button className="icon-button" onClick={() => setAttachmentsTarget(null)}><X size={20} /></button></div><div className="storage-dossier-files">{attachmentsOf(attachmentsTarget).map((file) => <a key={file.path} href={file.url} target="_blank" rel="noreferrer"><Paperclip size={14} /><span>{file.name}</span><ExternalLink size={13} /></a>)}</div></section></div>}
