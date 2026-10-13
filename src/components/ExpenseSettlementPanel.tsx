@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { db } from '../lib/firebase'
+import { ensureOfficialDemonstrative } from '../lib/officialDemonstrative'
 import '../expense-settlement.css'
 
 type AnyRecord = { id: string } & DocumentData
@@ -76,14 +77,22 @@ export function ExpenseSettlementPanel() {
     if (!window.confirm(`Marcar esta despesa como PAGA em ${paymentDate.split('-').reverse().join('/')}?`)) return
     setBusyId(item.id)
     try {
+      const finalized = {
+        ...item,
+        status: 'pago',
+        paymentDate,
+        paidBy: profile?.uid ?? null,
+        paidByName: profile?.displayName ?? profile?.email ?? null,
+      }
       await updateDoc(doc(db, 'expenses', item.id), {
         status: 'pago',
         paymentDate,
         paidAt: serverTimestamp(),
-        paidBy: profile?.uid ?? null,
-        paidByName: profile?.displayName ?? profile?.email ?? null,
+        paidBy: finalized.paidBy,
+        paidByName: finalized.paidByName,
         updatedAt: serverTimestamp(),
       })
+      await ensureOfficialDemonstrative('expense', finalized, { generatedBy: profile?.uid ?? null })
       await audit('Despesa marcada como paga', item)
     } catch (error) {
       console.error(error)
