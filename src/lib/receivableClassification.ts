@@ -16,6 +16,7 @@ export function isAlvaraReceivable(item: ReceivableRecord) {
   // Alvará é uma receita vinculada a processo. Registros antigos de teste sem processo
   // não podem alimentar Dashboard nem Repasse de Alvarás.
   if (!String(item.processo ?? '').trim()) return false
+  if (!String(item.reclamante ?? '').trim()) return false
 
   return true
 }
