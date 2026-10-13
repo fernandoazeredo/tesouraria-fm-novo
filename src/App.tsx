@@ -232,14 +232,20 @@ function VersionUpdateNotice() {
     }
 
     void checkVersion()
-    const timer = window.setInterval(() => void checkVersion(), 60000)
+    const timer = window.setInterval(() => void checkVersion(), 15000)
     const onVisibility = () => { if (document.visibilityState === 'visible') void checkVersion() }
+    const onFocus = () => void checkVersion()
+    const onOnline = () => void checkVersion()
     document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('online', onOnline)
 
     return () => {
       cancelled = true
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('online', onOnline)
     }
   }, [])
 
