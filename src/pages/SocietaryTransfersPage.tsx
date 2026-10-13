@@ -26,6 +26,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { db } from '../lib/firebase'
+import { ensureOfficialDemonstrative } from '../lib/officialDemonstrative'
 import { isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
 import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 import '../societary-transfers.css'
@@ -708,6 +709,16 @@ export function SocietaryTreasuryPanel() {
       updatedAt: serverTimestamp(),
     }))
     await batch.commit()
+    await Promise.all(items.map((item) => ensureOfficialDemonstrative('societaryTransfer', {
+      ...item,
+      status: 'pago',
+      paidValue: toNumber(item.transferValue),
+      paymentDate: today(),
+      paymentGroupId,
+      paymentReference: reference.trim(),
+      paidBy: profile?.uid,
+      paidByName: profile?.displayName,
+    }, { generatedBy: profile?.uid ?? null })))
     await audit(profile, 'Pagamento societário confirmado', `${items.length} repasse(s) · ${money.format(total)} · grupo ${paymentGroupId}${reference.trim() ? ` · referência ${reference.trim()}` : ''}`)
     setSelected(new Set())
   }
