@@ -31,7 +31,7 @@ import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requir
 import '../societary-transfers.css'
 
 type AnyRecord = { id: string } & DocumentData
-type TransferStatus = 'apurado' | 'aguardando_aprovacao' | 'rejeitado' | 'aprovado' | 'enviado_tesouraria' | 'pago' | 'cancelado'
+type TransferStatus = 'apurado' | 'aguardando_aprovacao' | 'devolvido' | 'rejeitado' | 'aprovado' | 'enviado_tesouraria' | 'pago' | 'cancelado'
 type Settings = {
   beneficiary: string
   defaultPercent: number
@@ -128,7 +128,8 @@ function statusLabel(item: AnyRecord) {
   const labels: Record<TransferStatus, string> = {
     apurado: 'Apurado',
     aguardando_aprovacao: 'Aguardando Aprovação',
-    rejeitado: 'Rejeitado / Ajuste necessário',
+    devolvido: 'Devolvido / Ajuste necessário',
+    rejeitado: 'Rejeitado',
     aprovado: 'Aprovado',
     enviado_tesouraria: 'Enviado à Tesouraria',
     pago: 'Pago',
@@ -141,6 +142,7 @@ function statusClass(item: AnyRecord) {
   const label = statusLabel(item)
   if (label === 'Pago' || label === 'Aprovado') return 'soc-status success'
   if (label === 'Vencido' || label.startsWith('Rejeitado') || label === 'Cancelado') return 'soc-status danger'
+  if (label.startsWith('Devolvido')) return 'soc-status warning'
   if (label === 'Enviado à Tesouraria') return 'soc-status info'
   return 'soc-status warning'
 }
@@ -392,7 +394,7 @@ export function SocietaryTransfersPage() {
   }
 
   async function saveAdjustment(item: AnyRecord) {
-    if (!canDecide || !['apurado', 'rejeitado'].includes(String(item.status ?? ''))) return
+    if (!canDecide || !['apurado', 'devolvido', 'rejeitado'].includes(String(item.status ?? ''))) return
     const draft = draftFor(item)
     const percent = Math.max(0, Math.min(100, toNumber(draft.percent)))
     const transferValue = parseMoney(draft.value)
@@ -423,7 +425,7 @@ export function SocietaryTransfersPage() {
   }
 
   async function submitForApproval(item: AnyRecord) {
-    if (!canDecide || !['apurado', 'rejeitado'].includes(String(item.status ?? ''))) return
+    if (!canDecide || !['apurado', 'devolvido', 'rejeitado'].includes(String(item.status ?? ''))) return
     setBusyId(item.id)
     try {
       await updateDoc(doc(db, 'societaryTransfers', item.id), {
@@ -633,7 +635,7 @@ export function SocietaryTransfersPage() {
         <div className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar processo, reclamante ou reclamada" /></div>
         <input className="soc-month" type="month" value={month} onChange={(event) => setMonth(event.target.value)} aria-label="Filtrar por competência" />
         <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filtrar por status">
-          <option value="todos">Todos os status</option><option value="apurado">Apurado</option><option value="aguardando_aprovacao">Aguardando Aprovação</option><option value="rejeitado">Rejeitado / Ajuste</option><option value="aprovado">Aprovado</option><option value="enviado_tesouraria">Enviado à Tesouraria</option><option value="pago">Pago</option><option value="cancelado">Cancelado</option>
+          <option value="todos">Todos os status</option><option value="apurado">Apurado</option><option value="aguardando_aprovacao">Aguardando Aprovação</option><option value="devolvido">Devolvido / Ajuste</option><option value="rejeitado">Rejeitado</option><option value="aprovado">Aprovado</option><option value="enviado_tesouraria">Enviado à Tesouraria</option><option value="pago">Pago</option><option value="cancelado">Cancelado</option>
         </select>
         <div className="soc-report-actions"><button className="small-neutral-button" type="button" onClick={() => window.print()}><FileText size={14} /> PDF / Imprimir</button><button className="small-neutral-button" type="button" onClick={exportExcel}><FileDown size={14} /> Excel</button></div>
       </div>
@@ -644,7 +646,7 @@ export function SocietaryTransfersPage() {
         <thead><tr><th><input type="checkbox" checked={rows.length > 0 && rows.every((item) => selected.has(item.id))} onChange={toggleAll} /></th><th>Data</th><th>Processo</th><th>Reclamante / Reclamada</th><th>Honorários do Escritório</th><th>% Repasse</th><th>Valor do Repasse</th><th>Valor Pago</th><th>Saldo Linha</th><th>Aprovação</th><th>Status</th><th>Data Pagamento</th><th>Saldo Acumulado</th><th>Ações</th></tr></thead>
         <tbody>{rows.map((item) => {
           const draft = draftFor(item)
-          const editable = canDecide && ['apurado', 'rejeitado'].includes(String(item.status ?? ''))
+          const editable = canDecide && ['apurado', 'devolvido', 'rejeitado'].includes(String(item.status ?? ''))
           const balance = Math.max(0, toNumber(item.transferValue) - toNumber(item.paidValue))
           const currentApproval = approvalLabel(item)
           return <tr key={item.id}>
@@ -658,7 +660,7 @@ export function SocietaryTransfersPage() {
             <td className="numeric">{money.format(toNumber(item.paidValue))}</td>
             <td className="numeric"><strong>{money.format(balance)}</strong></td>
             <td className="soc-approval">{currentApproval ? (item.status === 'aguardando_aprovacao' ? <span>Aguardando</span> : <strong>{currentApproval}</strong>) : <span>—</span>}</td>
-            <td><span className={statusClass(item)}>{statusLabel(item)}</span>{item.rejectionReason && <small className="soc-reason">{String(item.rejectionReason)}</small>}</td>
+            <td><span className={statusClass(item)}>{statusLabel(item)}</span>{(item.returnReason || item.rejectionReason) && <small className="soc-reason">{String(item.returnReason || item.rejectionReason)}</small>}</td>
             <td>{item.paymentDate ? dateBR(item.paymentDate) : '—'}</td>
             <td className="numeric"><strong>{money.format(rowBalances.get(item.id) ?? 0)}</strong></td>
             <td><div className="soc-actions">
