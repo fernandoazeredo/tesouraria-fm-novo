@@ -42,6 +42,10 @@ function invoiceValue(source: AnyRecord) {
   return toNumber(source.invoiceValue) || componentValue(source, 'Honorários do Escritório')
 }
 
+function fiscalClientName(source: AnyRecord) {
+  return String(source.reclamante || source.titular || '')
+}
+
 function statusLabel(note?: AnyRecord) {
   if (note?.status === 'emitida') return 'Emitida'
   if (note?.status === 'cancelada') return 'Cancelada'
@@ -92,7 +96,7 @@ function FiscalNoteModal({ source, note, onClose }: { source: AnyRecord; note?: 
       await setDoc(doc(db, 'fiscalNotes', source.id), {
         sourceReceivableId: source.id,
         processo: source.processo || '',
-        clientName: source.titular || source.reclamante || '',
+        clientName: fiscalClientName(source),
         cpf: source.cpf || '',
         email: source.emailNf || '',
         address: source.enderecoNf || '',
@@ -130,7 +134,7 @@ function FiscalNoteModal({ source, note, onClose }: { source: AnyRecord; note?: 
 
   return <div className="modal-backdrop"><section className="decision-modal obligation-modal" role="dialog" aria-modal="true">
     <div className="modal-toolbar"><div><span className="eyebrow">Nota Fiscal / NFS-e</span><h2>Dados para emissão</h2></div><button className="icon-button" type="button" onClick={onClose}><X size={20} /></button></div>
-    <div className="fiscal-client-card"><div><span>Cliente</span><strong>{source.titular || source.reclamante || '—'}</strong></div><div><span>CPF</span><strong>{source.cpf || '—'}</strong></div><div><span>E-mail</span><strong>{source.emailNf || '—'}</strong></div><div><span>Endereço</span><strong>{source.enderecoNf || '—'}</strong></div><div><span>Processo</span><strong>{source.processo || '—'}</strong></div><div className="fiscal-value"><span>Valor da NFS-e / Honorários</span><strong>{money.format(value)}</strong></div></div>
+    <div className="fiscal-client-card"><div><span>Cliente</span><strong>{fiscalClientName(source) || '—'}</strong></div><div><span>CPF</span><strong>{source.cpf || '—'}</strong></div><div><span>E-mail</span><strong>{source.emailNf || '—'}</strong></div><div><span>Endereço</span><strong>{source.enderecoNf || '—'}</strong></div><div><span>Processo</span><strong>{source.processo || '—'}</strong></div><div className="fiscal-value"><span>Valor da NFS-e / Honorários</span><strong>{money.format(value)}</strong></div></div>
     <div className="obligation-form-grid fiscal-form-grid"><label><span>Status da NFS-e</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="pendente">Pendente de emissão</option><option value="emitida">Emitida</option><option value="cancelada">Cancelada</option></select></label><label><span>Número da NFS-e</span><input data-required-key="fiscal-number" value={number} onChange={(event) => setNumber(event.target.value)} placeholder="Ex.: 0085967" /></label><label><span>Data de emissão</span><input data-required-key="fiscal-date" type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} /></label></div>
     <label className="obligation-notes"><span>Observações</span><textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
     <div className="modal-actions"><button className="secondary-button" type="button" onClick={onClose}>Fechar</button>{canEdit && <button className="revenue-button" type="button" disabled={busy} onClick={() => void save()}><FileText size={16} /> Salvar controle da NFS-e</button>}</div>
@@ -144,7 +148,7 @@ function printExtract(sources: AnyRecord[], noteMap: Map<string, AnyRecord>) {
   }
   const rows = sources.map((source) => {
     const note = noteMap.get(source.id)
-    return `<tr><td>${escapeHtml(source.processo || '—')}</td><td>${escapeHtml(source.titular || source.reclamante || '—')}</td><td>${escapeHtml(source.cpf || '—')}</td><td>${escapeHtml(source.emailNf || '—')}</td><td class="num">${escapeHtml(money.format(invoiceValue(source)))}</td><td>${escapeHtml(statusLabel(note))}</td><td>${escapeHtml(note?.number || '—')}</td><td>${escapeHtml(dateBr(note?.issueDate))}</td></tr>`
+    return `<tr><td>${escapeHtml(source.processo || '—')}</td><td>${escapeHtml(fiscalClientName(source) || '—')}</td><td>${escapeHtml(source.cpf || '—')}</td><td>${escapeHtml(source.emailNf || '—')}</td><td class="num">${escapeHtml(money.format(invoiceValue(source)))}</td><td>${escapeHtml(statusLabel(note))}</td><td>${escapeHtml(note?.number || '—')}</td><td>${escapeHtml(dateBr(note?.issueDate))}</td></tr>`
   }).join('')
   const w = window.open('', '_blank', 'width=1200,height=820')
   if (!w) {
@@ -179,7 +183,7 @@ export function FiscalNotesPageV3() {
     <section className="page-card module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por processo, cliente, CPF, status ou nº da NFS-e" /></div></div>
       {loadingReceivables || loadingNotes ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando Notas Fiscais</strong></div> : sources.length === 0 ? <div className="module-empty"><FileText size={34} /><strong>Nenhum honorário disponível para emissão</strong></div> : <div className="obligation-list fiscal-v3-list"><div className="obligation-list-row obligation-list-head"><span>Processo / Cliente</span><span>CPF</span><span>E-mail</span><span>Valor</span><span>Status NFS-e</span><span>Nº NFSe e Data</span><span>Ação</span></div>{sources.map((source) => {
         const note = noteMap.get(source.id)
-        return <div className="obligation-list-row" key={source.id}><span><strong>{source.processo || '—'}</strong><small>{source.titular || source.reclamante || '—'}</small></span><span>{source.cpf || '—'}</span><span className="fiscal-email-cell">{source.emailNf || '—'}</span><span><strong>{money.format(invoiceValue(source))}</strong></span><span><b className={`workflow-status-badge ${statusClass(note)}`}>{statusLabel(note)}</b></span><span className="fiscal-number-cell"><strong>{note?.number || '—'}</strong>{note?.issueDate && <small>{dateBr(note.issueDate)}</small>}</span><span><button className="small-neutral-button" type="button" onClick={() => setTarget(source)}>{note ? 'Abrir controle' : 'Preparar NFS-e'}</button></span></div>
+        return <div className="obligation-list-row" key={source.id}><span><strong>{source.processo || '—'}</strong><small>{fiscalClientName(source) || '—'}</small></span><span>{source.cpf || '—'}</span><span className="fiscal-email-cell">{source.emailNf || '—'}</span><span><strong>{money.format(invoiceValue(source))}</strong></span><span><b className={`workflow-status-badge ${statusClass(note)}`}>{statusLabel(note)}</b></span><span className="fiscal-number-cell"><strong>{note?.number || '—'}</strong>{note?.issueDate && <small>{dateBr(note.issueDate)}</small>}</span><span><button className="small-neutral-button" type="button" onClick={() => setTarget(source)}>{note ? 'Abrir controle' : 'Preparar NFS-e'}</button></span></div>
       })}</div>}
     </section>
     {target && <FiscalNoteModal source={target} note={noteMap.get(target.id)} onClose={() => setTarget(null)} />}
