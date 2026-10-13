@@ -81,27 +81,30 @@ function BrazilianMoneyInput({ value, onChange, ariaLabel, validationKey }: { va
     if (!focused) setText(value > 0 ? decimalBR.format(value) : '')
   }, [focused, value])
 
-  return <input
-    type="text"
-    inputMode="decimal"
-    aria-label={ariaLabel}
-    data-required-key={validationKey}
-    placeholder="0,00"
-    value={text}
-    onFocus={(event) => {
-      setFocused(true)
-      event.currentTarget.select()
-    }}
-    onChange={(event) => {
-      const next = event.target.value
-      setText(next)
-      onChange(Math.max(0, parseBrazilianNumber(next)))
-    }}
-    onBlur={() => {
-      setFocused(false)
-      setText(value > 0 ? decimalBR.format(value) : '')
-    }}
-  />
+  return <span className="money-input-with-preview">
+    <input
+      type="text"
+      inputMode="decimal"
+      aria-label={ariaLabel}
+      data-required-key={validationKey}
+      placeholder="0,00"
+      value={text}
+      onFocus={(event) => {
+        setFocused(true)
+        event.currentTarget.select()
+      }}
+      onChange={(event) => {
+        const next = event.target.value
+        setText(next)
+        onChange(Math.max(0, parseBrazilianNumber(next)))
+      }}
+      onBlur={() => {
+        setFocused(false)
+        setText(value > 0 ? decimalBR.format(value) : '')
+      }}
+    />
+    <small>{money.format(value)}</small>
+  </span>
 }
 
 function BrazilianPercentInput({ value, onChange, ariaLabel }: { value: number; onChange: (value: number) => void; ariaLabel?: string }) {
