@@ -45,6 +45,7 @@ type Settings = {
 type Draft = { percent: string; value: string }
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+const moneyInput = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const today = () => new Date().toISOString().slice(0, 10)
 const DEFAULT_SETTINGS: Settings = {
   beneficiary: 'Ana Müller',
@@ -374,14 +375,14 @@ export function SocietaryTransfersPage() {
   function draftFor(item: AnyRecord): Draft {
     return drafts[item.id] ?? {
       percent: toNumber(item.percent).toFixed(2),
-      value: toNumber(item.transferValue).toFixed(2),
+      value: moneyInput(toNumber(item.transferValue)),
     }
   }
 
   function changePercent(item: AnyRecord, raw: string) {
     const percent = Math.max(0, Math.min(100, toNumber(raw)))
     const value = calculateTransferValue(toNumber(item.officeFees), percent)
-    setDrafts((current) => ({ ...current, [item.id]: { percent: raw, value: value.toFixed(2) } }))
+    setDrafts((current) => ({ ...current, [item.id]: { percent: raw, value: moneyInput(value) } }))
   }
 
   function changeValue(item: AnyRecord, raw: string) {
