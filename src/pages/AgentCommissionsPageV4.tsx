@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
 import { CheckCircle2, FileText, Plus, RefreshCw, Search, Send, Trash2, Users, X } from 'lucide-react'
 import { db } from '../lib/firebase'
+import { ensureOfficialDemonstrative } from '../lib/officialDemonstrative'
 import { isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
 import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 import '../agent-commissions-v4.css'
@@ -265,7 +266,10 @@ function CommissionModal({ source, plan, onClose }: { source: AnyRecord; plan?: 
     const nextStatus = paidCount === 0 ? 'aprovado' : paidCount === finalized.length ? 'pago' : 'parcialmente_pago'
     setBusy(true)
     try {
-      await setDoc(doc(db, 'agentCommissions', source.id), { installments: finalized, status: nextStatus, paidValue: finalized.reduce((sum, item) => sum + (item.paid ? item.value : 0), 0), updatedBy: profile.uid, updatedByName: profile.displayName, updatedAt: serverTimestamp() }, { merge: true })
+      const paidValue = finalized.reduce((sum, item) => sum + (item.paid ? item.value : 0), 0)
+      const finalizedPlan = { ...plan, id: source.id, installments: finalized, status: nextStatus, paidValue, updatedBy: profile.uid, updatedByName: profile.displayName }
+      await setDoc(doc(db, 'agentCommissions', source.id), { installments: finalized, status: nextStatus, paidValue, updatedBy: profile.uid, updatedByName: profile.displayName, updatedAt: serverTimestamp() }, { merge: true })
+      if (nextStatus === 'pago') await ensureOfficialDemonstrative('commission', finalizedPlan, { generatedBy: profile.uid })
       for (let index = 0; index < finalized.length; index += 1) if (finalized[index].paid && !previous[index]?.paid) await audit(profile, `Parcela ${finalized[index].number} da comissão paga`, `Processo ${source.processo || '—'} · ${beneficiary(source)} · ${money.format(finalized[index].value)} em ${dateBr(finalized[index].paidDate)}`, source.id)
       await audit(profile, 'Execução da comissão atualizada', `Processo ${source.processo || '—'} · ${paidCount}/${finalized.length} parcela(s) paga(s)`, source.id)
       onClose()
