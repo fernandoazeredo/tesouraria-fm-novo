@@ -239,7 +239,7 @@ export function DreGerencialPageV2() {
 
   const classificationMap = useMemo(() => new Map(classifications.map((item) => [item.id, item])), [classifications])
   const launches = useMemo<UnifiedLaunch[]>(() => {
-    const expenseRows = expenses.map((item) => {
+    const expenseRows = expenses.filter((item) => EXPENSE_DRE_STATUSES.has(String(item.status ?? ''))).map((item) => {
       const date = String(Array.isArray(item.items) && item.items[0]?.data ? item.items[0].data : `${item.competencia || ''}-01`).slice(0, 10)
       return {
         key: classificationKey('expense', item.id), sourceType: 'expense' as const, sourceId: item.id, source: item,
@@ -248,7 +248,7 @@ export function DreGerencialPageV2() {
         amount: toNumber(item.valorTotal), status: String(item.status ?? ''), classification: classificationMap.get(classificationKey('expense', item.id)),
       }
     })
-    const revenueRows = revenues.map((item) => {
+    const revenueRows = revenues.filter((item) => REVENUE_DRE_STATUSES.has(String(item.status ?? ''))).map((item) => {
       const date = String(item.receiptDate ?? item.data ?? '').slice(0, 10)
       return {
         key: classificationKey('revenue', item.id), sourceType: 'revenue' as const, sourceId: item.id, source: item,
