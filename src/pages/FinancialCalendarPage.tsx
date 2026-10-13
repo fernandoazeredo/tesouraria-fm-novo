@@ -51,16 +51,20 @@ function fileName(value: string) {
 }
 
 function downloadPdf(title: string, lines: string[], name: string) {
+  // Abre o demonstrativo para consulta no navegador. Isso funciona melhor em celular
+  // e em ambientes que bloqueiam downloads automáticos.
+  const reportWindow = window.open('', '_blank')
+  if (!reportWindow) {
+    window.alert('O navegador bloqueou a abertura do demonstrativo. Libere pop-ups para este site e tente novamente.')
+    return
+  }
+
   const bytes = createTextPdf(title, lines)
   const blob = new Blob([bytes], { type: 'application/pdf' })
   const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = name
-  document.body.appendChild(anchor)
-  anchor.click()
-  anchor.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 1500)
+  reportWindow.document.title = name
+  reportWindow.location.href = url
+  setTimeout(() => URL.revokeObjectURL(url), 60000)
 }
 
 function expensePdf(item: AnyRecord) {
