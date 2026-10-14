@@ -39,6 +39,14 @@ service cloud.firestore {
       return activeUser() && currentUser().data.role in roles;
     }
 
+    function masterWipeMode() {
+      return isPrimaryAdminEmail()
+        && hasRole(['master'])
+        && exists(/databases/$(database)/documents/systemControl/wipe)
+        && get(/databases/$(database)/documents/systemControl/wipe).data.uid == request.auth.uid
+        && get(/databases/$(database)/documents/systemControl/wipe).data.expiresAt > request.time;
+    }
+
     function masterRestoreMode() {
       return isPrimaryAdminEmail()
         && exists(/databases/$(database)/documents/systemControl/restore)
@@ -272,7 +280,7 @@ service cloud.firestore {
       allow update: if masterRestoreMode()
         || societaryDirectorUpdate()
         || societaryTreasuryUpdate();
-      allow delete: if false;
+      allow delete: if masterWipeMode();
     }
 
     match /fiscalNotes/{document=**} {

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { AlertTriangle, DatabaseBackup, Download, Trash2, Upload } from 'lucide-react'
 import {
   Timestamp,
+  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -20,6 +21,9 @@ const BACKUP_COLLECTIONS = [
   'receivables',
   'alvaraTransfers',
   'agentCommissions',
+  'societaryTransfers',
+  'managerialClassifications',
+  'approvals',
   'fiscalNotes',
   'accountingDispatches',
   'accountingPackages',
@@ -30,7 +34,7 @@ const BACKUP_COLLECTIONS = [
 ] as const
 
 const PROTECTED_COLLECTIONS = new Set<string>(['users', 'settings', 'chartOfAccounts'])
-const WIPE_COLLECTIONS = BACKUP_COLLECTIONS.filter((name) => !PROTECTED_COLLECTIONS.has(name))
+const WIPE_COLLECTIONS = BACKUP_COLLECTIONS.filter((name) => !PROTECTED_COLLECTIONS.has(name) && name !== 'auditLogs').concat(['auditLogs'] as const)
 
 type BackupFile = {
   app: 'controle-despesas-receitas-mm'
@@ -78,7 +82,9 @@ function attachmentPaths(data: DocumentData) {
     if (item && typeof item === 'object' && typeof item.path === 'string') paths.push(item.path)
   }
   if (typeof data.storagePath === 'string') paths.push(data.storagePath)
-  return paths
+  if (typeof data.demonstrativePath === 'string') paths.push(data.demonstrativePath)
+  if (data.demonstrative && typeof data.demonstrative.path === 'string') paths.push(data.demonstrative.path)
+  return [...new Set(paths.filter((path) => !path.includes('..') && !path.startsWith('/')))]
 }
 
 export function UtilitiesPage() {
@@ -183,32 +189,88 @@ export function UtilitiesPage() {
     if (phrase.trim().toUpperCase() !== 'APAGAR TUDO') return
     setBusy('wipe')
     setMessage('')
+    const wipeControl = doc(db, 'systemControl', 'wipe')
+    let wipeOpened = false
+    const counts: Record<string, number> = {}
+    const storageErrors: string[] = []
+    const seenPaths = new Set<string>()
+    let removedFiles = 0
+    let cleanupError: unknown = null
     try {
+      // Sempre preservar backup e controle antes de qualquer exclusão.
       await buildBackup(true)
+      await setDoc(wipeControl, {
+        uid: masterProfile.uid,
+        email: masterProfile.email,
+        startedAt: serverTimestamp(),
+        expiresAt: Timestamp.fromMillis(Date.now() + 10 * 60 * 1000),
+      })
+      wipeOpened = true
 
       for (const name of WIPE_COLLECTIONS) {
         const snapshot = await getDocs(collection(db, name))
+        counts[name] = 0
         for (const item of snapshot.docs) {
-          const data = item.data()
-          for (const path of attachmentPaths(data)) {
+          for (const path of attachmentPaths(item.data())) {
+            if (seenPaths.has(path)) continue
+            seenPaths.add(path)
             try {
               await deleteObject(storageRef(storage, path))
+              removedFiles += 1
             } catch (error) {
-              const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: string }).code) : ''
-              if (code !== 'storage/object-not-found' && code !== 'storage/unauthorized') console.warn('Falha ao remover arquivo do Storage:', path, error)
+              const code = typeof error === 'object' && error && 'code' in error
+                ? String((error as { code?: string }).code) : ''
+              if (code === 'storage/object-not-found') continue
+              storageErrors.push(name + '/' + item.id + ': ' + path + ' (' + (code || String(error)) + ')')
+              // Não apagar registro enquanto o comprovante/PDF continua inacessível.
+              throw new Error('Falha ao excluir arquivo do Storage (' + (code || 'erro de acesso') + ').')
             }
           }
           await deleteDoc(doc(db, name, item.id))
+          counts[name] += 1
         }
       }
-
       setConfirmWipe(false)
       setPhrase('')
-      setMessage('Limpeza concluída. Usuários, Configurações e o Plano de Contas atual foram preservados. Antes da exclusão, um backup JSON foi baixado automaticamente.')
     } catch (error) {
-      console.error(error)
-      setMessage('A limpeza não foi concluída integralmente. Usuários, Configurações e Plano de Contas não são removidos por esta operação.')
+      cleanupError = error
+      console.error('Limpeza incompleta:', error)
     } finally {
+      // Auditoria sempre recriada DEPOIS da limpeza da coleção auditLogs.
+      // Mesmo no caso de falha parcial, registrar quem executou e o resultado.
+      try {
+        const detail = Object.entries(counts).map(([name, count]) => name + ': ' + count).join('; ')
+        await addDoc(collection(db, 'auditLogs'), {
+          action: cleanupError ? 'Limpeza total incompleta' : 'Limpeza total executada',
+          module: 'Utilitários',
+          detail: 'Coleções: ' + detail + '; arquivos Storage excluídos: ' + removedFiles +
+            (storageErrors.length ? '; falhas: ' + storageErrors.join(' | ') : ''),
+          counts,
+          removedFiles,
+          status: cleanupError ? 'incompleta' : 'concluida',
+          error: cleanupError ? String(cleanupError) : null,
+          userId: masterProfile.uid,
+          userName: masterProfile.displayName,
+          userEmail: masterProfile.email,
+          createdAt: serverTimestamp(),
+        })
+      } catch (auditError) {
+        console.error('Falha ao registrar auditoria da limpeza:', auditError)
+        storageErrors.push('Registro de auditoria indisponível: ' + String(auditError))
+      }
+      if (wipeOpened) {
+        try { await deleteDoc(wipeControl) } catch (error) { console.error('Falha ao fechar janela de limpeza:', error) }
+      }
+      if (cleanupError || storageErrors.length) {
+        setMessage('Limpeza NÃO concluída: confira a Auditoria e o console. ' +
+          String(cleanupError || storageErrors.join('; ')) +
+          '. Usuários, Configurações e Plano de Contas foram preservados.')
+      } else {
+        setMessage('Limpeza concluída e auditada. Registros removidos por módulo: ' +
+          Object.entries(counts).map(([name, count]) => name + ' ' + count).join('; ') +
+          '. Arquivos excluídos do Storage: ' + removedFiles +
+          '. Usuários, Configurações e Plano de Contas preservados.')
+      }
       setBusy('')
     }
   }
@@ -234,14 +296,14 @@ export function UtilitiesPage() {
 
       <section className="page-card utility-card utility-danger-card">
         <Trash2 size={28} />
-        <div><h2>Apagar dados operacionais</h2><p>Remove despesas, receitas, repasses, comissões, Notas Fiscais, auditoria, documentos operacionais e extratos. Usuários, Configurações e o Plano de Contas atual são sempre preservados. Um backup JSON é baixado automaticamente antes da limpeza.</p></div>
+        <div><h2>Apagar dados operacionais</h2><p>Remove despesas, receitas, repasses de alvarás, comissões, repasses societários, classificações dos testes, Notas Fiscais, registros de auditoria anteriores, documentos, demonstrativos PDF e extratos. Registra uma nova auditoria com usuário, horário e quantidade removida por módulo. Usuários, Configurações e o Plano de Contas atual são sempre preservados. Um backup JSON é baixado antes da limpeza; os arquivos binários do Storage não fazem parte desse backup.</p></div>
         <button className="expense-button" type="button" disabled={Boolean(busy)} onClick={() => setConfirmWipe(true)}><Trash2 size={17} /> Limpeza total</button>
       </section>
     </div>
 
     {confirmWipe && <div className="modal-backdrop"><section className="decision-modal rejeitado" role="dialog" aria-modal="true">
       <div className="modal-toolbar"><div><span className="eyebrow">Operação irreversível</span><h2>Apagar dados operacionais</h2></div></div>
-      <div className="decision-warning"><AlertTriangle size={22} /><div><strong>Confirmação obrigatória</strong><span>Digite APAGAR TUDO para habilitar a exclusão. Usuários, Configurações e Plano de Contas serão preservados.</span></div></div>
+      <div className="decision-warning"><AlertTriangle size={22} /><div><strong>Confirmação obrigatória</strong><span>Digite APAGAR TUDO para habilitar a exclusão. Usuários, Configurações e Plano de Contas serão preservados; uma auditoria da limpeza será registrada.</span></div></div>
       <label className="decision-reason"><span>Confirmação</span><input autoFocus value={phrase} onChange={(event) => setPhrase(event.target.value)} placeholder="APAGAR TUDO" /></label>
       <div className="modal-actions"><button className="secondary-button" type="button" onClick={() => { setConfirmWipe(false); setPhrase('') }}>Cancelar</button><button className="expense-button" type="button" disabled={busy === 'wipe' || phrase.trim().toUpperCase() !== 'APAGAR TUDO'} onClick={() => void wipeAllExceptUsers()}><Trash2 size={16} /> {busy === 'wipe' ? 'Apagando...' : 'Confirmar limpeza'}</button></div>
     </section></div>}
