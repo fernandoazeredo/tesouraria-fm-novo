@@ -1,0 +1,29 @@
+name: Manutencao pontual - residuos societarios
+on:
+  push:
+    branches:
+      - dev-fm-2026-09-08
+
+jobs:
+  purge-societary-residue:
+    if: contains(github.event.head_commit.message, '[manutencao-societario-2026-10-14]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exato do commit
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Autenticacao Firebase service account
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TESOURARIA_FM_NOVO }}
+      - name: Instalar Firebase Admin SDK
+        run: npm install --no-save --package-lock=false firebase-admin@13
+      - name: Excluir SOMENTE residuos societarios de teste apos prechecagem
+        env:
+          ALLOW_TEST_RESIDUE_PURGE: SOC-3-2-19000-7600-6000
+        run: node scripts/purge-societary-test-residue.cjs
