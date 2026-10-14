@@ -53,22 +53,46 @@ function fileName(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'demonstrativo'
 }
 
-function DemonstrativeLink({ item }: { item: AnyRecord }) {
+type DocumentContext = 'expense' | 'revenue' | 'alvaraTransfer' | 'commission' | 'societaryTransfer'
+function DemonstrativeLink({ item, context }: { item: AnyRecord; context: DocumentContext }) {
   const storedUrl = String(item.demonstrative?.url || item.demonstrativeUrl || '')
   const path = String(item.demonstrative?.path || item.demonstrativePath || '')
   const [url, setUrl] = useState(storedUrl)
+  const [readError, setReadError] = useState('')
   useEffect(() => {
     setUrl(storedUrl)
+    setReadError('')
     if (storedUrl || !path) return
     let alive = true
     getDownloadURL(storageRef(storage, path)).then((resolved) => {
       if (alive) setUrl(resolved)
-    }).catch((error) => console.warn('Demonstrativo do calendário indisponível:', path, error))
+    }).catch((error) => {
+      console.warn('Demonstrativo do calendário indisponível:', path, error)
+      if (alive) setReadError(String((error as { code?: string })?.code || 'falha de leitura'))
+    })
     return () => { alive = false }
   }, [path, storedUrl])
-  return url
-    ? <a href={url} target="_blank" rel="noreferrer"><FileText size={14} /> Demonstrativo</a>
-    : <span><FileText size={14} /> Demonstrativo pendente</span>
+  if (url) return <a href={url} target="_blank" rel="noreferrer"><FileText size={14} /> Demonstrativo</a>
+
+  const reference = context === 'expense'
+    ? String(item.fornecedor || item.nome || item.id)
+    : String(item.processo || item.sourceSnapshot?.processo || item.beneficiary || item.id)
+  const typeName = {
+    expense: 'Despesa', revenue: 'Receita', alvaraTransfer: 'Repasse de Alvará',
+    commission: 'Comissão', societaryTransfer: 'Repasse Societário',
+  }[context]
+  const status = String(item.status || '')
+  const notPaid = context === 'expense' && status === 'aprovado'
+  const pendingDescription = notPaid
+    ? 'Aguardando pagamento — PDF de baixa ainda não aplicável'
+    : readError
+      ? `Falha ao abrir PDF (${readError})`
+      : context === 'societaryTransfer'
+        ? 'PDF societário ainda não salvo'
+        : 'PDF de lançamento finalizado ainda não salvo'
+  return <span title={`${typeName} · ${reference} · status ${status || 'não informado'} · ${pendingDescription}`}>
+    <FileText size={14} /> {pendingDescription} · {typeName}: {reference}
+  </span>
 }
 
 function AttachmentLink({ file, index }: { file: Attachment; index: number }) {
@@ -97,7 +121,7 @@ function ExpenseMovement({ item }: { item: AnyRecord }) {
       <b>{money.format(toNumber(item.valorTotal))}</b>
     </div>
     <div className="financial-document-row">
-      <DemonstrativeLink item={item} />
+      <DemonstrativeLink item={item} context="expense" />
       <OfficialFinancialDocumentPreviewButton kind="expense" record={item} />
       {attachments.map((file, index) => <AttachmentLink key={file.path || `${file.name}-${index}`} file={file} index={index} />)}
     </div>
@@ -112,7 +136,7 @@ function RevenueMovement({ item }: { item: AnyRecord }) {
       <b>{money.format(toNumber(item.valorAlvara || item.valorLiquidoCliente))}</b>
     </div>
     <div className="financial-document-row">
-      <DemonstrativeLink item={item} />
+      <DemonstrativeLink item={item} context="revenue" />
       <OfficialFinancialDocumentPreviewButton kind="revenue" record={item} />
       {attachments.map((file, index) => <AttachmentLink key={file.path || `${file.name}-${index}`} file={file} index={index} />)}
     </div>
@@ -129,7 +153,7 @@ function PayoutMovementCard({ item }: { item: PayoutMovement }) {
       <b>{money.format(item.value)}</b>
     </div>
     <div className="financial-document-row">
-      <DemonstrativeLink item={item.record} />
+      <DemonstrativeLink item={item.record} context={item.kind === 'Comissão de Agente' ? 'commission' : item.kind === 'Repasse Societário' ? 'societaryTransfer' : 'alvaraTransfer'} />
       <OfficialFinancialDocumentPreviewButton kind={item.kind === 'Comissão de Agente' ? 'commission' : item.kind === 'Repasse Societário' ? 'societaryTransfer' : 'alvaraTransfer'} record={item.record} />
       {attachments.map((file, index) => <AttachmentLink key={file.path || `${file.name}-${index}`} file={file} index={index} />)}
     </div>
