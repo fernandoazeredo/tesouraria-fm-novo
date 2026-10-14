@@ -39,6 +39,328 @@ service cloud.firestore {
       return activeUser() && currentUser().data.role in roles;
     }
 
+    // Registrar exclusivamente metadados de PDF já concluído.
+    // A operação nunca pode alterar valores, status, datas, parcelas ou aprovação.
+    function demonstrativeMetadataOnly(folder) {
+      return hasRole(['master', 'diretor', 'gerente', 'tesouraria'])
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['demonstrative', 'demonstrativePath', 'demonstrativeUrl', 'demonstrativeGeneratedAt'])
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['demonstrative', 'demonstrativePath', 'demonstrativeUrl'])
+        && request.resource.data.demonstrativePath is string
+        && request.resource.data.demonstrativePath.matches('^demonstrativos/' + folder + '/[^/]+/(v2/)?demonstrativo[.]pdf
+      return isPrimaryAdminEmail()
+        && exists(/databases/$(database)/documents/systemControl/restore)
+        && get(/databases/$(database)/documents/systemControl/restore).data.uid == request.auth.uid
+        && get(/databases/$(database)/documents/systemControl/restore).data.expiresAt > request.time;
+    }
+
+    function validSelfRegistration(userId) {
+      return signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && (
+          (isPrimaryAdminEmail()
+            && request.resource.data.role == 'master'
+            && request.resource.data.status == 'active')
+          ||
+          (isDirectorEmail()
+            && request.resource.data.role == 'diretor'
+            && request.resource.data.status == 'pending')
+          ||
+          (isManagerEmail()
+            && request.resource.data.role == 'gerente'
+            && request.resource.data.status == 'pending')
+          ||
+          (isTreasuryEmail()
+            && request.resource.data.role == 'tesouraria'
+            && request.resource.data.status == 'pending')
+          ||
+          (!isPrimaryAdminEmail()
+            && !isDirectorEmail()
+            && !isManagerEmail()
+            && !isTreasuryEmail()
+            && request.resource.data.role == 'operador'
+            && request.resource.data.status == 'pending')
+        );
+    }
+
+    function safeSelfUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['displayName', 'photoURL', 'lastLoginAt']);
+    }
+
+    function directorExpenseDecision() {
+      return (
+          (isDirectorEmail() && hasRole(['diretor']))
+          || (isPrimaryAdminEmail() && hasRole(['master']))
+        )
+        && resource.data.status in ['enviado_aprovacao', 'em_analise']
+        && request.resource.data.status in ['aprovado', 'devolvido', 'rejeitado'];
+    }
+
+    function operationalExpenseUpdate() {
+      return hasRole(['master', 'gerente', 'tesouraria', 'operador'])
+        && (hasRole(['master']) || resource.data.createdBy == request.auth.uid)
+        && (
+          (resource.data.status == 'rascunho'
+            && request.resource.data.status in ['rascunho', 'enviado_aprovacao'])
+          ||
+          (resource.data.status == 'devolvido'
+            && request.resource.data.status in ['devolvido', 'enviado_aprovacao'])
+        );
+    }
+
+    function treasuryExpenseClose() {
+      return hasRole(['master', 'tesouraria'])
+        && (
+          (resource.data.status == 'aprovado'
+            && request.resource.data.status in ['aprovado', 'pago'])
+          ||
+          (resource.data.status == 'pago'
+            && request.resource.data.status in ['pago', 'arquivado'])
+        );
+    }
+
+    function originReceivableUpdate() {
+      return hasRole(['master', 'gerente', 'operador'])
+        && (
+          (resource.data.status == 'rascunho'
+            && request.resource.data.status in ['rascunho', 'enviado_tesouraria'])
+          ||
+          (resource.data.status == 'devolvido'
+            && request.resource.data.status in ['devolvido', 'enviado_tesouraria'])
+        );
+    }
+
+    function treasuryReceivableUpdate() {
+      return hasRole(['master', 'tesouraria'])
+        && (
+          (resource.data.status == 'enviado_tesouraria'
+            && request.resource.data.status in ['enviado_tesouraria', 'recebido_tesouraria', 'devolvido'])
+          ||
+          (resource.data.status == 'recebido_tesouraria'
+            && request.resource.data.status in ['recebido_tesouraria', 'encerrado'])
+        );
+    }
+
+    function paymentControlDecision() {
+      return (
+          (isDirectorEmail() && hasRole(['diretor']))
+          || (isPrimaryAdminEmail() && hasRole(['master']))
+        )
+        && resource.data.status == 'aguardando_aprovacao'
+        && request.resource.data.status in ['aprovado', 'devolvido', 'rejeitado'];
+    }
+
+    function paymentControlOperationalUpdate() {
+      return hasRole(['master', 'tesouraria'])
+        && (
+          (resource.data.status in ['devolvido', 'rejeitado']
+            && request.resource.data.status == 'aguardando_aprovacao')
+          ||
+          (resource.data.status == 'aprovado'
+            && request.resource.data.status in ['aprovado', 'parcialmente_pago', 'pago'])
+          ||
+          (resource.data.status == 'parcialmente_pago'
+            && request.resource.data.status in ['parcialmente_pago', 'pago'])
+        );
+    }
+
+    function societaryDecisionUser() {
+      return (isPrimaryAdminEmail() && hasRole(['master']))
+        || (isDirectorEmail() && hasRole(['diretor']));
+    }
+
+    function societaryCreate(documentId) {
+      return hasRole(['master', 'diretor', 'tesouraria'])
+        && request.resource.data.sourceReceivableId == documentId
+        && request.resource.data.status == 'apurado';
+    }
+
+    function societaryDirectorUpdate() {
+      return societaryDecisionUser()
+        && (
+          (resource.data.status == 'apurado'
+            && request.resource.data.status in ['apurado', 'aguardando_aprovacao', 'cancelado'])
+          ||
+          (resource.data.status == 'aguardando_aprovacao'
+            && request.resource.data.status in ['aprovado', 'devolvido', 'rejeitado', 'cancelado'])
+          ||
+          (resource.data.status in ['devolvido', 'rejeitado']
+            && request.resource.data.status in ['apurado', 'aguardando_aprovacao', 'cancelado'])
+          ||
+          (resource.data.status == 'aprovado'
+            && request.resource.data.status in ['enviado_tesouraria', 'apurado', 'cancelado'])
+          ||
+          (resource.data.status == 'enviado_tesouraria'
+            && request.resource.data.status in ['apurado', 'cancelado'])
+        );
+    }
+
+    function societaryTreasuryUpdate() {
+      return hasRole(['master', 'tesouraria'])
+        && resource.data.status == 'enviado_tesouraria'
+        && request.resource.data.status in ['pago', 'rejeitado'];
+    }
+
+    match /systemControl/{document=**} {
+      allow read, create, update, delete: if isPrimaryAdminEmail();
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || hasRole(['master']));
+      allow create: if validSelfRegistration(userId) || masterRestoreMode();
+      allow update: if signedIn() && (
+        (request.auth.uid == userId && safeSelfUpdate())
+        || hasRole(['master'])
+        || masterRestoreMode()
+      );
+      allow delete: if (hasRole(['master']) && request.auth.uid != userId) || masterRestoreMode();
+    }
+
+    match /userInvites/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /expenses/{document=**} {
+      allow read: if activeUser();
+      allow create: if masterRestoreMode() || (
+        hasRole(['master', 'gerente', 'tesouraria', 'operador'])
+        && request.resource.data.status in ['rascunho', 'enviado_aprovacao']
+      );
+      allow update: if masterRestoreMode()
+        || directorExpenseDecision()
+        || operationalExpenseUpdate()
+        || treasuryExpenseClose()
+        || (resource.data.status in ['pago', 'arquivado'] && demonstrativeMetadataOnly('despesas'));
+      allow delete: if masterRestoreMode()
+        || hasRole(['master'])
+        || (hasRole(['gerente', 'tesouraria', 'operador'])
+          && resource.data.status == 'rascunho'
+          && resource.data.createdBy == request.auth.uid);
+    }
+
+    match /receivables/{document=**} {
+      allow read: if activeUser();
+      allow create: if masterRestoreMode() || (
+        hasRole(['master', 'gerente', 'operador'])
+        && request.resource.data.status in ['rascunho', 'enviado_tesouraria']
+      );
+      allow update: if masterRestoreMode() || originReceivableUpdate() || treasuryReceivableUpdate()
+        || (resource.data.status in ['recebido_tesouraria', 'encerrado'] && demonstrativeMetadataOnly('receitas'));
+      allow delete: if masterRestoreMode() || hasRole(['master']);
+    }
+
+    match /alvaraTransfers/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create: if masterRestoreMode() || (
+        hasRole(['master', 'tesouraria'])
+        && request.resource.data.status == 'aguardando_aprovacao'
+      );
+      allow update: if masterRestoreMode()
+        || paymentControlDecision()
+        || paymentControlOperationalUpdate()
+        || (resource.data.status in ['parcialmente_pago', 'pago'] && demonstrativeMetadataOnly('repasses-alvaras'));
+      allow delete: if masterRestoreMode() || hasRole(['master']);
+    }
+
+    match /agentCommissions/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create: if masterRestoreMode() || (
+        hasRole(['master', 'tesouraria'])
+        && request.resource.data.status == 'aguardando_aprovacao'
+      );
+      allow update: if masterRestoreMode()
+        || paymentControlDecision()
+        || paymentControlOperationalUpdate()
+        || (resource.data.status in ['parcialmente_pago', 'pago'] && demonstrativeMetadataOnly('comissoes'));
+      allow delete: if masterRestoreMode() || hasRole(['master']);
+    }
+
+    match /societaryTransfers/{documentId} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create: if masterRestoreMode() || societaryCreate(documentId);
+      allow update: if masterRestoreMode()
+        || societaryDirectorUpdate()
+        || societaryTreasuryUpdate()
+        || (resource.data.status == 'pago' && demonstrativeMetadataOnly('repasses-societarios'));
+      allow delete: if false;
+    }
+
+    match /fiscalNotes/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create, update: if masterRestoreMode() || hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow delete: if masterRestoreMode() || hasRole(['master']);
+    }
+
+    match /approvals/{document=**} {
+      allow read: if activeUser();
+      allow create, update: if (isDirectorEmail() && hasRole(['diretor']))
+        || (isPrimaryAdminEmail() && hasRole(['master']));
+      allow delete: if hasRole(['master']);
+    }
+
+    match /chartOfAccounts/{document=**} {
+      allow read: if activeUser();
+      allow write: if masterRestoreMode() || (isPrimaryAdminEmail() && hasRole(['master']));
+    }
+
+    match /managerialClassifications/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create, update: if masterRestoreMode() || hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow delete: if masterRestoreMode() || hasRole(['master']);
+    }
+
+    match /accountingDispatches/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create: if masterRestoreMode() || hasRole(['master', 'gerente', 'tesouraria']);
+      allow update, delete: if masterRestoreMode() || hasRole(['master']);
+    }
+
+    match /accountingPackages/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create: if masterRestoreMode();
+      allow update, delete: if masterRestoreMode() || hasRole(['master']);
+    }
+
+    match /bankStatements/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create, update: if masterRestoreMode() || hasRole(['master', 'gerente', 'tesouraria']);
+      allow delete: if masterRestoreMode() || hasRole(['master', 'gerente', 'tesouraria']);
+    }
+
+    match /auditLogs/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create: if masterRestoreMode() || activeUser();
+      allow update: if masterRestoreMode();
+      allow delete: if masterRestoreMode() || (isPrimaryAdminEmail() && hasRole(['master']));
+    }
+
+    match /settings/{document=**} {
+      allow read: if activeUser();
+      allow write: if masterRestoreMode() || hasRole(['master']);
+    }
+
+    match /appConfig/societaryTransfer {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow write: if masterRestoreMode() || societaryDecisionUser();
+    }
+
+    match /appConfig/{document=**} {
+      allow read: if activeUser();
+      allow write: if masterRestoreMode() || (isPrimaryAdminEmail() && hasRole(['master']));
+    }
+  }
+})
+        && request.resource.data.demonstrative is map
+        && request.resource.data.demonstrative.path == request.resource.data.demonstrativePath
+        && request.resource.data.demonstrativeUrl is string
+        && request.resource.data.demonstrative.url == request.resource.data.demonstrativeUrl
+        && request.resource.data.demonstrativeGeneratedAt is string;
+    }
+
     function masterRestoreMode() {
       return isPrimaryAdminEmail()
         && exists(/databases/$(database)/documents/systemControl/restore)
