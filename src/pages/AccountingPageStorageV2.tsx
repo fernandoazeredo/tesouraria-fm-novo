@@ -290,7 +290,7 @@ export function AccountingPageStorageV2() {
     ) {
       const files = attachmentsOf(record)
       if (!files.length) {
-        addIssue(label, reference, amount, 'Sem comprovante/anexo registrado para ' + prefix)
+        addIssue(label, reference, amount, prefix.startsWith('repasse_') ? 'Comprovante de pagamento ao cliente não anexado' : prefix.startsWith('comissao_') ? 'Comprovante de pagamento da comissão não anexado' : 'Sem comprovante/anexo registrado para ' + prefix)
         return
       }
       for (let i = 0; i < files.length; i += 1) {
@@ -358,7 +358,6 @@ export function AccountingPageStorageV2() {
         await addPdf(plan, 'alvaraTransfer', group.folder, '02_demonstrativo_repasse_cliente' + suffix + '.pdf', 'Repasse de Alvará', reference, amount, paid)
         await addProofs(plan, group.folder, 'Repasse de Alvará', reference, amount, seen, 'repasse_' + safeName(plan.id))
         // Registro de parcela paga não substitui o comprovante bancário.
-        if (!attachmentsOf(plan).length) addIssue('Repasse de Alvará', reference, amount, 'Comprovante de pagamento do cliente não anexado')
       }
       for (const plan of group.commissions.values()) {
         const movements = group.commissionPayments.filter((movement) => movement.planId === plan.id)
@@ -368,7 +367,6 @@ export function AccountingPageStorageV2() {
         const paid = Array.isArray(plan.installments) && plan.installments.some((item: DocumentData) => item?.paid === true)
         await addPdf(plan, 'commission', group.folder, fileName, 'Comissão', reference, amount, paid)
         await addProofs(plan, group.folder, 'Comissão', reference, amount, seen, 'comissao_' + safeName(plan.id))
-        if (!attachmentsOf(plan).length) addIssue('Comissão', reference, amount, 'Comprovante de pagamento do agente não anexado')
       }
     }
     if (statement?.storagePath) {
