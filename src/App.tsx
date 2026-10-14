@@ -7,6 +7,8 @@ import {
   CircleDollarSign,
   FileCheck2,
   FileText,
+  Eye,
+  EyeOff,
   FolderArchive,
   Handshake,
   LayoutDashboard,
@@ -129,6 +131,7 @@ function LoginScreen() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -183,13 +186,21 @@ function LoginScreen() {
           <form onSubmit={submit} className="auth-form">
             {mode === 'register' && <label><span>Nome</span><input value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" placeholder="Seu nome" /></label>}
             <label><span>E-mail</span><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="seu@email.com" /></label>
-            <label><span>Senha</span><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder="••••••••" /></label>
+            <div className="auth-password-field">
+              <label htmlFor="fm-login-password">Senha</label>
+              <div className="auth-password-input">
+                <input id="fm-login-password" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder="••••••••" />
+                <button className="auth-password-toggle" type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'} aria-pressed={showPassword} title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}>
+                  {showPassword ? <EyeOff size={21} aria-hidden="true" /> : <Eye size={21} aria-hidden="true" />}
+                </button>
+              </div>
+            </div>
             {error && <div className="form-error" role="alert">{error}</div>}
             <button className="primary-button auth-submit" type="submit" disabled={busy}>{busy ? <LoaderCircle className="spin" size={18} /> : <Mail size={18} />}{mode === 'login' ? 'Entrar com e-mail' : 'Criar acesso'}</button>
           </form>
           <div className="auth-divider"><span>ou</span></div>
           <button className="google-button" type="button" onClick={googleLogin} disabled={busy}><GoogleMark />Continuar com Google</button>
-          <button className="text-button" type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}>{mode === 'login' ? 'Primeiro acesso? Solicitar cadastro' : 'Já possui acesso? Voltar para o login'}</button>
+          <button className="text-button" type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setShowPassword(false); setError('') }}>{mode === 'login' ? 'Primeiro acesso? Solicitar cadastro' : 'Já possui acesso? Voltar para o login'}</button>
         </section>
       </div>
     </div>

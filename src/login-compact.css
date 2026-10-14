@@ -434,3 +434,48 @@
     font-size: 31px !important;
   }
 }
+
+
+/* Mostrar/ocultar senha: campo original preservado, botão independente. */
+.auth-page.login-light-only .auth-form .auth-password-field {
+  display: grid;
+  gap: 7px;
+}
+.auth-page.login-light-only .auth-form .auth-password-field > label {
+  color: #1e2f42 !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+}
+.auth-page.login-light-only .auth-form .auth-password-input {
+  position: relative;
+  width: 100%;
+}
+.auth-page.login-light-only .auth-form .auth-password-input > input {
+  width: 100%;
+  padding-right: 58px !important;
+}
+.auth-page.login-light-only .auth-form .auth-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #637b94;
+  cursor: pointer;
+  box-shadow: none;
+}
+.auth-page.login-light-only .auth-form .auth-password-toggle:hover {
+  color: #1766d8;
+  background: #edf5ff;
+}
+.auth-page.login-light-only .auth-form .auth-password-toggle:focus-visible {
+  outline: 2px solid #1766d8;
+  outline-offset: 1px;
+}
