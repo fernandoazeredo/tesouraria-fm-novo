@@ -70,6 +70,24 @@ function DemonstrativeLink({ item }: { item: AnyRecord }) {
     : <span><FileText size={14} /> Demonstrativo pendente</span>
 }
 
+function AttachmentLink({ file, index }: { file: Attachment; index: number }) {
+  const savedUrl = String(file.url || '')
+  const path = String(file.path || '')
+  const [url, setUrl] = useState(savedUrl)
+  useEffect(() => {
+    setUrl(savedUrl)
+    if (savedUrl || !path) return
+    let mounted = true
+    getDownloadURL(storageRef(storage, path)).then((resolved) => {
+      if (mounted) setUrl(resolved)
+    }).catch((error) => console.warn('Comprovante indisponível no calendário:', path, error))
+    return () => { mounted = false }
+  }, [savedUrl, path])
+  return url
+    ? <a href={url} target="_blank" rel="noreferrer"><Paperclip size={13} /> {file.name || `Documento ${index + 1}`} <ExternalLink size={11} /></a>
+    : <span><Paperclip size={13} /> {file.name || `Documento ${index + 1}`} indisponível</span>
+}
+
 function ExpenseMovement({ item }: { item: AnyRecord }) {
   const attachments = attachmentsOf(item)
   return <article className="financial-movement-card expense-movement">
@@ -79,7 +97,7 @@ function ExpenseMovement({ item }: { item: AnyRecord }) {
     </div>
     <div className="financial-document-row">
       <DemonstrativeLink item={item} />
-      {attachments.map((file, index) => file.url ? <a key={file.path || `${file.name}-${index}`} href={file.url} target="_blank" rel="noreferrer"><Paperclip size={13} /> {file.name || `Documento ${index + 1}`} <ExternalLink size={11} /></a> : null)}
+      {attachments.map((file, index) => <AttachmentLink key={file.path || `${file.name}-${index}`} file={file} index={index} />)}
     </div>
   </article>
 }
@@ -93,7 +111,7 @@ function RevenueMovement({ item }: { item: AnyRecord }) {
     </div>
     <div className="financial-document-row">
       <DemonstrativeLink item={item} />
-      {attachments.map((file, index) => file.url ? <a key={file.path || `${file.name}-${index}`} href={file.url} target="_blank" rel="noreferrer"><Paperclip size={13} /> {file.name || `Documento ${index + 1}`} <ExternalLink size={11} /></a> : null)}
+      {attachments.map((file, index) => <AttachmentLink key={file.path || `${file.name}-${index}`} file={file} index={index} />)}
     </div>
   </article>
 }
@@ -109,7 +127,7 @@ function PayoutMovementCard({ item }: { item: PayoutMovement }) {
     </div>
     <div className="financial-document-row">
       <DemonstrativeLink item={item.record} />
-      {attachments.map((file, index) => file.url ? <a key={file.path || `${file.name}-${index}`} href={file.url} target="_blank" rel="noreferrer"><Paperclip size={13} /> {file.name || `Comprovante ${index + 1}`} <ExternalLink size={11} /></a> : null)}
+      {attachments.map((file, index) => <AttachmentLink key={file.path || `${file.name}-${index}`} file={file} index={index} />)}
     </div>
   </article>
 }

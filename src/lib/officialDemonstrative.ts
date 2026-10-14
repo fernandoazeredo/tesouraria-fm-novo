@@ -1,7 +1,7 @@
 import { doc, updateDoc, type DocumentData } from 'firebase/firestore'
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
 import { db, storage } from './firebase'
-import { createTextPdf } from './simplePdf'
+import { createStyledDemonstrativePdf } from './simplePdf'
 
 export type DemonstrativeKind = 'expense' | 'revenue' | 'alvaraTransfer' | 'commission' | 'societaryTransfer'
 export type AnyFinancialRecord = { id: string } & DocumentData
@@ -55,7 +55,7 @@ export function createExpenseDemonstrativePdf(record: AnyFinancialRecord) {
     ? items.map((item: DocumentData) => `${s(item?.data)} · ${s(item?.historico)} · ${money.format(n(item?.valor))}`)
     : ['Nenhum item detalhado informado.']
 
-  return createTextPdf('FLÁVIO MARQUES ADVOGADOS ASSOCIADOS', [
+  return createStyledDemonstrativePdf('FLÁVIO MARQUES ADVOGADOS ASSOCIADOS', [
     'DEMONSTRATIVO DE DESPESAS',
     '',
     'DADOS DO LANÇAMENTO',
@@ -91,7 +91,7 @@ export function createExpenseDemonstrativePdf(record: AnyFinancialRecord) {
 }
 
 export function createRevenueDemonstrativePdf(record: AnyFinancialRecord) {
-  return createTextPdf('FLÁVIO MARQUES ADVOGADOS ASSOCIADOS', [
+  return createStyledDemonstrativePdf('FLÁVIO MARQUES ADVOGADOS ASSOCIADOS', [
     'DEMONSTRATIVO DE RECEBIMENTO DE HONORÁRIOS',
     '',
     'DADOS DO PROCESSO',
@@ -189,7 +189,7 @@ export function createPaymentDemonstrativePdf(kind: Exclude<DemonstrativeKind, '
     `Pago por: ${s(record.paidByName || record.updatedByName)}`,
   )
 
-  return createTextPdf('FLÁVIO MARQUES ADVOGADOS ASSOCIADOS', lines)
+  return createStyledDemonstrativePdf('FLÁVIO MARQUES ADVOGADOS ASSOCIADOS', lines)
 }
 
 function pathFor(kind: DemonstrativeKind, id: string) {
