@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { DocumentData } from 'firebase/firestore'
 import { X, FileText } from 'lucide-react'
 import './OfficialFinancialDocument.css'
@@ -22,7 +22,7 @@ type Field = { label: string; value: string }
 function Fields({ fields }: { fields: Field[] }) {
   return <div className="ofd-fields">{fields.map((f, i) => <div className="ofd-field" key={i}><span>{f.label}</span><strong>{f.value}</strong></div>)}</div>
 }
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return <section className="ofd-section"><h3 className="form-section-title">{title}</h3>{children}</section>
 }
 function GridTable({ columns, rows }: { columns: string[]; rows: string[][] }) {
