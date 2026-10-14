@@ -123,6 +123,8 @@ export function AccountingPageStorageV2() {
   const documentCount = [...selectedExpenses, ...selectedReceivables].reduce((sum, item) => sum + attachmentsOf(item).length + (demonstrativeOf(item) ? 1 : 0), 0)
   const missingAttachments = [...selectedExpenses.map((item) => ({ type: 'Despesa', item })), ...selectedReceivables.map((item) => ({ type: 'Receita', item }))].filter(({ item }) => attachmentsOf(item).length === 0)
   const missingDemonstratives = [...selectedExpenses.map((item) => ({ type: 'Despesa', item })), ...selectedReceivables.map((item) => ({ type: 'Receita', item }))].filter(({ item }) => !demonstrativeOf(item))
+  // Reavaliar depois da geração, nunca utilizar o snapshot anterior ao ZIP.
+  const currentMissingDemonstratives = () => [...selectedExpenses.map((item) => ({ type: 'Despesa', item })), ...selectedReceivables.map((item) => ({ type: 'Receita', item }))].filter(({ item }) => !demonstrativeOf(item))
 
   async function audit(action: string, detail: string, entityId?: string) {
     if (!profile) return
@@ -145,6 +147,7 @@ export function AccountingPageStorageV2() {
   }
 
   function workbookSheets(): XlsxSheet[] {
+    const pendingDemonstratives = currentMissingDemonstratives()
     const summaryRows = [
       ['FLÁVIO MARQUES ADVOGADOS ASSOCIADOS'],
       ['Movimento mensal para Contabilidade'],
@@ -153,7 +156,7 @@ export function AccountingPageStorageV2() {
       ['Receitas aptas', receivableCount], ['Total receitas', revenueTotal],
       ['Repasses de Alvarás pagos no mês', transferCount], ['Total repassado a clientes', transferTotal],
       ['Comissões de Agentes pagas no mês', commissionCount], ['Total de comissões pagas', commissionTotal],
-      ['Documentos anexados', documentCount], ['Lançamentos sem anexo', missingAttachments.length], ['Lançamentos sem demonstrativo', missingDemonstratives.length], ['Extrato consolidado', statement?.fileName || 'NÃO ANEXADO (OPCIONAL)'],
+      ['Documentos anexados', documentCount], ['Lançamentos sem anexo', missingAttachments.length], ['Lançamentos sem demonstrativo', pendingDemonstratives.length], ['Extrato consolidado', statement?.fileName || 'NÃO ANEXADO (OPCIONAL)'],
       ['Gerado por', profile?.displayName || profile?.email || 'Usuário'], ['Gerado em', dateTimeBR.format(new Date())],
     ]
     const expenseRows: (string | number)[][] = [['Competência', 'Unidade', 'Responsável', 'Fornecedor/Favorecido', 'CPF/CNPJ', 'Plano de Contas', 'Descrição da Conta', 'DRE', 'Status', 'Valor', 'Documentos', 'Demonstrativo']]
@@ -175,7 +178,7 @@ export function AccountingPageStorageV2() {
     selectedReceivables.forEach((item) => attachmentsOf(item).forEach((file) => documentRows.push(['Receita', `${item.processo ?? ''} · ${item.reclamante ?? ''}`, file.name ?? 'Documento', toNumber(file.size)])))
     const pendingRows: (string | number)[][] = [['Tipo', 'Referência', 'Valor', 'Pendência']]
     missingAttachments.forEach(({ type, item }) => pendingRows.push([type, type === 'Despesa' ? `${item.nome ?? ''} · ${item.fornecedor ?? ''}` : `${item.processo ?? ''} · ${item.reclamante ?? ''}`, type === 'Despesa' ? toNumber(item.valorTotal) : toNumber(item.valorAlvara), 'Sem documento anexado']))
-    missingDemonstratives.forEach(({ type, item }) => pendingRows.push([type, type === 'Despesa' ? `${item.nome ?? ''} · ${item.fornecedor ?? ''}` : `${item.processo ?? ''} · ${item.reclamante ?? ''}`, type === 'Despesa' ? toNumber(item.valorTotal) : toNumber(item.valorAlvara), 'Sem demonstrativo gerado']))
+    pendingDemonstratives.forEach(({ type, item }) => pendingRows.push([type, type === 'Despesa' ? `${item.nome ?? ''} · ${item.fornecedor ?? ''}` : `${item.processo ?? ''} · ${item.reclamante ?? ''}`, type === 'Despesa' ? toNumber(item.valorTotal) : toNumber(item.valorAlvara), 'Sem demonstrativo gerado']))
     if (!statement) pendingRows.push(['Extrato bancário', competence, 0, 'Extrato consolidado não anexado — opcional'])
     return [
       { name: 'Resumo', rows: summaryRows as (string | number)[][], currencyColumns: [1] },
@@ -191,17 +194,18 @@ export function AccountingPageStorageV2() {
   async function buildPackage() {
     if (totalEntries === 0) throw new Error('Nenhum lançamento apto foi encontrado para a competência e filtros selecionados.')
     setMessage('Montando planilha Excel e incorporando documentos ao ZIP...')
+    const failures: string[] = []
     for (const item of selectedExpenses) if (!demonstrativeOf(item) && ['pago', 'arquivado'].includes(String(item.status))) {
-      try { item.demonstrative = await ensureOfficialDemonstrative('expense', item, { generatedBy: profile?.uid ?? null }) } catch (error) { console.warn('Demonstrativo de despesa não gerado:', item.id, error) }
+      try { item.demonstrative = await ensureOfficialDemonstrative('expense', item, { generatedBy: profile?.uid ?? null }) } catch (error) { console.warn('Demonstrativo de despesa não gerado:', item.id, error); failures.push(`Demonstrativo despesa ${item.id}: ${String(error)}`) }
     }
     for (const item of selectedReceivables) if (!demonstrativeOf(item) && ['recebido_tesouraria', 'encerrado'].includes(String(item.status))) {
-      try { item.demonstrative = await ensureOfficialDemonstrative('revenue', item, { generatedBy: profile?.uid ?? null }) } catch (error) { console.warn('Demonstrativo de receita não gerado:', item.id, error) }
+      try { item.demonstrative = await ensureOfficialDemonstrative('revenue', item, { generatedBy: profile?.uid ?? null }) } catch (error) { console.warn('Demonstrativo de receita não gerado:', item.id, error); failures.push(`Demonstrativo receita ${item.id}: ${String(error)}`) }
     }
-    for (const plan of transfers.filter((item) => item.status === 'pago')) if (!demonstrativeOf(plan)) {
-      try { plan.demonstrative = await ensureOfficialDemonstrative('alvaraTransfer', plan, { generatedBy: profile?.uid ?? null }) } catch (error) { console.warn('Demonstrativo de repasse não gerado:', plan.id, error) }
+    for (const plan of transfers.filter((item) => Array.isArray(item.installments) && item.installments.some((p: DocumentData) => p?.paid === true))) if (!demonstrativeOf(plan)) {
+      try { plan.demonstrative = await ensureOfficialDemonstrative('alvaraTransfer', plan, { generatedBy: profile?.uid ?? null }) } catch (error) { console.warn('Demonstrativo de repasse não gerado:', plan.id, error); failures.push(`Demonstrativo repasse ${plan.id}: ${String(error)}`) }
     }
-    for (const plan of commissions.filter((item) => item.status === 'pago')) if (!demonstrativeOf(plan)) {
-      try { plan.demonstrative = await ensureOfficialDemonstrative('commission', plan, { generatedBy: profile?.uid ?? null }) } catch (error) { console.warn('Demonstrativo de comissão não gerado:', plan.id, error) }
+    for (const plan of commissions.filter((item) => Array.isArray(item.installments) && item.installments.some((p: DocumentData) => p?.paid === true))) if (!demonstrativeOf(plan)) {
+      try { plan.demonstrative = await ensureOfficialDemonstrative('commission', plan, { generatedBy: profile?.uid ?? null }) } catch (error) { console.warn('Demonstrativo de comissão não gerado:', plan.id, error); failures.push(`Demonstrativo comissão ${plan.id}: ${String(error)}`) }
     }
     const workbook = createXlsx(workbookSheets())
     const entries: Array<{ name: string; content: string | Uint8Array }> = [{ name: `Movimento_Contabilidade_${competence}_${safeName(unit)}.xlsx`, content: workbook }]
@@ -214,45 +218,48 @@ export function AccountingPageStorageV2() {
       }
     }
     for (const item of selectedExpenses) {
-      const folder = `Despesas/${safeName(String(item.competencia || 'sem-competencia'))}_${safeName(String(item.fornecedor || item.nome || item.id))}`
+      const folder = `Despesas/${safeName(String(item.competencia || 'sem-competencia'))}_${safeName(String(item.fornecedor || item.nome || 'favorecido'))}_${safeName(item.id)}`
+      entries.push({ name: `${folder}/`, content: '' })
       const demo = demonstrativeOf(item)
-      if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de despesa não incluído:', item.id, error) }
+      if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de despesa não incluído:', item.id, error); failures.push(`PDF despesa ${item.id}: ${String(error)}`) }
       for (const file of attachmentsOf(item)) try { entries.push({ name: `${folder}/${safeName(file.name || 'documento')}`, content: await bytesFromAttachment(file) }) } catch (error) { console.warn('Documento de despesa não incluído:', file, error) }
     }
     for (const item of selectedReceivables) {
-      const folder = `Receitas/${safeName(String(item.processo || item.id))}_${safeName(String(item.reclamante || 'cliente'))}`
+      const folder = `Receitas/${safeName(String(item.processo || 'sem-processo'))}_${safeName(String(item.reclamante || 'cliente'))}_${safeName(item.id)}`
       const demo = demonstrativeOf(item)
-      if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de receita não incluído:', item.id, error) }
+      if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de receita não incluído:', item.id, error); failures.push(`PDF receita ${item.id}: ${String(error)}`) }
       for (const file of attachmentsOf(item)) try { entries.push({ name: `${folder}/${safeName(file.name || 'documento')}`, content: await bytesFromAttachment(file) }) } catch (error) { console.warn('Documento de receita não incluído:', file, error) }
     }
     for (const movement of selectedTransfers) {
       const plan = transfers.find((item) => item.id === movement.planId)
       if (!plan) continue
-      const folder = `Repasses_Alvaras/${safeName(movement.process || plan.id)}_${safeName(movement.beneficiary || 'cliente')}`
+      const folder = `Repasses_Alvaras/${safeName(movement.process || 'sem-processo')}_${safeName(movement.beneficiary || 'cliente')}_parcela-${movement.installment}_${safeName(plan.id)}`
+      entries.push({ name: `${folder}/`, content: '' })
       const demo = demonstrativeOf(plan)
-      if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de repasse não incluído:', plan.id, error) }
+      if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de repasse não incluído:', plan.id, error); failures.push(`PDF repasse ${plan.id}: ${String(error)}`) }
       for (const file of attachmentsOf(plan)) try { entries.push({ name: `${folder}/${safeName(file.name || 'comprovante')}`, content: await bytesFromAttachment(file) }) } catch (error) { console.warn('Comprovante de repasse não incluído:', file, error) }
     }
     for (const movement of selectedCommissions) {
       const plan = commissions.find((item) => item.id === movement.planId)
       if (!plan) continue
-      const folder = `Comissoes/${safeName(movement.process || plan.id)}_${safeName(movement.beneficiary || 'agente')}`
+      const folder = `Comissoes/${safeName(movement.process || 'sem-processo')}_${safeName(movement.beneficiary || 'agente')}_parcela-${movement.installment}_${safeName(plan.id)}`
       const demo = demonstrativeOf(plan)
-      if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de comissão não incluído:', plan.id, error) }
+      if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de comissão não incluído:', plan.id, error); failures.push(`PDF comissão ${plan.id}: ${String(error)}`) }
       for (const file of attachmentsOf(plan)) try { entries.push({ name: `${folder}/${safeName(file.name || 'comprovante')}`, content: await bytesFromAttachment(file) }) } catch (error) { console.warn('Comprovante de comissão não incluído:', file, error) }
     }
+    if (failures.length) entries.push({ name: 'PENDENCIAS_GERACAO_DOCUMENTOS.txt', content: ['ATENÇÃO: pacote incompleto. Os documentos abaixo não foram incluídos.', 'Verifique permissões do Firebase Storage e Firestore antes de enviar à Contabilidade.', ...failures].join('\n') })
     const bytes = createZip(entries)
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-    return { blob: toBlob(bytes), fileName: `Contabilidade_${competence}_${safeName(unit)}_${stamp}.zip` }
+    return { blob: toBlob(bytes), fileName: `Contabilidade_${competence}_${safeName(unit)}_${stamp}.zip`, failures: failures.length }
   }
 
   async function downloadPackage() {
     setBusy('download'); setMessage('')
     try {
-      const { blob, fileName } = await buildPackage()
+      const { blob, fileName, failures } = await buildPackage()
       downloadBlob(blob, fileName)
       await audit('Pacote completo da Contabilidade baixado', `${competence} · ${unit} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões) · extrato ${statement ? 'anexado' : 'não anexado'}`)
-      setMessage(`ZIP completo gerado: ${fileName}${statement ? '' : ' (sem extrato bancário)'}`)
+      setMessage(failures ? `ZIP gerado com ${failures} falha(s): consulte PENDENCIAS_GERACAO_DOCUMENTOS.txt. Pacote incompleto.` : `ZIP completo gerado: ${fileName}${statement ? '' : ' (sem extrato bancário)'}`)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível gerar o ZIP.') } finally { setBusy('') }
   }
 

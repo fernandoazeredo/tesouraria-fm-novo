@@ -30,6 +30,7 @@ import { useAuth, type UserRole } from './auth/AuthContext'
 import { TreasuryPage } from './pages/SystemPages'
 import { ReceivablesPageStorageV2 } from './pages/ReceivablesPageStorageV2'
 import { ExpensesPageStorage } from './pages/ExpensesPageStorage'
+import { ExpenseSettlementPanel } from './components/ExpenseSettlementPanel'
 import { AccountsPageFernando } from './pages/AccountsPageFernando'
 import { DocumentsPageStorage } from './pages/DocumentsPageStorage'
 import { DashboardPageEnhanced } from './pages/DashboardPageEnhanced'
@@ -286,7 +287,7 @@ function AppShell() {
       <main className="main-content">
         <Routes>
           <Route path="/" element={<DashboardPageEnhanced />} />
-          <Route path="/despesas" element={<ExpensesPageStorage />} />
+          <Route path="/despesas" element={<><ExpensesPageStorage /><ExpenseSettlementPanel /></>} />
           <Route path="/alvaras" element={<ReceivablesPageStorageV2 />} />
           <Route path="/repasse-alvaras" element={<AlvaraTransfersPageV3 />} />
           <Route path="/repasse-societario" element={<SocietaryTransfersPage />} />

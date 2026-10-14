@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, type DocumentData } from 'firebase/firestore'
+import { getDownloadURL, ref as storageRef } from 'firebase/storage'
+import { storage } from '../lib/firebase'
 import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink, FileText, Paperclip, RefreshCw } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { isEffectiveAlvaraReceivable } from '../lib/receivableClassification'
@@ -50,8 +52,22 @@ function fileName(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'demonstrativo'
 }
 
-function demonstrativeUrl(item: AnyRecord) {
-  return String(item.demonstrative?.url || item.demonstrativeUrl || '')
+function DemonstrativeLink({ item }: { item: AnyRecord }) {
+  const storedUrl = String(item.demonstrative?.url || item.demonstrativeUrl || '')
+  const path = String(item.demonstrative?.path || item.demonstrativePath || '')
+  const [url, setUrl] = useState(storedUrl)
+  useEffect(() => {
+    setUrl(storedUrl)
+    if (storedUrl || !path) return
+    let alive = true
+    getDownloadURL(storageRef(storage, path)).then((resolved) => {
+      if (alive) setUrl(resolved)
+    }).catch((error) => console.warn('Demonstrativo do calendário indisponível:', path, error))
+    return () => { alive = false }
+  }, [path, storedUrl])
+  return url
+    ? <a href={url} target="_blank" rel="noreferrer"><FileText size={14} /> Demonstrativo</a>
+    : <span><FileText size={14} /> Demonstrativo pendente</span>
 }
 
 function ExpenseMovement({ item }: { item: AnyRecord }) {
@@ -62,7 +78,7 @@ function ExpenseMovement({ item }: { item: AnyRecord }) {
       <b>{money.format(toNumber(item.valorTotal))}</b>
     </div>
     <div className="financial-document-row">
-      {demonstrativeUrl(item) ? <a href={demonstrativeUrl(item)} target="_blank" rel="noreferrer"><FileText size={14} /> Demonstrativo</a> : <span><FileText size={14} /> Demonstrativo pendente</span>}
+      <DemonstrativeLink item={item} />
       {attachments.map((file, index) => file.url ? <a key={file.path || `${file.name}-${index}`} href={file.url} target="_blank" rel="noreferrer"><Paperclip size={13} /> {file.name || `Documento ${index + 1}`} <ExternalLink size={11} /></a> : null)}
     </div>
   </article>
@@ -76,7 +92,7 @@ function RevenueMovement({ item }: { item: AnyRecord }) {
       <b>{money.format(toNumber(item.valorAlvara || item.valorLiquidoCliente))}</b>
     </div>
     <div className="financial-document-row">
-      {demonstrativeUrl(item) ? <a href={demonstrativeUrl(item)} target="_blank" rel="noreferrer"><FileText size={14} /> Demonstrativo</a> : <span><FileText size={14} /> Demonstrativo pendente</span>}
+      <DemonstrativeLink item={item} />
       {attachments.map((file, index) => file.url ? <a key={file.path || `${file.name}-${index}`} href={file.url} target="_blank" rel="noreferrer"><Paperclip size={13} /> {file.name || `Documento ${index + 1}`} <ExternalLink size={11} /></a> : null)}
     </div>
   </article>
@@ -92,7 +108,7 @@ function PayoutMovementCard({ item }: { item: PayoutMovement }) {
       <b>{money.format(item.value)}</b>
     </div>
     <div className="financial-document-row">
-      {demonstrativeUrl(item.record) ? <a href={demonstrativeUrl(item.record)} target="_blank" rel="noreferrer"><FileText size={14} /> Demonstrativo</a> : <span><FileText size={14} /> Demonstrativo pendente</span>}
+      <DemonstrativeLink item={item.record} />
       {attachments.map((file, index) => file.url ? <a key={file.path || `${file.name}-${index}`} href={file.url} target="_blank" rel="noreferrer"><Paperclip size={13} /> {file.name || `Comprovante ${index + 1}`} <ExternalLink size={11} /></a> : null)}
     </div>
   </article>

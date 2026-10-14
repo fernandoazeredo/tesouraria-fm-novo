@@ -1,0 +1,32 @@
+name: Deploy Storage Rules - Tesouraria FM
+on:
+  push:
+    branches:
+      - dev-fm-2026-09-08
+  workflow_dispatch:
+
+jobs:
+  deploy-storage-rules:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[deploy-firebase]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout do repositorio
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Autenticacao no projeto Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TESOURARIA_FM_NOVO }}
+
+      - name: Instalar Firebase CLI
+        run: npm install --global firebase-tools
+
+      - name: Publicar regras do Firebase Storage
+        run: firebase deploy --only storage --project tesouraria-fm-novo --non-interactive
