@@ -177,6 +177,14 @@ export function AccountingPageStorageV2() {
     const documentRows: (string | number)[][] = [['Tipo', 'Referência', 'Arquivo', 'Tamanho (bytes)']]
     selectedExpenses.forEach((item) => attachmentsOf(item).forEach((file) => documentRows.push(['Despesa', `${item.nome ?? ''} · ${item.fornecedor ?? ''}`, file.name ?? 'Documento', toNumber(file.size)])))
     selectedReceivables.forEach((item) => attachmentsOf(item).forEach((file) => documentRows.push(['Receita', `${item.processo ?? ''} · ${item.reclamante ?? ''}`, file.name ?? 'Documento', toNumber(file.size)])))
+    selectedTransfers.forEach((item) => {
+      const plan = transfers.find((record) => record.id === item.planId)
+      if (plan) attachmentsOf(plan).forEach((file) => documentRows.push(['Repasse de Alvará', `${item.process} · Parcela ${item.installment}`, file.name ?? 'Comprovante', toNumber(file.size)]))
+    })
+    selectedCommissions.forEach((item) => {
+      const plan = commissions.find((record) => record.id === item.planId)
+      if (plan) attachmentsOf(plan).forEach((file) => documentRows.push(['Comissão de Agente', `${item.process} · Parcela ${item.installment}`, file.name ?? 'Comprovante', toNumber(file.size)]))
+    })
     const pendingRows: (string | number)[][] = [['Tipo', 'Referência', 'Valor', 'Pendência']]
     packageIssues.forEach((issue) => pendingRows.push([issue.type, issue.reference, issue.value, issue.reason]))
     return [
