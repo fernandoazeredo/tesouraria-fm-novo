@@ -239,6 +239,13 @@ export function AccountingPageStorageV2() {
       if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de repasse não incluído:', plan.id, error); failures.push(`PDF repasse ${plan.id}: ${String(error)}`) }
       for (const file of attachmentsOf(plan)) try { entries.push({ name: `${folder}/${safeName(file.name || 'comprovante')}`, content: await bytesFromAttachment(file) }) } catch (error) { console.warn('Comprovante de repasse não incluído:', file, error) }
     }
+    // A pasta de Comissões deve estar sempre presente no pacote contábil.
+    // Quando não houver comissão efetivamente paga nos filtros, declarar isso
+    // explicitamente, sem fabricar um lançamento ou documento financeiro.
+    entries.push({ name: 'Comissoes/', content: '' })
+    if (selectedCommissions.length === 0) {
+      entries.push({ name: 'Comissoes/SEM_COMISSOES_PAGAS_NA_COMPETENCIA.txt', content: `Nenhuma comissão paga encontrada para a competência ${competence}, unidade ${unit} e movimento ${movement}. Verifique os filtros de competência e a data efetiva de pagamento.` })
+    }
     for (const movement of selectedCommissions) {
       const plan = commissions.find((item) => item.id === movement.planId)
       if (!plan) continue
