@@ -192,12 +192,14 @@ export function FinancialCalendarPage() {
     const operations = new Map<string, CreditOperation>()
     for (const source of receivables) operations.set(source.id, { source, transfers: [], commissions: [] })
     for (const plan of alvaraTransfers) {
+      if (!Array.isArray(plan.installments) || !plan.installments.some((row: DocumentData) => row?.paid === true)) continue
       const source = receivableForFinancialPlan(plan, receivables)
       const key = source?.id || 'alvara:' + plan.id
       if (!operations.has(key)) operations.set(key, { source, transfers: [], commissions: [] })
       operations.get(key)!.transfers.push(plan)
     }
     for (const plan of commissions) {
+      if (!Array.isArray(plan.installments) || !plan.installments.some((row: DocumentData) => row?.paid === true)) continue
       const source = receivableForFinancialPlan(plan, receivables)
       const key = source?.id || 'commission:' + plan.id
       if (!operations.has(key)) operations.set(key, { source, transfers: [], commissions: [] })
