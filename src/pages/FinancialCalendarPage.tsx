@@ -98,7 +98,6 @@ function ExpenseMovement({ item }: { item: AnyRecord }) {
     </div>
     <div className="financial-document-row">
       <DemonstrativeLink item={item} />
-      <OfficialFinancialDocumentPreviewButton kind="revenue" record={item} />
       <OfficialFinancialDocumentPreviewButton kind="expense" record={item} />
       {attachments.map((file, index) => <AttachmentLink key={file.path || `${file.name}-${index}`} file={file} index={index} />)}
     </div>
@@ -114,6 +113,7 @@ function RevenueMovement({ item }: { item: AnyRecord }) {
     </div>
     <div className="financial-document-row">
       <DemonstrativeLink item={item} />
+      <OfficialFinancialDocumentPreviewButton kind="revenue" record={item} />
       {attachments.map((file, index) => <AttachmentLink key={file.path || `${file.name}-${index}`} file={file} index={index} />)}
     </div>
   </article>
