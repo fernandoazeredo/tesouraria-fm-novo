@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { collection, onSnapshot, type DocumentData } from 'firebase/firestore'
 import { getDownloadURL, ref as storageRef } from 'firebase/storage'
 import { storage } from '../lib/firebase'
+import { OfficialFinancialDocumentPreviewButton } from '../components/OfficialFinancialDocument'
 import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink, FileText, Paperclip, RefreshCw } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { isEffectiveAlvaraReceivable } from '../lib/receivableClassification'
@@ -97,6 +98,8 @@ function ExpenseMovement({ item }: { item: AnyRecord }) {
     </div>
     <div className="financial-document-row">
       <DemonstrativeLink item={item} />
+      <OfficialFinancialDocumentPreviewButton kind="revenue" record={item} />
+      <OfficialFinancialDocumentPreviewButton kind="expense" record={item} />
       {attachments.map((file, index) => <AttachmentLink key={file.path || `${file.name}-${index}`} file={file} index={index} />)}
     </div>
   </article>
@@ -127,6 +130,7 @@ function PayoutMovementCard({ item }: { item: PayoutMovement }) {
     </div>
     <div className="financial-document-row">
       <DemonstrativeLink item={item.record} />
+      <OfficialFinancialDocumentPreviewButton kind={item.kind === 'Comissão de Agente' ? 'commission' : item.kind === 'Repasse Societário' ? 'societaryTransfer' : 'alvaraTransfer'} record={item.record} />
       {attachments.map((file, index) => <AttachmentLink key={file.path || `${file.name}-${index}`} file={file} index={index} />)}
     </div>
   </article>
