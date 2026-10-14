@@ -91,9 +91,6 @@ export function OfficialFinancialDocument({ kind, record, emittedAt }: { kind: O
           { label: 'Competência', value: val(r.competencia) }, { label: 'Unidade', value: val(r.unidade) },
           { label: 'Responsável', value: val(r.nome) }, { label: 'Fornecedor / Favorecido', value: val(r.fornecedor) },
           { label: 'CPF / CNPJ', value: val(r.documento) },
-          { label: 'Plano de Contas', value: val(r.expenseAccountCode || r.classificacaoContabil) },
-          { label: 'Descrição da Conta', value: val(r.expenseAccountName || r.categoria) },
-          { label: 'DRE', value: val(r.expenseAccountDre) },
         ]} />
       </Section>
       <Section title="Itens da Despesa">

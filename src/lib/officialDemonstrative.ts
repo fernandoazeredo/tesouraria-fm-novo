@@ -202,7 +202,7 @@ function pathFor(kind: DemonstrativeKind, id: string) {
     commission: 'comissoes',
     societaryTransfer: 'repasses-societarios',
   }[kind]
-  return `demonstrativos/${folder}/${id}/v3/demonstrativo.pdf`
+  return `demonstrativos/${folder}/${id}/${kind === 'expense' ? 'v4' : 'v3'}/demonstrativo.pdf`
 }
 
 export async function ensureOfficialDemonstrative(
@@ -211,7 +211,7 @@ export async function ensureOfficialDemonstrative(
   options?: { collectionName?: string; generatedBy?: string | null },
 ): Promise<DemonstrativeMeta> {
   const existing = record.demonstrative as DemonstrativeMeta | undefined
-  if (existing?.path && existing?.url && existing.layoutVersion === 3) return existing
+  if (existing?.path && existing?.url && existing.layoutVersion === (kind === 'expense' ? 4 : 3)) return existing
 
   const collectionName = options?.collectionName || ({
     expense: 'expenses',
@@ -248,7 +248,7 @@ export async function ensureOfficialDemonstrative(
     generatedAt,
     generatedBy: options?.generatedBy ?? null,
     kind,
-    layoutVersion: 3,
+    layoutVersion: kind === 'expense' ? 4 : 3,
   }
 
   await updateDoc(doc(db, collectionName, record.id), {

@@ -87,8 +87,8 @@ export function AccountingPageStorageV2() {
   const receivables = useLiveCollection('receivables')
   const transfers = useLiveCollection('alvaraTransfers')
   const commissions = useLiveCollection('agentCommissions')
+  const societaryTransfers = useLiveCollection('societaryTransfers')
   const dispatches = useLiveCollection('accountingDispatches')
-  const classifications = useLiveCollection('managerialClassifications')
   const statements = useLiveCollection('bankStatements')
   const [competence, setCompetence] = useState(new Date().toISOString().slice(0, 7))
   const [unit, setUnit] = useState('Todas')
@@ -100,6 +100,11 @@ export function AccountingPageStorageV2() {
   const finishedReceivables = useMemo(() => receivables.filter((item) => ['recebido_tesouraria', 'encerrado'].includes(String(item.status)) && String(item.data ?? '').slice(0, 7) === competence && (unit === 'Todas' || item.unidade === unit)), [receivables, competence, unit])
   const paidTransfers = useMemo(() => paidMovements(transfers, 'Repasse de Alvará', competence, unit), [transfers, competence, unit])
   const paidCommissions = useMemo(() => paidMovements(commissions, 'Comissão de Agente', competence, unit), [commissions, competence, unit])
+  const paidSocietary = useMemo(() => societaryTransfers.filter((item) => {
+    if (item.status !== 'pago' || String(item.paymentDate || '').slice(0, 7) !== competence) return false
+    const source = receivableForFinancialPlan(item, receivables)
+    return unit === 'Todas' || String(source?.unidade || item.unidade || '') === unit
+  }), [societaryTransfers, receivables, competence, unit])
 
   const includeExpenses = movement === 'Movimento completo' || movement === 'Somente Despesas'
   const includeReceivables = movement === 'Movimento completo' || movement === 'Somente Recebimentos'
@@ -108,20 +113,23 @@ export function AccountingPageStorageV2() {
   const selectedReceivables = includeReceivables ? finishedReceivables : []
   const selectedTransfers = includePayouts ? paidTransfers : []
   const selectedCommissions = includePayouts ? paidCommissions : []
+  const selectedSocietary = includePayouts ? paidSocietary : []
 
   const expenseCount = selectedExpenses.length
   const receivableCount = selectedReceivables.length
   const transferCount = selectedTransfers.length
   const commissionCount = selectedCommissions.length
+  const societaryCount = selectedSocietary.length
   const expenseTotal = selectedExpenses.reduce((sum, item) => sum + toNumber(item.valorTotal), 0)
   const revenueTotal = selectedReceivables.reduce((sum, item) => sum + toNumber(item.valorAlvara), 0)
   const transferTotal = selectedTransfers.reduce((sum, item) => sum + item.value, 0)
   const commissionTotal = selectedCommissions.reduce((sum, item) => sum + item.value, 0)
-  const totalEntries = expenseCount + receivableCount + transferCount + commissionCount
+  const societaryTotal = selectedSocietary.reduce((sum, item) => sum + toNumber(item.paidValue || item.transferValue), 0)
+  const totalEntries = expenseCount + receivableCount + transferCount + commissionCount + societaryCount
   const orderedDispatches = [...dispatches].sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0))
   const statementId = `${competence}__${unit}`
   const statement = statements.find((item) => item.id === statementId) ?? null
-  const classificationMap = useMemo(() => new Map(classifications.map((item) => [item.id, item])), [classifications])
+  // Classificacoes e indicadores gerenciais permanecem apenas nos modulos internos.
   const documentCount = [...selectedExpenses, ...selectedReceivables].reduce((sum, item) => sum + attachmentsOf(item).length + (demonstrativeOf(item) ? 1 : 0), 0)
   const missingAttachments = [...selectedExpenses.map((item) => ({ type: 'Despesa', item })), ...selectedReceivables.map((item) => ({ type: 'Receita', item }))].filter(({ item }) => attachmentsOf(item).length === 0)
   const missingDemonstratives = [...selectedExpenses.map((item) => ({ type: 'Despesa', item })), ...selectedReceivables.map((item) => ({ type: 'Receita', item }))].filter(({ item }) => !demonstrativeOf(item))
@@ -167,6 +175,7 @@ export function AccountingPageStorageV2() {
       const plan = commissions.find((r) => r.id === item.planId)
       if (plan) paths.set('commission:' + plan.id, accountingPath(creditFolderOfPlan(plan)))
     }
+    for (const item of selectedSocietary) paths.set('societary:' + item.id, accountingPath(creditFolderOfPlan(item)))
     return paths
   }
 
@@ -177,27 +186,31 @@ export function AccountingPageStorageV2() {
       ['FLÁVIO MARQUES ADVOGADOS ASSOCIADOS'],
       ['Movimento mensal para Contabilidade'],
       ['Competência', competence], ['Unidade', unit], ['Movimento', movement],
-      ['Despesas aptas', expenseCount], ['Total despesas', expenseTotal],
-      ['Receitas aptas', receivableCount], ['Total receitas', revenueTotal],
-      ['Repasses de Alvarás pagos no mês', transferCount], ['Total repassado a clientes', transferTotal],
-      ['Comissões de Agentes pagas no mês', commissionCount], ['Total de comissões pagas', commissionTotal],
+      ['Despesas aptas', expenseCount],
+      ['Receitas aptas', receivableCount],
+      ['Repasses de Alvarás pagos no mês', transferCount],
+      ['Comissões de Agentes pagas no mês', commissionCount],
+      ['Repasses Societários pagos no mês', societaryCount],
       ['Documentos anexados', documentCount], ['Lançamentos sem anexo', packageIssues.filter((issue) => issue.reason.toLowerCase().includes('comprovan')).length], ['Lançamentos sem demonstrativo', pendingDemonstratives.length], ['Extrato consolidado', statement?.fileName || 'NÃO ANEXADO (OPCIONAL)'],
       ['Gerado por', profile?.displayName || profile?.email || 'Usuário'], ['Gerado em', dateTimeBR.format(new Date())],
     ]
-    const expenseRows: (string | number)[][] = [['Competência', 'Unidade', 'Responsável', 'Fornecedor/Favorecido', 'CPF/CNPJ', 'Plano de Contas', 'Descrição da Conta', 'DRE', 'Status', 'Valor', 'Documentos', 'Demonstrativo', 'Pasta da Operação']]
+    const expenseRows: (string | number)[][] = [['Competência', 'Unidade', 'Responsável', 'Fornecedor/Favorecido', 'CPF/CNPJ', 'Status', 'Valor', 'Documentos', 'Demonstrativo', 'Pasta da Operação']]
     for (const item of selectedExpenses) {
-      const classification = classificationMap.get(`expense__${item.id}`)
-      expenseRows.push([item.competencia ?? '', item.unidade ?? '', item.nome ?? '', item.fornecedor ?? '', item.documento ?? '', classification?.accountCode ?? item.expenseAccountCode ?? item.classificacaoContabil ?? '', classification?.accountName ?? item.expenseAccountName ?? '', classification?.accountDre ?? item.expenseAccountDre ?? '', statusLabel(String(item.status ?? '')), toNumber(item.valorTotal), attachmentsOf(item).length, demonstrativeOf(item)?.path ?? '', paths.get('expense:' + item.id) || ''])
+      expenseRows.push([item.competencia ?? '', item.unidade ?? '', item.nome ?? '', item.fornecedor ?? '', item.documento ?? '', statusLabel(String(item.status ?? '')), toNumber(item.valorTotal), attachmentsOf(item).length, demonstrativeOf(item)?.path ?? '', paths.get('expense:' + item.id) || ''])
     }
-    const revenueRows: (string | number)[][] = [['Data', 'Unidade', 'Processo', 'Reclamante', 'Reclamada', 'Origem', 'Plano de Contas', 'Descrição da Conta', 'DRE', 'Status', 'Valor do Alvará', 'Líquido Cliente', 'Honorários Escritório', 'Comissão', 'Documentos', 'Demonstrativo', 'Pasta da Operação']]
+    const revenueRows: (string | number)[][] = [['Data', 'Unidade', 'Processo', 'Reclamante', 'Reclamada', 'Origem', 'Status', 'Valor do Alvará', 'Líquido Cliente', 'Honorários Escritório', 'Comissão', 'Documentos', 'Demonstrativo', 'Pasta da Operação']]
     for (const item of selectedReceivables) {
-      const classification = classificationMap.get(`revenue__${item.id}`)
-      revenueRows.push([item.data ?? '', item.unidade ?? '', item.processo ?? '', item.reclamante ?? '', item.reclamada ?? '', item.origem ?? '', classification?.accountCode ?? item.revenueAccountCode ?? item.classificacaoContabil ?? '', classification?.accountName ?? item.revenueAccountName ?? '', classification?.accountDre ?? item.revenueAccountDre ?? '', statusLabel(String(item.status ?? '')), toNumber(item.valorAlvara), toNumber(item.valorLiquidoCliente), revenueComponentValue(item, 'Honorários do Escritório'), revenueComponentValue(item, 'Outras Deduções / Participações'), attachmentsOf(item).length, demonstrativeOf(item)?.path ?? '', paths.get('revenue:' + item.id) || ''])
+      revenueRows.push([item.data ?? '', item.unidade ?? '', item.processo ?? '', item.reclamante ?? '', item.reclamada ?? '', item.origem ?? '', statusLabel(String(item.status ?? '')), toNumber(item.valorAlvara), toNumber(item.valorLiquidoCliente), revenueComponentValue(item, 'Honorários do Escritório'), revenueComponentValue(item, 'Outras Deduções / Participações'), attachmentsOf(item).length, demonstrativeOf(item)?.path ?? '', paths.get('revenue:' + item.id) || ''])
     }
     const transferRows: (string | number)[][] = [['Data do Pagamento', 'Unidade', 'Processo', 'Cliente / Beneficiário', 'Parcela', 'Valor', 'Natureza', 'Pasta da Operação']]
-    selectedTransfers.forEach((item) => transferRows.push([item.paidDate, item.unit, item.process, item.beneficiary, item.installment, item.value, 'Repasse de valor de terceiro — não classificar como despesa operacional/DRE', paths.get('transfer:' + item.planId) || '']))
+    selectedTransfers.forEach((item) => transferRows.push([item.paidDate, item.unit, item.process, item.beneficiary, item.installment, item.value, 'Repasse de valor de terceiro — não classificar como despesa operacional', paths.get('transfer:' + item.planId) || '']))
     const commissionRows: (string | number)[][] = [['Data do Pagamento', 'Unidade', 'Processo', 'Agente / Beneficiário', 'Parcela', 'Valor', 'Natureza', 'Pasta da Operação']]
     selectedCommissions.forEach((item) => commissionRows.push([item.paidDate, item.unit, item.process, item.beneficiary, item.installment, item.value, 'Comissão / participação vinculada ao Alvará', paths.get('commission:' + item.planId) || '']))
+    const societaryRows: (string | number)[][] = [['Data do Pagamento', 'Unidade', 'Processo', 'Reclamante', 'Beneficiário', 'Valor Pago', 'Status', 'Pasta da Operação']]
+    selectedSocietary.forEach((item) => {
+      const source = sourceOfPlan(item)
+      societaryRows.push([item.paymentDate ?? '', source?.unidade ?? item.unidade ?? '', item.processo ?? '', item.reclamante ?? source?.reclamante ?? '', item.beneficiary ?? '', toNumber(item.paidValue || item.transferValue), statusLabel(String(item.status)), paths.get('societary:' + item.id) || ''])
+    })
     const documentRows: (string | number)[][] = [['Tipo', 'Referência', 'Arquivo', 'Tamanho (bytes)', 'Pasta da Operação']]
     selectedExpenses.forEach((item) => attachmentsOf(item).forEach((file) => documentRows.push(['Despesa', `${item.nome ?? ''} · ${item.fornecedor ?? ''}`, file.name ?? 'Documento', toNumber(file.size), paths.get('expense:' + item.id) || ''])))
     selectedReceivables.forEach((item) => attachmentsOf(item).forEach((file) => documentRows.push(['Receita', `${item.processo ?? ''} · ${item.reclamante ?? ''}`, file.name ?? 'Documento', toNumber(file.size), paths.get('revenue:' + item.id) || ''])))
@@ -209,16 +222,18 @@ export function AccountingPageStorageV2() {
       const plan = commissions.find((record) => record.id === item.planId)
       if (plan) attachmentsOf(plan).forEach((file) => documentRows.push(['Comissão de Agente', `${item.process} · Parcela ${item.installment}`, file.name ?? 'Comprovante', toNumber(file.size), paths.get('commission:' + item.planId) || '']))
     })
+    selectedSocietary.forEach((item) => attachmentsOf(item).forEach((file) => documentRows.push(['Repasse Societário', String(item.processo || item.id), file.name ?? 'Comprovante', toNumber(file.size), paths.get('societary:' + item.id) || ''])))
     const operationRows: (string | number)[][] = [['Operação', 'Pasta da Operação']]
     for (const [key, folder] of paths) operationRows.push([key, folder])
     const pendingRows: (string | number)[][] = [['Tipo', 'Referência', 'Valor', 'Pendência']]
     packageIssues.forEach((issue) => pendingRows.push([issue.type, issue.reference, issue.value, issue.reason]))
     return [
       { name: 'Resumo', rows: summaryRows as (string | number)[][], currencyColumns: [1] },
-      { name: 'Despesas', rows: expenseRows, currencyColumns: [9] },
-      { name: 'Receitas', rows: revenueRows, currencyColumns: [10, 11, 12, 13] },
+      { name: 'Despesas', rows: expenseRows, currencyColumns: [6] },
+      { name: 'Receitas', rows: revenueRows, currencyColumns: [7, 8, 9, 10] },
       { name: 'Repasses_Alvaras', rows: transferRows, currencyColumns: [5] },
       { name: 'Comissoes_Agentes', rows: commissionRows, currencyColumns: [5] },
+      { name: 'Repasses_Societarios', rows: societaryRows, currencyColumns: [5] },
       { name: 'Documentos', rows: documentRows },
       { name: 'Operacoes', rows: operationRows },
       { name: 'Pendencias', rows: pendingRows, currencyColumns: [2] },
@@ -240,6 +255,7 @@ export function AccountingPageStorageV2() {
       source: AnyRecord | null
       transfers: Map<string, AnyRecord>
       commissions: Map<string, AnyRecord>
+      societary: Map<string, AnyRecord>
       transferPayments: PaidMovement[]
       commissionPayments: PaidMovement[]
     }
@@ -253,7 +269,7 @@ export function AccountingPageStorageV2() {
           processo: plan?.processo || plan?.sourceSnapshot?.processo,
           reclamante: plan?.sourceSnapshot?.reclamante,
         }
-        group = { folder: creditFolder(fallback), source, transfers: new Map(), commissions: new Map(), transferPayments: [], commissionPayments: [] }
+        group = { folder: creditFolder(fallback), source, transfers: new Map(), commissions: new Map(), societary: new Map(), transferPayments: [], commissionPayments: [] }
         credits.set(key, group)
       }
       return group
@@ -283,6 +299,12 @@ export function AccountingPageStorageV2() {
       group.commissions.set(plan.id, plan)
       group.commissionPayments.push(movement)
     }
+    for (const plan of selectedSocietary) {
+      const source = sourceOfPlan(plan)
+      const group = groupFor(source, plan, 'societario')
+      if (!source) addIssue('Repasse Societário', String(plan.processo || plan.id), toNumber(plan.paidValue || plan.transferValue), 'Receita de origem não identificada unicamente; operação mantida separada')
+      group.societary.set(plan.id, plan)
+    }
     // Todos os comprovantes de uma operação convivem no mesmo diretório.
     async function addProofs(
       record: AnyRecord, folder: string, label: string, reference: string, amount: number,
@@ -290,7 +312,7 @@ export function AccountingPageStorageV2() {
     ) {
       const files = attachmentsOf(record)
       if (!files.length) {
-        addIssue(label, reference, amount, prefix.startsWith('repasse_') ? 'Comprovante de pagamento ao cliente não anexado' : prefix.startsWith('comissao_') ? 'Comprovante de pagamento da comissão não anexado' : 'Sem comprovante/anexo registrado para ' + prefix)
+        addIssue(label, reference, amount, prefix.startsWith('repasse_') ? 'Comprovante de pagamento ao cliente não anexado' : prefix.startsWith('comissao_') ? 'Comprovante de pagamento da comissão não anexado' : prefix.startsWith('repasse_societario') ? 'Comprovante de pagamento do repasse societário não anexado' : 'Sem comprovante/anexo registrado para ' + prefix)
         return
       }
       for (let i = 0; i < files.length; i += 1) {
@@ -301,14 +323,14 @@ export function AccountingPageStorageV2() {
         try {
           const content = await bytesFromAttachment(file)
           if (!content.byteLength) throw new Error('arquivo vazio')
-          entries.push({ name: root + folder + '/comprovantes/' + safeName(prefix) + '_' + String(i + 1).padStart(2, '0') + '_' + safeName(String(file.name || 'comprovante')), content })
+          entries.push({ name: root + folder + '/comprovantes/' + (prefix.startsWith('repasse_societario') ? 'repasse_societario/' : '') + safeName(prefix) + '_' + String(i + 1).padStart(2, '0') + '_' + safeName(String(file.name || 'comprovante')), content })
         } catch (error) {
           addIssue(label, reference, amount, 'Comprovante ' + String(file.name || i + 1) + ' indisponível: ' + String(error))
         }
       }
     }
     async function addPdf(
-      record: AnyRecord, kind: 'expense' | 'revenue' | 'alvaraTransfer' | 'commission',
+      record: AnyRecord, kind: 'expense' | 'revenue' | 'alvaraTransfer' | 'commission' | 'societaryTransfer',
       folder: string, fileName: string, label: string, reference: string, amount: number, finalStatus: boolean,
     ) {
       if (!finalStatus) {
@@ -316,14 +338,18 @@ export function AccountingPageStorageV2() {
         return
       }
       let pdf = demonstrativeOf(record)
-      if (!pdf || Number(record.demonstrative?.layoutVersion ?? 0) < 3) {
+      const requiredLayoutVersion = kind === 'expense' ? 4 : 3
+      if (!pdf || Number(record.demonstrative?.layoutVersion ?? 0) < requiredLayoutVersion) {
         try {
           record.demonstrative = await ensureOfficialDemonstrative(kind, record, { generatedBy: profile?.uid ?? null })
           pdf = demonstrativeOf(record)
         } catch (error) {
-          addIssue(label, reference, amount, 'Falha ao gerar demonstrativo: ' + String(error))
+          // Não exportar versão antiga de despesa com classificações internas.
+          pdf = null
+          addIssue(label, reference, amount, 'Falha ao gerar demonstrativo atualizado: ' + String(error))
         }
       }
+      if (kind === 'expense' && Number(record.demonstrative?.layoutVersion ?? 0) < 4) pdf = null
       if (!pdf) {
         addIssue(label, reference, amount, 'Demonstrativo ausente')
         return
@@ -344,7 +370,7 @@ export function AccountingPageStorageV2() {
     }
     for (const group of credits.values()) {
       const source = group.source
-      const reference = String(source?.processo || group.transferPayments[0]?.process || group.commissionPayments[0]?.process || group.folder)
+      const reference = String(source?.processo || group.transferPayments[0]?.process || group.commissionPayments[0]?.process || [...group.societary.values()][0]?.processo || group.folder)
       const seen = new Set<string>()
       if (source) {
         await addPdf(source, 'revenue', group.folder, '01_demonstrativo_receita.pdf', 'Receita', reference, toNumber(source.valorAlvara), ['recebido_tesouraria', 'encerrado'].includes(String(source.status)))
@@ -367,6 +393,12 @@ export function AccountingPageStorageV2() {
         const paid = Array.isArray(plan.installments) && plan.installments.some((item: DocumentData) => item?.paid === true)
         await addPdf(plan, 'commission', group.folder, fileName, 'Comissão', reference, amount, paid)
         await addProofs(plan, group.folder, 'Comissão', reference, amount, seen, 'comissao_' + safeName(plan.id))
+      }
+      for (const plan of group.societary.values()) {
+        const amount = toNumber(plan.paidValue || plan.transferValue)
+        const suffix = group.societary.size > 1 ? '_' + safeName(plan.id) : ''
+        await addPdf(plan, 'societaryTransfer', group.folder, '04_demonstrativo_repasse_societario' + suffix + '.pdf', 'Repasse Societário', reference, amount, String(plan.status) === 'pago')
+        await addProofs(plan, group.folder, 'Repasse Societário', reference, amount, seen, 'repasse_societario_' + safeName(plan.id))
       }
     }
     if (statement?.storagePath) {
@@ -398,7 +430,7 @@ export function AccountingPageStorageV2() {
     try {
       const { blob, fileName, failures } = await buildPackage()
       downloadBlob(blob, fileName)
-      await audit(failures ? 'Pacote da Contabilidade com pendências baixado' : 'Pacote completo da Contabilidade baixado', `${competence} · ${unit} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões) · extrato ${statement ? 'anexado' : 'não anexado'}`)
+      await audit(failures ? 'Pacote da Contabilidade com pendências baixado' : 'Pacote completo da Contabilidade baixado', `${competence} · ${unit} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões) · ${societaryCount} repasse(s) societário(s) · extrato ${statement ? 'anexado' : 'não anexado'}`)
       setMessage(failures ? `ZIP gerado com ${failures} falha(s): consulte Contabilidade_${competence}/Pendencias/RELATORIO_DE_PENDENCIAS.txt. Pacote incompleto.` : `ZIP completo gerado: ${fileName}${statement ? '' : ' (sem extrato bancário)'}`)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível gerar o ZIP.') } finally { setBusy('') }
   }
@@ -408,19 +440,19 @@ export function AccountingPageStorageV2() {
     if (!window.confirm(`Registrar o movimento ${competence} como enviado à Contabilidade?`)) return
     setBusy('send'); setMessage('')
     try {
-      const ref = await addDoc(collection(db, 'accountingDispatches'), { competence, unit, movement, expenseCount, receivableCount, transferCount, commissionCount, expenseTotal, revenueTotal, transferTotal, commissionTotal, documentCount, bankStatement: statement?.fileName ?? null, status: 'enviado', sentBy: profile?.uid, sentByName: profile?.displayName, sentByEmail: profile?.email, createdAt: serverTimestamp() })
-      await audit('Movimento registrado como enviado à Contabilidade', `${competence} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões)`, ref.id)
+      const ref = await addDoc(collection(db, 'accountingDispatches'), { competence, unit, movement, expenseCount, receivableCount, transferCount, commissionCount, societaryCount, expenseTotal, revenueTotal, transferTotal, commissionTotal, societaryTotal, documentCount, bankStatement: statement?.fileName ?? null, status: 'enviado', sentBy: profile?.uid, sentByName: profile?.displayName, sentByEmail: profile?.email, createdAt: serverTimestamp() })
+      await audit('Movimento registrado como enviado à Contabilidade', `${competence} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões) · ${societaryCount} repasse(s) societário(s)`, ref.id)
       setMessage('Movimento registrado com sucesso no histórico.')
     } catch (error) { console.error(error); setMessage('Não foi possível registrar o envio.') } finally { setBusy('') }
   }
 
   return <>
-    <div className="page-heading"><div><span className="eyebrow">Fechamento mensal</span><h1>Contabilidade</h1><p>Pacote mensal por competência real: receitas no mês do recebimento e repasses/comissões no mês do pagamento efetivo.</p></div></div>
+    <div className="page-heading"><div><span className="eyebrow">Fechamento mensal</span><h1>Contabilidade</h1><p>Pacote mensal por competência real: receitas no mês do recebimento e repasses, comissões e repasses societários no mês do pagamento efetivo.</p></div></div>
     <section className="page-card accounting-panel">
       <div className="accounting-config"><label><span>Competência</span><input type="month" value={competence} onChange={(e) => setCompetence(e.target.value)} /></label><label><span>Unidade</span><select value={unit} onChange={(e) => setUnit(e.target.value)}><option>Todas</option><option>RJ</option><option>SP</option></select></label><label><span>Movimento</span><select value={movement} onChange={(e) => setMovement(e.target.value)}><option>Movimento completo</option><option>Somente Despesas</option><option>Somente Recebimentos</option><option>Somente Repasses / Comissões</option></select></label></div>
       <div className="readiness-grid accounting-six"><article><ReceiptText /><span>Despesas aptas</span><strong>{expenseCount}</strong><small>{money.format(expenseTotal)}</small></article><article><BadgeDollarSign /><span>Receitas aptas</span><strong>{receivableCount}</strong><small>{money.format(revenueTotal)}</small></article><article><Send /><span>Repasses pagos</span><strong>{transferCount}</strong><small>{money.format(transferTotal)}</small></article><article><Calculator /><span>Comissões pagas</span><strong>{commissionCount}</strong><small>{money.format(commissionTotal)}</small></article><article><Paperclip /><span>Documentos</span><strong>{documentCount}</strong><small>{missingAttachments.length} sem anexo · {missingDemonstratives.length} sem demonstrativo</small></article><article className={statement ? 'storage-ready-card' : ''}><Landmark /><span>Extrato bancário</span><strong>{statement ? 'Anexado' : 'Não anexado'}</strong><small>{statement?.fileName || 'Opcional para gerar o ZIP'}</small></article></div>
       <div className="bank-statement-box"><div><Landmark size={21} /><div><strong>Extrato consolidado do banco</strong><span>Opcional para gerar o pacote mensal. Se anexado, será incluído no ZIP. Aceita PDF, OFX, CSV e Excel.</span>{statement && <small><CheckCircle2 size={13} /> {statement.fileName}</small>}</div></div><label className="secondary-button accounting-file-button"><Upload size={17} /> {busy === 'statement' ? 'Enviando...' : statement ? 'Substituir extrato' : 'Anexar extrato'}<input type="file" hidden accept=".pdf,.ofx,.csv,.xlsx,.xls" onChange={(e) => { const file = e.target.files?.[0]; if (file) void uploadStatement(file); e.currentTarget.value = '' }} /></label></div>
-      <div className="storage-ready-box"><FileSpreadsheet size={18} /><span><strong>Pacote para a Contabilidade:</strong> planilha Excel com Resumo, Despesas, Receitas, Repasses de Alvarás, Comissões de Agentes, Documentos e Pendências + anexos. O extrato bancário é incluído somente quando estiver anexado.</span></div>
+      <div className="storage-ready-box"><FileSpreadsheet size={18} /><span><strong>Pacote para a Contabilidade:</strong> Excel com Resumo, Despesas, Receitas, Repasses de Alvarás, Comissões de Agentes, Repasses Societários, Documentos, Operações e Pendências + comprovantes por operação. O extrato bancário é incluído somente quando estiver anexado.</span></div>
       <div className="accounting-feedback success"><strong>Regra contábil operacional:</strong> Repasse de Alvará é dinheiro de terceiro e não entra como despesa operacional/DRE. A saída aparece na competência da data efetiva de pagamento da parcela.</div>
       {message && <div className={`accounting-feedback ${message.includes('sucesso') || message.includes('gerado') || message.includes('anexado') ? 'success' : 'warning'}`} role="status">{message}</div>}
       <div className="accounting-actions"><button className="secondary-button" type="button" disabled={Boolean(busy)} onClick={() => void downloadPackage()}><Download size={17} /> {busy === 'download' ? 'Montando ZIP...' : 'Baixar ZIP completo'}</button><button className="revenue-button" type="button" disabled={Boolean(busy)} onClick={() => void sendMovement()}><Calculator size={17} /> {busy === 'send' ? 'Registrando...' : 'Registrar envio à Contabilidade'}</button></div>

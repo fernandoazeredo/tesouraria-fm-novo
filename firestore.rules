@@ -349,7 +349,7 @@ service cloud.firestore {
         && request.resource.data.demonstrative is map
         && request.resource.data.demonstrativePath is string
         && request.resource.data.demonstrativePath ==
-           'demonstrativos/' + folder + '/' + documentId + '/v3/demonstrativo.pdf'
+           'demonstrativos/' + folder + '/' + documentId + '/' + (folder == 'despesas' ? 'v4' : 'v3') + '/demonstrativo.pdf'
         && request.resource.data.demonstrative.path == request.resource.data.demonstrativePath
         && request.resource.data.demonstrativeUrl is string
         && request.resource.data.demonstrative.url == request.resource.data.demonstrativeUrl
