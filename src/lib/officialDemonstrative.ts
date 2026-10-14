@@ -13,6 +13,7 @@ export type DemonstrativeMeta = {
   generatedAt: string
   generatedBy?: string | null
   kind: DemonstrativeKind
+  layoutVersion?: number
 }
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -200,7 +201,7 @@ function pathFor(kind: DemonstrativeKind, id: string) {
     commission: 'comissoes',
     societaryTransfer: 'repasses-societarios',
   }[kind]
-  return `demonstrativos/${folder}/${id}/demonstrativo.pdf`
+  return `demonstrativos/${folder}/${id}/v2/demonstrativo.pdf`
 }
 
 export async function ensureOfficialDemonstrative(
@@ -209,7 +210,7 @@ export async function ensureOfficialDemonstrative(
   options?: { collectionName?: string; generatedBy?: string | null },
 ): Promise<DemonstrativeMeta> {
   const existing = record.demonstrative as DemonstrativeMeta | undefined
-  if (existing?.path && existing?.url) return existing
+  if (existing?.path && existing?.url && existing.layoutVersion === 2) return existing
 
   const collectionName = options?.collectionName || ({
     expense: 'expenses',
@@ -225,7 +226,8 @@ export async function ensureOfficialDemonstrative(
       ? createRevenueDemonstrativePdf(record)
       : createPaymentDemonstrativePdf(kind, record)
 
-  const path = String(existing?.path || record.demonstrativePath || pathFor(kind, record.id))
+  // Nova versao cria outro objeto: nunca sobrescreve PDFs antigos imutaveis.
+  const path = pathFor(kind, record.id)
   const target = storageRef(storage, path)
   // PDFs imutáveis: reutilizar o arquivo já existente em caso de geração parcial.
   let url: string
@@ -245,6 +247,7 @@ export async function ensureOfficialDemonstrative(
     generatedAt: new Date().toISOString(),
     generatedBy: options?.generatedBy ?? null,
     kind,
+    layoutVersion: 2,
   }
 
   await updateDoc(doc(db, collectionName, record.id), {
