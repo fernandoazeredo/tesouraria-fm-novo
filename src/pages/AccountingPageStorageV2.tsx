@@ -218,14 +218,14 @@ export function AccountingPageStorageV2() {
       }
     }
     for (const item of selectedExpenses) {
-      const folder = `Despesas/${safeName(String(item.competencia || 'sem-competencia'))}_${safeName(String(item.fornecedor || item.nome || item.id))}`
+      const folder = `Despesas/${safeName(String(item.competencia || 'sem-competencia'))}_${safeName(String(item.fornecedor || item.nome || 'favorecido'))}_${safeName(item.id)}`
       entries.push({ name: `${folder}/`, content: '' })
       const demo = demonstrativeOf(item)
       if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de despesa não incluído:', item.id, error); failures.push(`PDF despesa ${item.id}: ${String(error)}`) }
       for (const file of attachmentsOf(item)) try { entries.push({ name: `${folder}/${safeName(file.name || 'documento')}`, content: await bytesFromAttachment(file) }) } catch (error) { console.warn('Documento de despesa não incluído:', file, error) }
     }
     for (const item of selectedReceivables) {
-      const folder = `Receitas/${safeName(String(item.processo || item.id))}_${safeName(String(item.reclamante || 'cliente'))}`
+      const folder = `Receitas/${safeName(String(item.processo || 'sem-processo'))}_${safeName(String(item.reclamante || 'cliente'))}_${safeName(item.id)}`
       const demo = demonstrativeOf(item)
       if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de receita não incluído:', item.id, error); failures.push(`PDF receita ${item.id}: ${String(error)}`) }
       for (const file of attachmentsOf(item)) try { entries.push({ name: `${folder}/${safeName(file.name || 'documento')}`, content: await bytesFromAttachment(file) }) } catch (error) { console.warn('Documento de receita não incluído:', file, error) }
@@ -233,7 +233,7 @@ export function AccountingPageStorageV2() {
     for (const movement of selectedTransfers) {
       const plan = transfers.find((item) => item.id === movement.planId)
       if (!plan) continue
-      const folder = `Repasses_Alvaras/${safeName(movement.process || plan.id)}_${safeName(movement.beneficiary || 'cliente')}`
+      const folder = `Repasses_Alvaras/${safeName(movement.process || 'sem-processo')}_${safeName(movement.beneficiary || 'cliente')}_parcela-${movement.installment}_${safeName(plan.id)}`
       entries.push({ name: `${folder}/`, content: '' })
       const demo = demonstrativeOf(plan)
       if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de repasse não incluído:', plan.id, error); failures.push(`PDF repasse ${plan.id}: ${String(error)}`) }
@@ -242,7 +242,7 @@ export function AccountingPageStorageV2() {
     for (const movement of selectedCommissions) {
       const plan = commissions.find((item) => item.id === movement.planId)
       if (!plan) continue
-      const folder = `Comissoes/${safeName(movement.process || plan.id)}_${safeName(movement.beneficiary || 'agente')}`
+      const folder = `Comissoes/${safeName(movement.process || 'sem-processo')}_${safeName(movement.beneficiary || 'agente')}_parcela-${movement.installment}_${safeName(plan.id)}`
       const demo = demonstrativeOf(plan)
       if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de comissão não incluído:', plan.id, error); failures.push(`PDF comissão ${plan.id}: ${String(error)}`) }
       for (const file of attachmentsOf(plan)) try { entries.push({ name: `${folder}/${safeName(file.name || 'comprovante')}`, content: await bytesFromAttachment(file) }) } catch (error) { console.warn('Comprovante de comissão não incluído:', file, error) }
