@@ -255,6 +255,7 @@ export function AccountingPageStorageV2() {
       source: AnyRecord | null
       transfers: Map<string, AnyRecord>
       commissions: Map<string, AnyRecord>
+      societary: Map<string, AnyRecord>
       transferPayments: PaidMovement[]
       commissionPayments: PaidMovement[]
     }
@@ -268,7 +269,7 @@ export function AccountingPageStorageV2() {
           processo: plan?.processo || plan?.sourceSnapshot?.processo,
           reclamante: plan?.sourceSnapshot?.reclamante,
         }
-        group = { folder: creditFolder(fallback), source, transfers: new Map(), commissions: new Map(), transferPayments: [], commissionPayments: [] }
+        group = { folder: creditFolder(fallback), source, transfers: new Map(), commissions: new Map(), societary: new Map(), transferPayments: [], commissionPayments: [] }
         credits.set(key, group)
       }
       return group
@@ -298,6 +299,12 @@ export function AccountingPageStorageV2() {
       group.commissions.set(plan.id, plan)
       group.commissionPayments.push(movement)
     }
+    for (const plan of selectedSocietary) {
+      const source = sourceOfPlan(plan)
+      const group = groupFor(source, plan, 'societario')
+      if (!source) addIssue('Repasse Societário', String(plan.processo || plan.id), toNumber(plan.paidValue || plan.transferValue), 'Receita de origem não identificada unicamente; operação mantida separada')
+      group.societary.set(plan.id, plan)
+    }
     // Todos os comprovantes de uma operação convivem no mesmo diretório.
     async function addProofs(
       record: AnyRecord, folder: string, label: string, reference: string, amount: number,
@@ -305,7 +312,7 @@ export function AccountingPageStorageV2() {
     ) {
       const files = attachmentsOf(record)
       if (!files.length) {
-        addIssue(label, reference, amount, prefix.startsWith('repasse_') ? 'Comprovante de pagamento ao cliente não anexado' : prefix.startsWith('comissao_') ? 'Comprovante de pagamento da comissão não anexado' : 'Sem comprovante/anexo registrado para ' + prefix)
+        addIssue(label, reference, amount, prefix.startsWith('repasse_') ? 'Comprovante de pagamento ao cliente não anexado' : prefix.startsWith('comissao_') ? 'Comprovante de pagamento da comissão não anexado' : prefix.startsWith('repasse_societario') ? 'Comprovante de pagamento do repasse societário não anexado' : 'Sem comprovante/anexo registrado para ' + prefix)
         return
       }
       for (let i = 0; i < files.length; i += 1) {
@@ -316,14 +323,14 @@ export function AccountingPageStorageV2() {
         try {
           const content = await bytesFromAttachment(file)
           if (!content.byteLength) throw new Error('arquivo vazio')
-          entries.push({ name: root + folder + '/comprovantes/' + safeName(prefix) + '_' + String(i + 1).padStart(2, '0') + '_' + safeName(String(file.name || 'comprovante')), content })
+          entries.push({ name: root + folder + '/comprovantes/' + (prefix.startsWith('repasse_societario') ? 'repasse_societario/' : '') + safeName(prefix) + '_' + String(i + 1).padStart(2, '0') + '_' + safeName(String(file.name || 'comprovante')), content })
         } catch (error) {
           addIssue(label, reference, amount, 'Comprovante ' + String(file.name || i + 1) + ' indisponível: ' + String(error))
         }
       }
     }
     async function addPdf(
-      record: AnyRecord, kind: 'expense' | 'revenue' | 'alvaraTransfer' | 'commission',
+      record: AnyRecord, kind: 'expense' | 'revenue' | 'alvaraTransfer' | 'commission' | 'societaryTransfer',
       folder: string, fileName: string, label: string, reference: string, amount: number, finalStatus: boolean,
     ) {
       if (!finalStatus) {
@@ -331,14 +338,18 @@ export function AccountingPageStorageV2() {
         return
       }
       let pdf = demonstrativeOf(record)
-      if (!pdf || Number(record.demonstrative?.layoutVersion ?? 0) < 3) {
+      const requiredLayoutVersion = kind === 'expense' ? 4 : 3
+      if (!pdf || Number(record.demonstrative?.layoutVersion ?? 0) < requiredLayoutVersion) {
         try {
           record.demonstrative = await ensureOfficialDemonstrative(kind, record, { generatedBy: profile?.uid ?? null })
           pdf = demonstrativeOf(record)
         } catch (error) {
-          addIssue(label, reference, amount, 'Falha ao gerar demonstrativo: ' + String(error))
+          // Não exportar versão antiga de despesa com classificações internas.
+          pdf = null
+          addIssue(label, reference, amount, 'Falha ao gerar demonstrativo atualizado: ' + String(error))
         }
       }
+      if (kind === 'expense' && Number(record.demonstrative?.layoutVersion ?? 0) < 4) pdf = null
       if (!pdf) {
         addIssue(label, reference, amount, 'Demonstrativo ausente')
         return
@@ -359,7 +370,7 @@ export function AccountingPageStorageV2() {
     }
     for (const group of credits.values()) {
       const source = group.source
-      const reference = String(source?.processo || group.transferPayments[0]?.process || group.commissionPayments[0]?.process || group.folder)
+      const reference = String(source?.processo || group.transferPayments[0]?.process || group.commissionPayments[0]?.process || [...group.societary.values()][0]?.processo || group.folder)
       const seen = new Set<string>()
       if (source) {
         await addPdf(source, 'revenue', group.folder, '01_demonstrativo_receita.pdf', 'Receita', reference, toNumber(source.valorAlvara), ['recebido_tesouraria', 'encerrado'].includes(String(source.status)))
@@ -382,6 +393,12 @@ export function AccountingPageStorageV2() {
         const paid = Array.isArray(plan.installments) && plan.installments.some((item: DocumentData) => item?.paid === true)
         await addPdf(plan, 'commission', group.folder, fileName, 'Comissão', reference, amount, paid)
         await addProofs(plan, group.folder, 'Comissão', reference, amount, seen, 'comissao_' + safeName(plan.id))
+      }
+      for (const plan of group.societary.values()) {
+        const amount = toNumber(plan.paidValue || plan.transferValue)
+        const suffix = group.societary.size > 1 ? '_' + safeName(plan.id) : ''
+        await addPdf(plan, 'societaryTransfer', group.folder, '04_demonstrativo_repasse_societario' + suffix + '.pdf', 'Repasse Societário', reference, amount, String(plan.status) === 'pago')
+        await addProofs(plan, group.folder, 'Repasse Societário', reference, amount, seen, 'repasse_societario_' + safeName(plan.id))
       }
     }
     if (statement?.storagePath) {
@@ -413,7 +430,7 @@ export function AccountingPageStorageV2() {
     try {
       const { blob, fileName, failures } = await buildPackage()
       downloadBlob(blob, fileName)
-      await audit(failures ? 'Pacote da Contabilidade com pendências baixado' : 'Pacote completo da Contabilidade baixado', `${competence} · ${unit} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões) · extrato ${statement ? 'anexado' : 'não anexado'}`)
+      await audit(failures ? 'Pacote da Contabilidade com pendências baixado' : 'Pacote completo da Contabilidade baixado', `${competence} · ${unit} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões) · ${societaryCount} repasse(s) societário(s) · extrato ${statement ? 'anexado' : 'não anexado'}`)
       setMessage(failures ? `ZIP gerado com ${failures} falha(s): consulte Contabilidade_${competence}/Pendencias/RELATORIO_DE_PENDENCIAS.txt. Pacote incompleto.` : `ZIP completo gerado: ${fileName}${statement ? '' : ' (sem extrato bancário)'}`)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível gerar o ZIP.') } finally { setBusy('') }
   }
@@ -423,8 +440,8 @@ export function AccountingPageStorageV2() {
     if (!window.confirm(`Registrar o movimento ${competence} como enviado à Contabilidade?`)) return
     setBusy('send'); setMessage('')
     try {
-      const ref = await addDoc(collection(db, 'accountingDispatches'), { competence, unit, movement, expenseCount, receivableCount, transferCount, commissionCount, expenseTotal, revenueTotal, transferTotal, commissionTotal, documentCount, bankStatement: statement?.fileName ?? null, status: 'enviado', sentBy: profile?.uid, sentByName: profile?.displayName, sentByEmail: profile?.email, createdAt: serverTimestamp() })
-      await audit('Movimento registrado como enviado à Contabilidade', `${competence} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões)`, ref.id)
+      const ref = await addDoc(collection(db, 'accountingDispatches'), { competence, unit, movement, expenseCount, receivableCount, transferCount, commissionCount, societaryCount, expenseTotal, revenueTotal, transferTotal, commissionTotal, societaryTotal, documentCount, bankStatement: statement?.fileName ?? null, status: 'enviado', sentBy: profile?.uid, sentByName: profile?.displayName, sentByEmail: profile?.email, createdAt: serverTimestamp() })
+      await audit('Movimento registrado como enviado à Contabilidade', `${competence} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões) · ${societaryCount} repasse(s) societário(s)`, ref.id)
       setMessage('Movimento registrado com sucesso no histórico.')
     } catch (error) { console.error(error); setMessage('Não foi possível registrar o envio.') } finally { setBusy('') }
   }
