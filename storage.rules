@@ -48,6 +48,16 @@ service firebase.storage {
       return signedIn() && (financialReader() || activeUser());
     }
 
+    // Exclusão de PDFs somente na janela de limpeza solicitada pelo Master.
+    // Sem a janela temporária no Firestore, os PDFs permanecem imutáveis.
+    function masterWipeMode() {
+      return signedIn()
+        && isPrimaryAdminEmail()
+        && firestore.exists(/databases/(default)/documents/systemControl/wipe)
+        && firestore.get(/databases/(default)/documents/systemControl/wipe).data.uid == request.auth.uid
+        && firestore.get(/databases/(default)/documents/systemControl/wipe).data.expiresAt > request.time;
+    }
+
     function validAttachmentSize() {
       return request.resource == null || request.resource.size <= 20 * 1024 * 1024;
     }
@@ -79,7 +89,8 @@ service firebase.storage {
       allow create: if demonstrativeAuthorizedUser()
         && validAttachmentSize()
         && request.resource.contentType == 'application/pdf';
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if masterWipeMode();
     }
 
     // Extrato consolidado mensal usado no ZIP da Contabilidade.
