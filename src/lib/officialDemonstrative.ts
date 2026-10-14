@@ -2,6 +2,7 @@ import { doc, updateDoc, type DocumentData } from 'firebase/firestore'
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
 import { db, storage } from './firebase'
 import { createStyledDemonstrativePdf } from './simplePdf'
+import { renderFinancialDocumentPdf } from './renderFinancialDocumentPdf'
 
 export type DemonstrativeKind = 'expense' | 'revenue' | 'alvaraTransfer' | 'commission' | 'societaryTransfer'
 export type AnyFinancialRecord = { id: string } & DocumentData
@@ -201,7 +202,7 @@ function pathFor(kind: DemonstrativeKind, id: string) {
     commission: 'comissoes',
     societaryTransfer: 'repasses-societarios',
   }[kind]
-  return `demonstrativos/${folder}/${id}/v2/demonstrativo.pdf`
+  return `demonstrativos/${folder}/${id}/v3/demonstrativo.pdf`
 }
 
 export async function ensureOfficialDemonstrative(
@@ -210,7 +211,7 @@ export async function ensureOfficialDemonstrative(
   options?: { collectionName?: string; generatedBy?: string | null },
 ): Promise<DemonstrativeMeta> {
   const existing = record.demonstrative as DemonstrativeMeta | undefined
-  if (existing?.path && existing?.url && existing.layoutVersion === 2) return existing
+  if (existing?.path && existing?.url && existing.layoutVersion === 3) return existing
 
   const collectionName = options?.collectionName || ({
     expense: 'expenses',
@@ -220,11 +221,11 @@ export async function ensureOfficialDemonstrative(
     societaryTransfer: 'societaryTransfers',
   }[kind])
 
-  const bytes = kind === 'expense'
-    ? createExpenseDemonstrativePdf(record)
-    : kind === 'revenue'
-      ? createRevenueDemonstrativePdf(record)
-      : createPaymentDemonstrativePdf(kind, record)
+  const generatedAt = new Date().toISOString()
+  const bytes = await renderFinancialDocumentPdf(kind, record, generatedAt)
+  if (bytes.byteLength < 30 * 1024) {
+    throw new Error('PDF abaixo do limite visual de 30 KB; não foi emitido nem salvo.')
+  }
 
   // Nova versao cria outro objeto: nunca sobrescreve PDFs antigos imutaveis.
   const path = pathFor(kind, record.id)
@@ -244,10 +245,10 @@ export async function ensureOfficialDemonstrative(
     path,
     url,
     type: 'application/pdf',
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     generatedBy: options?.generatedBy ?? null,
     kind,
-    layoutVersion: 2,
+    layoutVersion: 3,
   }
 
   await updateDoc(doc(db, collectionName, record.id), {
