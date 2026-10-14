@@ -1,0 +1,24 @@
+name: Validacao tecnica - Tesouraria FM
+on:
+  push:
+    branches:
+      - fix-contabilidade-demonstrativos-2026-10-13
+  pull_request:
+    branches:
+      - dev-fm-2026-09-08
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar dependencias
+        run: npm install --no-package-lock
+      - name: Validar TypeScript e build Vite
+        run: npm run build
