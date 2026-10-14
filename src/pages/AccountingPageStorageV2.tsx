@@ -225,133 +225,174 @@ export function AccountingPageStorageV2() {
     ]
   }
 
-  async function buildPackage() {
-    if (totalEntries === 0) throw new Error('Nenhum lançamento apto foi encontrado para a competência e filtros selecionados.')
-    setMessage('Verificando demonstrativos e comprovantes antes de montar o ZIP...')
 
+  async function buildPackage() {
+    if (totalEntries === 0) throw new Error('Nenhuma operação apta para os filtros selecionados.')
+    setMessage('Agrupando documentos por operação e verificando arquivos...')
     const issues: PackageIssue[] = []
-    const root = `Contabilidade_${competence}/`
+    const root = 'Contabilidade_' + competence + '/'
     const entries: Array<{ name: string; content: string | Uint8Array }> = []
     const addIssue = (type: string, reference: string, value: number, reason: string) => {
       issues.push({ type, reference, value, reason })
     }
-
-    // Cada pasta representa um lançamento. Não criar diretórios vazios nem
-    // anunciar um documento como incluído sem confirmar os respectivos bytes.
-    async function addDossier(
-      type: string,
-      record: AnyRecord,
-      kind: 'expense' | 'revenue' | 'alvaraTransfer' | 'commission',
-      folder: string,
-      reference: string,
-      value: number,
-      finalStatus: boolean,
-    ) {
-      if (!finalStatus) {
-        addIssue(type, reference, value, 'Lançamento ainda não finalizado; demonstrativo de pagamento não aplicável')
-      }
-      let demonstrative = demonstrativeOf(record)
-      if (finalStatus && (!demonstrative || Number(record.demonstrative?.layoutVersion ?? 0) < 3)) {
-        try {
-          record.demonstrative = await ensureOfficialDemonstrative(kind, record, { generatedBy: profile?.uid ?? null })
-          demonstrative = demonstrativeOf(record)
-        } catch (error) {
-          addIssue(type, reference, value, `Falha ao gerar demonstrativo: ${String(error)}`)
+    type CreditGroup = {
+      folder: string
+      source: AnyRecord | null
+      transfers: Map<string, AnyRecord>
+      commissions: Map<string, AnyRecord>
+      transferPayments: PaidMovement[]
+      commissionPayments: PaidMovement[]
+    }
+    const credits = new Map<string, CreditGroup>()
+    function groupFor(source: AnyRecord | null, plan: AnyRecord | null, kind: string): CreditGroup {
+      const key = source ? 'receivable:' + source.id : kind + ':' + String(plan?.id || 'sem-id')
+      let group = credits.get(key)
+      if (!group) {
+        const fallback: AnyRecord = source || {
+          id: String(plan?.id || 'sem-id'),
+          processo: plan?.processo || plan?.sourceSnapshot?.processo,
+          reclamante: plan?.sourceSnapshot?.reclamante,
         }
+        group = { folder: creditFolder(fallback), source, transfers: new Map(), commissions: new Map(), transferPayments: [], commissionPayments: [] }
+        credits.set(key, group)
       }
-      if (!demonstrative && finalStatus) addIssue(type, reference, value, 'Demonstrativo ausente após tentativa de geração')
-      let pdf: Uint8Array | null = null
-      if (demonstrative && finalStatus) {
-        try {
-          pdf = await bytesFromAttachment(demonstrative)
-          if (!pdf.byteLength) throw new Error('arquivo PDF vazio')
-        } catch (error) {
-          addIssue(type, reference, value, `Falha ao ler demonstrativo do Storage: ${String(error)}`)
-        }
-      }
-
-      const documents = attachmentsOf(record)
-      const supportingFiles: Array<{ name: string; content: Uint8Array }> = []
-      for (let index = 0; index < documents.length; index += 1) {
-        const document = documents[index]
-        try {
-          const content = await bytesFromAttachment(document)
-          if (!content.byteLength) throw new Error('arquivo vazio')
-          supportingFiles.push({
-            name: `${root}${folder}/comprovantes/${String(index + 1).padStart(2, '0')}_${safeName(document.name || 'comprovante')}`,
-            content,
-          })
-        } catch (error) {
-          addIssue(type, reference, value, `Comprovante ${document.name || index + 1} indisponível: ${String(error)}`)
-        }
-      }
-      if (documents.length === 0) {
-        addIssue(type, reference, value, 'Sem documento comprobatório anexado ao lançamento')
-      }
-
-      if (pdf) entries.push({ name: `${root}${folder}/demonstrativo.pdf`, content: pdf })
-      entries.push(...supportingFiles)
+      return group
     }
-
-    if (statement?.storagePath) {
-      try {
-        const content = new Uint8Array(await getBytes(storageRef(storage, String(statement.storagePath))))
-        if (!content.byteLength) throw new Error('extrato vazio')
-        entries.push({ name: `${root}Extrato_Bancario/${safeName(String(statement.fileName || 'Extrato_Consolidado'))}`, content })
-      } catch (error) {
-        addIssue('Extrato bancário', competence, 0, `Extrato informado, mas indisponível para leitura: ${String(error)}`)
-      }
-    }
-
-    for (const item of selectedExpenses) {
-      const reference = `${item.competencia || competence} · ${item.fornecedor || item.nome || item.id}`
-      const folder = `Despesas/${safeName(String(item.competencia || competence))}_${safeName(String(item.fornecedor || item.nome || 'favorecido'))}_${safeName(item.id)}`
-      await addDossier('Despesa', item, 'expense', folder, reference, toNumber(item.valorTotal), ['pago', 'arquivado'].includes(String(item.status)))
-    }
-    for (const item of selectedReceivables) {
-      const reference = `${item.processo || item.id} · ${item.reclamante || 'cliente'}`
-      const folder = `Receitas/${safeName(String(item.processo || 'sem-processo'))}_${safeName(String(item.reclamante || 'cliente'))}_${safeName(item.id)}`
-      await addDossier('Receita', item, 'revenue', folder, reference, toNumber(item.valorAlvara), ['recebido_tesouraria', 'encerrado'].includes(String(item.status)))
-    }
+    for (const item of selectedReceivables) groupFor(item, null, 'revenue')
     for (const movement of selectedTransfers) {
       const plan = transfers.find((item) => item.id === movement.planId)
       if (!plan) {
-        addIssue('Repasse de Alvará', movement.process, movement.value, 'Plano de repasse não encontrado')
+        addIssue('Repasse de Alvará', movement.process, movement.value, 'Plano vinculado não encontrado')
         continue
       }
-      const folder = `Repasses_Alvaras/${safeName(movement.process || 'sem-processo')}_${safeName(movement.beneficiary || 'cliente')}_parcela-${movement.installment}_${safeName(plan.id)}`
-      await addDossier('Repasse de Alvará', plan, 'alvaraTransfer', folder, `${movement.process} · parcela ${movement.installment}`, movement.value, true)
+      const source = sourceOfPlan(plan)
+      const group = groupFor(source, plan, 'alvara')
+      if (!source) addIssue('Repasse de Alvará', movement.process, movement.value, 'Receita de origem não identificada de forma única; operação mantida separada')
+      group.transfers.set(plan.id, plan)
+      group.transferPayments.push(movement)
     }
     for (const movement of selectedCommissions) {
       const plan = commissions.find((item) => item.id === movement.planId)
       if (!plan) {
-        addIssue('Comissão', movement.process, movement.value, 'Plano de comissão não encontrado')
+        addIssue('Comissão', movement.process, movement.value, 'Plano vinculado não encontrado')
         continue
       }
-      const folder = `Comissoes/${safeName(movement.process || 'sem-processo')}_${safeName(movement.beneficiary || 'agente')}_parcela-${movement.installment}_${safeName(plan.id)}`
-      await addDossier('Comissão', plan, 'commission', folder, `${movement.process} · parcela ${movement.installment}`, movement.value, true)
+      const source = sourceOfPlan(plan)
+      const group = groupFor(source, plan, 'comissao')
+      if (!source) addIssue('Comissão', movement.process, movement.value, 'Receita de origem não identificada de forma única; operação mantida separada')
+      group.commissions.set(plan.id, plan)
+      group.commissionPayments.push(movement)
     }
-
-    // Só agora construir o Excel, com as pendências reais depois das tentativas
-    // de gerar/ler PDFs e anexos. Não registrar itens que já foram incorporados.
+    // Todos os comprovantes de uma operação convivem no mesmo diretório.
+    async function addProofs(
+      record: AnyRecord, folder: string, label: string, reference: string, amount: number,
+      seen: Set<string>, prefix: string,
+    ) {
+      const files = attachmentsOf(record)
+      if (!files.length) {
+        addIssue(label, reference, amount, 'Sem comprovante/anexo registrado para ' + prefix)
+        return
+      }
+      for (let i = 0; i < files.length; i += 1) {
+        const file = files[i]
+        const signature = String(file.path || file.url || prefix + ':' + i)
+        if (seen.has(signature)) continue
+        seen.add(signature)
+        try {
+          const content = await bytesFromAttachment(file)
+          if (!content.byteLength) throw new Error('arquivo vazio')
+          entries.push({ name: root + folder + '/comprovantes/' + safeName(prefix) + '_' + String(i + 1).padStart(2, '0') + '_' + safeName(String(file.name || 'comprovante')), content })
+        } catch (error) {
+          addIssue(label, reference, amount, 'Comprovante ' + String(file.name || i + 1) + ' indisponível: ' + String(error))
+        }
+      }
+    }
+    async function addPdf(
+      record: AnyRecord, kind: 'expense' | 'revenue' | 'alvaraTransfer' | 'commission',
+      folder: string, fileName: string, label: string, reference: string, amount: number, finalStatus: boolean,
+    ) {
+      if (!finalStatus) {
+        addIssue(label, reference, amount, 'Pagamento ainda não finalizado: demonstrativo de baixa não aplicável')
+        return
+      }
+      let pdf = demonstrativeOf(record)
+      if (!pdf || Number(record.demonstrative?.layoutVersion ?? 0) < 3) {
+        try {
+          record.demonstrative = await ensureOfficialDemonstrative(kind, record, { generatedBy: profile?.uid ?? null })
+          pdf = demonstrativeOf(record)
+        } catch (error) {
+          addIssue(label, reference, amount, 'Falha ao gerar demonstrativo: ' + String(error))
+        }
+      }
+      if (!pdf) {
+        addIssue(label, reference, amount, 'Demonstrativo ausente')
+        return
+      }
+      try {
+        const content = await bytesFromAttachment(pdf)
+        if (!content.byteLength) throw new Error('PDF vazio')
+        entries.push({ name: root + folder + '/' + fileName, content })
+      } catch (error) {
+        addIssue(label, reference, amount, 'Falha ao incorporar demonstrativo: ' + String(error))
+      }
+    }
+    for (const item of selectedExpenses) {
+      const folder = debitFolder(item)
+      const reference = String(item.fornecedor || item.nome || item.id)
+      await addPdf(item, 'expense', folder, '01_demonstrativo_despesa.pdf', 'Despesa', reference, toNumber(item.valorTotal), ['pago', 'arquivado'].includes(String(item.status)))
+      await addProofs(item, folder, 'Despesa', reference, toNumber(item.valorTotal), new Set<string>(), 'despesa')
+    }
+    for (const group of credits.values()) {
+      const source = group.source
+      const reference = String(source?.processo || group.transferPayments[0]?.process || group.commissionPayments[0]?.process || group.folder)
+      const seen = new Set<string>()
+      if (source) {
+        await addPdf(source, 'revenue', group.folder, '01_demonstrativo_receita.pdf', 'Receita', reference, toNumber(source.valorAlvara), ['recebido_tesouraria', 'encerrado'].includes(String(source.status)))
+        await addProofs(source, group.folder, 'Receita', reference, toNumber(source.valorAlvara), seen, 'receita')
+      }
+      for (const plan of group.transfers.values()) {
+        const movements = group.transferPayments.filter((movement) => movement.planId === plan.id)
+        const amount = movements.reduce((sum, movement) => sum + movement.value, 0)
+        const suffix = group.transfers.size > 1 ? '_' + safeName(plan.id) : ''
+        const paid = Array.isArray(plan.installments) && plan.installments.some((item: DocumentData) => item?.paid === true)
+        await addPdf(plan, 'alvaraTransfer', group.folder, '02_demonstrativo_repasse_cliente' + suffix + '.pdf', 'Repasse de Alvará', reference, amount, paid)
+        await addProofs(plan, group.folder, 'Repasse de Alvará', reference, amount, seen, 'repasse_' + safeName(plan.id))
+        // Registro de parcela paga não substitui o comprovante bancário.
+        if (!attachmentsOf(plan).length) addIssue('Repasse de Alvará', reference, amount, 'Comprovante de pagamento do cliente não anexado')
+      }
+      for (const plan of group.commissions.values()) {
+        const movements = group.commissionPayments.filter((movement) => movement.planId === plan.id)
+        const amount = movements.reduce((sum, movement) => sum + movement.value, 0)
+        const agent = safeName(String(plan.beneficiary || plan.sourceSnapshot?.agentName || 'agente'))
+        const fileName = '03_demonstrativo_comissao_' + agent + (group.commissions.size > 1 ? '_' + safeName(plan.id) : '') + '.pdf'
+        const paid = Array.isArray(plan.installments) && plan.installments.some((item: DocumentData) => item?.paid === true)
+        await addPdf(plan, 'commission', group.folder, fileName, 'Comissão', reference, amount, paid)
+        await addProofs(plan, group.folder, 'Comissão', reference, amount, seen, 'comissao_' + safeName(plan.id))
+        if (!attachmentsOf(plan).length) addIssue('Comissão', reference, amount, 'Comprovante de pagamento do agente não anexado')
+      }
+    }
+    if (statement?.storagePath) {
+      try {
+        const content = new Uint8Array(await getBytes(storageRef(storage, String(statement.storagePath))))
+        if (!content.byteLength) throw new Error('extrato vazio')
+        entries.push({ name: root + 'Extrato_Bancario/' + safeName(String(statement.fileName || 'Extrato_Consolidado')), content })
+      } catch (error) {
+        addIssue('Extrato bancário', competence, 0, 'Extrato anexado e indisponível: ' + String(error))
+      }
+    }
     const workbook = createXlsx(workbookSheets(issues))
-    entries.unshift({ name: `${root}Movimento_Contabilidade.xlsx`, content: workbook })
-    if (issues.length > 0) {
+    entries.unshift({ name: root + 'Movimento_Contabilidade.xlsx', content: workbook })
+    if (issues.length) {
       const report = [
-        'PACOTE CONTÁBIL INCOMPLETO — PENDÊNCIAS POR LANÇAMENTO',
-        `Competência: ${competence} | Unidade: ${unit}`,
-        ...issues.map((issue) => `${issue.type} | ${issue.reference} | ${money.format(issue.value)} | ${issue.reason}`),
+        'PACOTE CONTÁBIL — PENDÊNCIAS POR OPERAÇÃO',
+        'Competência: ' + competence + ' | Unidade: ' + unit,
+        ...issues.map((issue) => issue.type + ' | ' + issue.reference + ' | ' + money.format(issue.value) + ' | ' + issue.reason),
       ]
-      entries.push({ name: `${root}Pendencias/RELATORIO_DE_PENDENCIAS.txt`, content: report.join('\n') })
+      entries.push({ name: root + 'Pendencias/RELATORIO_DE_PENDENCIAS.txt', content: report.join('\n') })
     }
-
     const bytes = createZip(entries)
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-    return {
-      blob: toBlob(bytes),
-      fileName: `Contabilidade_${competence}_${safeName(unit)}_${stamp}.zip`,
-      failures: issues.length,
-    }
+    return { blob: toBlob(bytes), fileName: 'Contabilidade_' + competence + '_' + safeName(unit) + '_' + stamp + '.zip', failures: issues.length }
   }
 
   async function downloadPackage() {
