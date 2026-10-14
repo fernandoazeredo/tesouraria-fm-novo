@@ -13,6 +13,7 @@ const dateTimeBR = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeSt
 type AnyRecord = { id: string } & DocumentData
 type BusyAction = '' | 'download' | 'send' | 'statement'
 type Attachment = { name?: string; path?: string; url?: string; size?: number; type?: string }
+type PackageIssue = { type: string; reference: string; value: number; reason: string }
 type PaidMovement = { planId: string; type: 'Repasse de Alvará' | 'Comissão de Agente'; process: string; beneficiary: string; unit: string; installment: number; paidDate: string; value: number; status: string }
 
 function useLiveCollection(name: string) {
@@ -146,8 +147,8 @@ export function AccountingPageStorageV2() {
     } catch (error) { console.error(error); setMessage('Não foi possível enviar o extrato consolidado.') } finally { setBusy('') }
   }
 
-  function workbookSheets(): XlsxSheet[] {
-    const pendingDemonstratives = currentMissingDemonstratives()
+  function workbookSheets(packageIssues: PackageIssue[] = []): XlsxSheet[] {
+    const pendingDemonstratives = packageIssues.filter((issue) => issue.reason.toLowerCase().includes('demonstrativo'))
     const summaryRows = [
       ['FLÁVIO MARQUES ADVOGADOS ASSOCIADOS'],
       ['Movimento mensal para Contabilidade'],
@@ -156,7 +157,7 @@ export function AccountingPageStorageV2() {
       ['Receitas aptas', receivableCount], ['Total receitas', revenueTotal],
       ['Repasses de Alvarás pagos no mês', transferCount], ['Total repassado a clientes', transferTotal],
       ['Comissões de Agentes pagas no mês', commissionCount], ['Total de comissões pagas', commissionTotal],
-      ['Documentos anexados', documentCount], ['Lançamentos sem anexo', missingAttachments.length], ['Lançamentos sem demonstrativo', pendingDemonstratives.length], ['Extrato consolidado', statement?.fileName || 'NÃO ANEXADO (OPCIONAL)'],
+      ['Documentos anexados', documentCount], ['Lançamentos sem anexo', packageIssues.filter((issue) => issue.reason.toLowerCase().includes('comprovan')).length], ['Lançamentos sem demonstrativo', pendingDemonstratives.length], ['Extrato consolidado', statement?.fileName || 'NÃO ANEXADO (OPCIONAL)'],
       ['Gerado por', profile?.displayName || profile?.email || 'Usuário'], ['Gerado em', dateTimeBR.format(new Date())],
     ]
     const expenseRows: (string | number)[][] = [['Competência', 'Unidade', 'Responsável', 'Fornecedor/Favorecido', 'CPF/CNPJ', 'Plano de Contas', 'Descrição da Conta', 'DRE', 'Status', 'Valor', 'Documentos', 'Demonstrativo']]
@@ -177,9 +178,7 @@ export function AccountingPageStorageV2() {
     selectedExpenses.forEach((item) => attachmentsOf(item).forEach((file) => documentRows.push(['Despesa', `${item.nome ?? ''} · ${item.fornecedor ?? ''}`, file.name ?? 'Documento', toNumber(file.size)])))
     selectedReceivables.forEach((item) => attachmentsOf(item).forEach((file) => documentRows.push(['Receita', `${item.processo ?? ''} · ${item.reclamante ?? ''}`, file.name ?? 'Documento', toNumber(file.size)])))
     const pendingRows: (string | number)[][] = [['Tipo', 'Referência', 'Valor', 'Pendência']]
-    missingAttachments.forEach(({ type, item }) => pendingRows.push([type, type === 'Despesa' ? `${item.nome ?? ''} · ${item.fornecedor ?? ''}` : `${item.processo ?? ''} · ${item.reclamante ?? ''}`, type === 'Despesa' ? toNumber(item.valorTotal) : toNumber(item.valorAlvara), 'Sem documento anexado']))
-    pendingDemonstratives.forEach(({ type, item }) => pendingRows.push([type, type === 'Despesa' ? `${item.nome ?? ''} · ${item.fornecedor ?? ''}` : `${item.processo ?? ''} · ${item.reclamante ?? ''}`, type === 'Despesa' ? toNumber(item.valorTotal) : toNumber(item.valorAlvara), 'Sem demonstrativo gerado']))
-    if (!statement) pendingRows.push(['Extrato bancário', competence, 0, 'Extrato consolidado não anexado — opcional'])
+    packageIssues.forEach((issue) => pendingRows.push([issue.type, issue.reference, issue.value, issue.reason]))
     return [
       { name: 'Resumo', rows: summaryRows as (string | number)[][], currencyColumns: [1] },
       { name: 'Despesas', rows: expenseRows, currencyColumns: [9] },
@@ -193,71 +192,134 @@ export function AccountingPageStorageV2() {
 
   async function buildPackage() {
     if (totalEntries === 0) throw new Error('Nenhum lançamento apto foi encontrado para a competência e filtros selecionados.')
-    setMessage('Montando planilha Excel e incorporando documentos ao ZIP...')
-    const failures: string[] = []
-    for (const item of selectedExpenses) if (!demonstrativeOf(item) && ['pago', 'arquivado'].includes(String(item.status))) {
-      try { item.demonstrative = await ensureOfficialDemonstrative('expense', item, { generatedBy: profile?.uid ?? null }) } catch (error) { console.warn('Demonstrativo de despesa não gerado:', item.id, error); failures.push(`Demonstrativo despesa ${item.id}: ${String(error)}`) }
+    setMessage('Verificando demonstrativos e comprovantes antes de montar o ZIP...')
+
+    const issues: PackageIssue[] = []
+    const root = `Contabilidade_${competence}/`
+    const entries: Array<{ name: string; content: string | Uint8Array }> = []
+    const addIssue = (type: string, reference: string, value: number, reason: string) => {
+      issues.push({ type, reference, value, reason })
     }
-    for (const item of selectedReceivables) if (!demonstrativeOf(item) && ['recebido_tesouraria', 'encerrado'].includes(String(item.status))) {
-      try { item.demonstrative = await ensureOfficialDemonstrative('revenue', item, { generatedBy: profile?.uid ?? null }) } catch (error) { console.warn('Demonstrativo de receita não gerado:', item.id, error); failures.push(`Demonstrativo receita ${item.id}: ${String(error)}`) }
+
+    // Cada pasta representa um lançamento. Não criar diretórios vazios nem
+    // anunciar um documento como incluído sem confirmar os respectivos bytes.
+    async function addDossier(
+      type: string,
+      record: AnyRecord,
+      kind: 'expense' | 'revenue' | 'alvaraTransfer' | 'commission',
+      folder: string,
+      reference: string,
+      value: number,
+      finalStatus: boolean,
+    ) {
+      if (!finalStatus) {
+        addIssue(type, reference, value, 'Lançamento ainda não finalizado; demonstrativo de pagamento não aplicável')
+        return
+      }
+      let demonstrative = demonstrativeOf(record)
+      if (!demonstrative) {
+        try {
+          record.demonstrative = await ensureOfficialDemonstrative(kind, record, { generatedBy: profile?.uid ?? null })
+          demonstrative = demonstrativeOf(record)
+        } catch (error) {
+          addIssue(type, reference, value, `Falha ao gerar demonstrativo: ${String(error)}`)
+          return
+        }
+      }
+      if (!demonstrative) {
+        addIssue(type, reference, value, 'Demonstrativo ausente após tentativa de geração')
+        return
+      }
+      let pdf: Uint8Array
+      try {
+        pdf = await bytesFromAttachment(demonstrative)
+        if (!pdf.byteLength) throw new Error('arquivo PDF vazio')
+      } catch (error) {
+        addIssue(type, reference, value, `Falha ao ler demonstrativo do Storage: ${String(error)}`)
+        return
+      }
+
+      const documents = attachmentsOf(record)
+      const supportingFiles: Array<{ name: string; content: Uint8Array }> = []
+      for (let index = 0; index < documents.length; index += 1) {
+        const document = documents[index]
+        try {
+          const content = await bytesFromAttachment(document)
+          if (!content.byteLength) throw new Error('arquivo vazio')
+          supportingFiles.push({
+            name: `${root}${folder}/comprovantes/${String(index + 1).padStart(2, '0')}_${safeName(document.name || 'comprovante')}`,
+            content,
+          })
+        } catch (error) {
+          addIssue(type, reference, value, `Comprovante ${document.name || index + 1} indisponível: ${String(error)}`)
+        }
+      }
+      if (documents.length === 0) {
+        addIssue(type, reference, value, 'Sem documento comprobatório anexado ao lançamento')
+      }
+
+      entries.push({ name: `${root}${folder}/demonstrativo.pdf`, content: pdf }, ...supportingFiles)
     }
-    for (const plan of transfers.filter((item) => Array.isArray(item.installments) && item.installments.some((p: DocumentData) => p?.paid === true))) if (!demonstrativeOf(plan)) {
-      try { plan.demonstrative = await ensureOfficialDemonstrative('alvaraTransfer', plan, { generatedBy: profile?.uid ?? null }) } catch (error) { console.warn('Demonstrativo de repasse não gerado:', plan.id, error); failures.push(`Demonstrativo repasse ${plan.id}: ${String(error)}`) }
-    }
-    for (const plan of commissions.filter((item) => Array.isArray(item.installments) && item.installments.some((p: DocumentData) => p?.paid === true))) if (!demonstrativeOf(plan)) {
-      try { plan.demonstrative = await ensureOfficialDemonstrative('commission', plan, { generatedBy: profile?.uid ?? null }) } catch (error) { console.warn('Demonstrativo de comissão não gerado:', plan.id, error); failures.push(`Demonstrativo comissão ${plan.id}: ${String(error)}`) }
-    }
-    const workbook = createXlsx(workbookSheets())
-    const entries: Array<{ name: string; content: string | Uint8Array }> = [{ name: `Movimento_Contabilidade_${competence}_${safeName(unit)}.xlsx`, content: workbook }]
+
     if (statement?.storagePath) {
       try {
-        const statementBytes = new Uint8Array(await getBytes(storageRef(storage, String(statement.storagePath))))
-        entries.push({ name: `Extrato_Bancario/${safeName(String(statement.fileName ?? 'Extrato_Consolidado'))}`, content: statementBytes })
+        const content = new Uint8Array(await getBytes(storageRef(storage, String(statement.storagePath))))
+        if (!content.byteLength) throw new Error('extrato vazio')
+        entries.push({ name: `${root}Extrato_Bancario/${safeName(String(statement.fileName || 'Extrato_Consolidado'))}`, content })
       } catch (error) {
-        console.warn('Extrato bancário não incluído no ZIP:', error)
+        addIssue('Extrato bancário', competence, 0, `Extrato informado, mas indisponível para leitura: ${String(error)}`)
       }
     }
+
     for (const item of selectedExpenses) {
-      const folder = `Despesas/${safeName(String(item.competencia || 'sem-competencia'))}_${safeName(String(item.fornecedor || item.nome || 'favorecido'))}_${safeName(item.id)}`
-      entries.push({ name: `${folder}/`, content: '' })
-      const demo = demonstrativeOf(item)
-      if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de despesa não incluído:', item.id, error); failures.push(`PDF despesa ${item.id}: ${String(error)}`) }
-      for (const file of attachmentsOf(item)) try { entries.push({ name: `${folder}/${safeName(file.name || 'documento')}`, content: await bytesFromAttachment(file) }) } catch (error) { console.warn('Documento de despesa não incluído:', file, error) }
+      const reference = `${item.competencia || competence} · ${item.fornecedor || item.nome || item.id}`
+      const folder = `Despesas/${safeName(String(item.competencia || competence))}_${safeName(String(item.fornecedor || item.nome || 'favorecido'))}_${safeName(item.id)}`
+      await addDossier('Despesa', item, 'expense', folder, reference, toNumber(item.valorTotal), ['pago', 'arquivado'].includes(String(item.status)))
     }
     for (const item of selectedReceivables) {
+      const reference = `${item.processo || item.id} · ${item.reclamante || 'cliente'}`
       const folder = `Receitas/${safeName(String(item.processo || 'sem-processo'))}_${safeName(String(item.reclamante || 'cliente'))}_${safeName(item.id)}`
-      const demo = demonstrativeOf(item)
-      if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de receita não incluído:', item.id, error); failures.push(`PDF receita ${item.id}: ${String(error)}`) }
-      for (const file of attachmentsOf(item)) try { entries.push({ name: `${folder}/${safeName(file.name || 'documento')}`, content: await bytesFromAttachment(file) }) } catch (error) { console.warn('Documento de receita não incluído:', file, error) }
+      await addDossier('Receita', item, 'revenue', folder, reference, toNumber(item.valorAlvara), ['recebido_tesouraria', 'encerrado'].includes(String(item.status)))
     }
     for (const movement of selectedTransfers) {
       const plan = transfers.find((item) => item.id === movement.planId)
-      if (!plan) continue
+      if (!plan) {
+        addIssue('Repasse de Alvará', movement.process, movement.value, 'Plano de repasse não encontrado')
+        continue
+      }
       const folder = `Repasses_Alvaras/${safeName(movement.process || 'sem-processo')}_${safeName(movement.beneficiary || 'cliente')}_parcela-${movement.installment}_${safeName(plan.id)}`
-      entries.push({ name: `${folder}/`, content: '' })
-      const demo = demonstrativeOf(plan)
-      if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de repasse não incluído:', plan.id, error); failures.push(`PDF repasse ${plan.id}: ${String(error)}`) }
-      for (const file of attachmentsOf(plan)) try { entries.push({ name: `${folder}/${safeName(file.name || 'comprovante')}`, content: await bytesFromAttachment(file) }) } catch (error) { console.warn('Comprovante de repasse não incluído:', file, error) }
-    }
-    // A pasta de Comissões deve estar sempre presente no pacote contábil.
-    // Quando não houver comissão efetivamente paga nos filtros, declarar isso
-    // explicitamente, sem fabricar um lançamento ou documento financeiro.
-    entries.push({ name: 'Comissoes/', content: '' })
-    if (selectedCommissions.length === 0) {
-      entries.push({ name: 'Comissoes/SEM_COMISSOES_PAGAS_NA_COMPETENCIA.txt', content: `Nenhuma comissão paga encontrada para a competência ${competence}, unidade ${unit} e movimento ${movement}. Verifique os filtros de competência e a data efetiva de pagamento.` })
+      await addDossier('Repasse de Alvará', plan, 'alvaraTransfer', folder, `${movement.process} · parcela ${movement.installment}`, movement.value, true)
     }
     for (const movement of selectedCommissions) {
       const plan = commissions.find((item) => item.id === movement.planId)
-      if (!plan) continue
+      if (!plan) {
+        addIssue('Comissão', movement.process, movement.value, 'Plano de comissão não encontrado')
+        continue
+      }
       const folder = `Comissoes/${safeName(movement.process || 'sem-processo')}_${safeName(movement.beneficiary || 'agente')}_parcela-${movement.installment}_${safeName(plan.id)}`
-      const demo = demonstrativeOf(plan)
-      if (demo) try { entries.push({ name: `${folder}/demonstrativo.pdf`, content: await bytesFromAttachment(demo) }) } catch (error) { console.warn('Demonstrativo de comissão não incluído:', plan.id, error); failures.push(`PDF comissão ${plan.id}: ${String(error)}`) }
-      for (const file of attachmentsOf(plan)) try { entries.push({ name: `${folder}/${safeName(file.name || 'comprovante')}`, content: await bytesFromAttachment(file) }) } catch (error) { console.warn('Comprovante de comissão não incluído:', file, error) }
+      await addDossier('Comissão', plan, 'commission', folder, `${movement.process} · parcela ${movement.installment}`, movement.value, true)
     }
-    if (failures.length) entries.push({ name: 'PENDENCIAS_GERACAO_DOCUMENTOS.txt', content: ['ATENÇÃO: pacote incompleto. Os documentos abaixo não foram incluídos.', 'Verifique permissões do Firebase Storage e Firestore antes de enviar à Contabilidade.', ...failures].join('\n') })
+
+    // Só agora construir o Excel, com as pendências reais depois das tentativas
+    // de gerar/ler PDFs e anexos. Não registrar itens que já foram incorporados.
+    const workbook = createXlsx(workbookSheets(issues))
+    entries.unshift({ name: `${root}Movimento_Contabilidade.xlsx`, content: workbook })
+    if (issues.length > 0) {
+      const report = [
+        'PACOTE CONTÁBIL INCOMPLETO — PENDÊNCIAS POR LANÇAMENTO',
+        `Competência: ${competence} | Unidade: ${unit}`,
+        ...issues.map((issue) => `${issue.type} | ${issue.reference} | ${money.format(issue.value)} | ${issue.reason}`),
+      ]
+      entries.push({ name: `${root}Pendencias/RELATORIO_DE_PENDENCIAS.txt`, content: report.join('\n') })
+    }
+
     const bytes = createZip(entries)
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-    return { blob: toBlob(bytes), fileName: `Contabilidade_${competence}_${safeName(unit)}_${stamp}.zip`, failures: failures.length }
+    return {
+      blob: toBlob(bytes),
+      fileName: `Contabilidade_${competence}_${safeName(unit)}_${stamp}.zip`,
+      failures: issues.length,
+    }
   }
 
   async function downloadPackage() {
@@ -265,8 +327,8 @@ export function AccountingPageStorageV2() {
     try {
       const { blob, fileName, failures } = await buildPackage()
       downloadBlob(blob, fileName)
-      await audit('Pacote completo da Contabilidade baixado', `${competence} · ${unit} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões) · extrato ${statement ? 'anexado' : 'não anexado'}`)
-      setMessage(failures ? `ZIP gerado com ${failures} falha(s): consulte PENDENCIAS_GERACAO_DOCUMENTOS.txt. Pacote incompleto.` : `ZIP completo gerado: ${fileName}${statement ? '' : ' (sem extrato bancário)'}`)
+      await audit(failures ? 'Pacote da Contabilidade com pendências baixado' : 'Pacote completo da Contabilidade baixado', `${competence} · ${unit} · ${expenseCount} despesa(s) · ${receivableCount} receita(s) · ${transferCount} repasse(s) · ${commissionCount} comissão(ões) · extrato ${statement ? 'anexado' : 'não anexado'}`)
+      setMessage(failures ? `ZIP gerado com ${failures} falha(s): consulte Contabilidade_${competence}/Pendencias/RELATORIO_DE_PENDENCIAS.txt. Pacote incompleto.` : `ZIP completo gerado: ${fileName}${statement ? '' : ' (sem extrato bancário)'}`)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível gerar o ZIP.') } finally { setBusy('') }
   }
 
