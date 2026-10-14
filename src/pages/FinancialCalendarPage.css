@@ -61,3 +61,12 @@ body.dark .financial-calendar-toolbar>div span,
 html[data-theme='dark'] .financial-day-empty,
 body.dark .financial-day-empty,
 .dark-theme .financial-day-empty{background:#2a2118;border-color:#f59e0b;color:#fb923c}
+
+/* Dossie de documentos agrupado por operacao, mantendo os movimentos por data. */
+.financial-operation-documents{margin:10px 0 0;border:1px solid var(--border-color,#d6dee8);border-radius:9px;overflow:hidden}
+.financial-operation-documents>summary{padding:11px 13px;cursor:pointer;font-weight:750;font-size:13px;list-style-position:inside;background:rgba(105,137,175,.10)}
+.financial-operation-list{padding:10px;display:grid;gap:10px}
+.financial-operation-group{padding:10px;border:1px solid var(--border-color,#d6dee8);border-radius:8px;min-width:0}
+.financial-operation-group>strong{display:block;margin-bottom:8px;font-size:12px}
+.financial-operation-group .financial-document-row{display:flex;flex-wrap:wrap;gap:9px;align-items:center}
+.financial-operation-group .financial-document-row>a,.financial-operation-group .financial-document-row>span{font-size:12px;overflow-wrap:anywhere}

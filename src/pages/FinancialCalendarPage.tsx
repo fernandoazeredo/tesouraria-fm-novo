@@ -6,6 +6,7 @@ import { OfficialFinancialDocumentPreviewButton } from '../components/OfficialFi
 import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink, FileText, Paperclip, RefreshCw } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { isEffectiveAlvaraReceivable } from '../lib/receivableClassification'
+import { receivableForFinancialPlan } from '../lib/creditOperations'
 import './FinancialCalendarPage.css'
 
 type AnyRecord = { id: string } & DocumentData
@@ -53,22 +54,46 @@ function fileName(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'demonstrativo'
 }
 
-function DemonstrativeLink({ item }: { item: AnyRecord }) {
+type DocumentContext = 'expense' | 'revenue' | 'alvaraTransfer' | 'commission' | 'societaryTransfer'
+function DemonstrativeLink({ item, context }: { item: AnyRecord; context: DocumentContext }) {
   const storedUrl = String(item.demonstrative?.url || item.demonstrativeUrl || '')
   const path = String(item.demonstrative?.path || item.demonstrativePath || '')
   const [url, setUrl] = useState(storedUrl)
+  const [readError, setReadError] = useState('')
   useEffect(() => {
     setUrl(storedUrl)
+    setReadError('')
     if (storedUrl || !path) return
     let alive = true
     getDownloadURL(storageRef(storage, path)).then((resolved) => {
       if (alive) setUrl(resolved)
-    }).catch((error) => console.warn('Demonstrativo do calendário indisponível:', path, error))
+    }).catch((error) => {
+      console.warn('Demonstrativo do calendário indisponível:', path, error)
+      if (alive) setReadError(String((error as { code?: string })?.code || 'falha de leitura'))
+    })
     return () => { alive = false }
   }, [path, storedUrl])
-  return url
-    ? <a href={url} target="_blank" rel="noreferrer"><FileText size={14} /> Demonstrativo</a>
-    : <span><FileText size={14} /> Demonstrativo pendente</span>
+  if (url) return <a href={url} target="_blank" rel="noreferrer"><FileText size={14} /> Demonstrativo</a>
+
+  const reference = context === 'expense'
+    ? String(item.fornecedor || item.nome || item.id)
+    : String(item.processo || item.sourceSnapshot?.processo || item.beneficiary || item.id)
+  const typeName = {
+    expense: 'Despesa', revenue: 'Receita', alvaraTransfer: 'Repasse de Alvará',
+    commission: 'Comissão', societaryTransfer: 'Repasse Societário',
+  }[context]
+  const status = String(item.status || '')
+  const notPaid = context === 'expense' && status === 'aprovado'
+  const pendingDescription = notPaid
+    ? 'Aguardando pagamento — PDF de baixa ainda não aplicável'
+    : readError
+      ? `Falha ao abrir PDF (${readError})`
+      : context === 'societaryTransfer'
+        ? 'PDF societário ainda não salvo'
+        : 'PDF de lançamento finalizado ainda não salvo'
+  return <span title={`${typeName} · ${reference} · status ${status || 'não informado'} · ${pendingDescription}`}>
+    <FileText size={14} /> {pendingDescription} · {typeName}: {reference}
+  </span>
 }
 
 function AttachmentLink({ file, index }: { file: Attachment; index: number }) {
@@ -89,53 +114,72 @@ function AttachmentLink({ file, index }: { file: Attachment; index: number }) {
     : <span><Paperclip size={13} /> {file.name || `Documento ${index + 1}`} indisponível</span>
 }
 
+
+type CreditOperation = { source: AnyRecord | null; transfers: AnyRecord[]; commissions: AnyRecord[] }
+
+function FilesForOperation({
+  source, transfers = [], commissions = [], expense, societary,
+}: { source?: AnyRecord | null; transfers?: AnyRecord[]; commissions?: AnyRecord[]; expense?: AnyRecord; societary?: AnyRecord }) {
+  const records: Array<{ kind: DocumentContext; record: AnyRecord; title: string }> = []
+  if (expense) records.push({ kind: 'expense', record: expense, title: '01 · Demonstrativo da despesa' })
+  if (source) records.push({ kind: 'revenue', record: source, title: '01 · Demonstrativo da receita' })
+  transfers.forEach((plan) => records.push({ kind: 'alvaraTransfer', record: plan, title: '02 · Repasse ao cliente' }))
+  commissions.forEach((plan) => records.push({ kind: 'commission', record: plan, title: '03 · Comissão de ' + String(plan.beneficiary || plan.sourceSnapshot?.agentName || 'agente') }))
+  if (societary) records.push({ kind: 'societaryTransfer', record: societary, title: 'Repasse Societário' })
+  const count = records.reduce((sum, item) => sum + attachmentsOf(item.record).length + (item.record.demonstrative?.url || item.record.demonstrativeUrl ? 1 : 0), 0)
+  return <details className="financial-operation-documents">
+    <summary>Documentos da operação · {records.length} demonstrativo(s) · {count} arquivo(s) relacionado(s)</summary>
+    <div className="financial-operation-list">
+      {records.map(({ kind, record, title }) => <section className="financial-operation-group" key={kind + ':' + record.id}>
+        <strong>{title}</strong>
+        <div className="financial-document-row">
+          <DemonstrativeLink item={record} context={kind} />
+          <OfficialFinancialDocumentPreviewButton kind={kind} record={record} />
+          {attachmentsOf(record).map((file, index) =>
+            <AttachmentLink key={file.path || String(index)} file={file} index={index} />)}
+          {attachmentsOf(record).length === 0 && <span>Comprovante não anexado</span>}
+        </div>
+      </section>)}
+    </div>
+  </details>
+}
+
+
 function ExpenseMovement({ item }: { item: AnyRecord }) {
-  const attachments = attachmentsOf(item)
   return <article className="financial-movement-card expense-movement">
     <div className="financial-movement-main">
       <div><strong>{item.fornecedor || item.nome || 'Despesa'}</strong><span>{item.expenseAccountName || item.categoria || item.expenseAccountCode || 'Despesa'}</span></div>
       <b>{money.format(toNumber(item.valorTotal))}</b>
     </div>
-    <div className="financial-document-row">
-      <DemonstrativeLink item={item} />
-      <OfficialFinancialDocumentPreviewButton kind="expense" record={item} />
-      {attachments.map((file, index) => <AttachmentLink key={file.path || `${file.name}-${index}`} file={file} index={index} />)}
-    </div>
+    <FilesForOperation expense={item} />
   </article>
 }
-
-function RevenueMovement({ item }: { item: AnyRecord }) {
-  const attachments = attachmentsOf(item)
+function RevenueMovement({ item, operation }: { item: AnyRecord; operation?: CreditOperation }) {
   return <article className="financial-movement-card revenue-movement">
     <div className="financial-movement-main">
       <div><strong>{item.processo || item.reclamante || 'Receita'}</strong><span>{item.reclamante || item.origem || item.natureza || 'Recebimento'}</span></div>
       <b>{money.format(toNumber(item.valorAlvara || item.valorLiquidoCliente))}</b>
     </div>
-    <div className="financial-document-row">
-      <DemonstrativeLink item={item} />
-      <OfficialFinancialDocumentPreviewButton kind="revenue" record={item} />
-      {attachments.map((file, index) => <AttachmentLink key={file.path || `${file.name}-${index}`} file={file} index={index} />)}
-    </div>
+    <FilesForOperation source={operation?.source || item} transfers={operation?.transfers || []} commissions={operation?.commissions || []} />
   </article>
 }
 
 type PayoutMovement = { id: string; kind: 'Repasse de Alvará' | 'Comissão de Agente' | 'Repasse Societário'; date: string; process: string; beneficiary: string; value: number; record: AnyRecord }
 
-function PayoutMovementCard({ item }: { item: PayoutMovement }) {
-  const attachments = attachmentsOf(item.record)
+
+function PayoutMovementCard({ item, operation }: { item: PayoutMovement; operation?: CreditOperation }) {
   return <article className="financial-movement-card payout-movement">
     <div className="financial-movement-main">
       <div><strong>{item.kind}</strong><span>{item.process || '—'} · {item.beneficiary || '—'}</span></div>
       <b>{money.format(item.value)}</b>
     </div>
-    <div className="financial-document-row">
-      <DemonstrativeLink item={item.record} />
-      <OfficialFinancialDocumentPreviewButton kind={item.kind === 'Comissão de Agente' ? 'commission' : item.kind === 'Repasse Societário' ? 'societaryTransfer' : 'alvaraTransfer'} record={item.record} />
-      {attachments.map((file, index) => <AttachmentLink key={file.path || `${file.name}-${index}`} file={file} index={index} />)}
-    </div>
+    {item.kind === 'Repasse Societário'
+      ? <FilesForOperation societary={item.record} />
+      : <FilesForOperation source={operation?.source || null}
+        transfers={operation?.transfers || (item.kind === 'Repasse de Alvará' ? [item.record] : [])}
+        commissions={operation?.commissions || (item.kind === 'Comissão de Agente' ? [item.record] : [])} />}
   </article>
 }
-
 
 export function FinancialCalendarPage() {
   const { records: expenses, loading: loadingExpenses } = useCollectionRecords('expenses')
@@ -143,6 +187,31 @@ export function FinancialCalendarPage() {
   const { records: alvaraTransfers, loading: loadingTransfers } = useCollectionRecords('alvaraTransfers')
   const { records: commissions, loading: loadingCommissions } = useCollectionRecords('agentCommissions')
   const { records: societaryTransfers, loading: loadingSocietary } = useCollectionRecords('societaryTransfers')
+
+  const creditOperations = useMemo(() => {
+    const operations = new Map<string, CreditOperation>()
+    for (const source of receivables) operations.set(source.id, { source, transfers: [], commissions: [] })
+    for (const plan of alvaraTransfers) {
+      if (!Array.isArray(plan.installments) || !plan.installments.some((row: DocumentData) => row?.paid === true)) continue
+      const source = receivableForFinancialPlan(plan, receivables)
+      const key = source?.id || 'alvara:' + plan.id
+      if (!operations.has(key)) operations.set(key, { source, transfers: [], commissions: [] })
+      operations.get(key)!.transfers.push(plan)
+    }
+    for (const plan of commissions) {
+      if (!Array.isArray(plan.installments) || !plan.installments.some((row: DocumentData) => row?.paid === true)) continue
+      const source = receivableForFinancialPlan(plan, receivables)
+      const key = source?.id || 'commission:' + plan.id
+      if (!operations.has(key)) operations.set(key, { source, transfers: [], commissions: [] })
+      operations.get(key)!.commissions.push(plan)
+    }
+    return operations
+  }, [receivables, alvaraTransfers, commissions])
+  const operationForPlan = (plan: AnyRecord, kind: 'alvara' | 'commission') => {
+    const source = receivableForFinancialPlan(plan, receivables)
+    return creditOperations.get(source?.id || kind + ':' + plan.id)
+  }
+
   const today = new Date()
   const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1))
 
@@ -270,12 +339,12 @@ export function FinancialCalendarPage() {
 
             {dayReceivables.length > 0 && <section className="financial-day-section financial-day-revenues">
               <div className="financial-day-section-head"><h3>Receitas</h3><strong>{money.format(dayRevenueTotal)}</strong></div>
-              <div className="financial-movement-list">{dayReceivables.map((item) => <RevenueMovement key={item.id} item={item} />)}</div>
+              <div className="financial-movement-list">{dayReceivables.map((item) => <RevenueMovement key={item.id} item={item} operation={creditOperations.get(item.id)} />)}</div>
             </section>}
 
             {dayPayouts.length > 0 && <section className="financial-day-section financial-day-payouts">
               <div className="financial-day-section-head"><h3>Repasses e Comissões Pagos</h3><strong>{money.format(dayPayouts.reduce((sum, item) => sum + item.value, 0))}</strong></div>
-              <div className="financial-movement-list">{dayPayouts.map((item) => <PayoutMovementCard key={item.id} item={item} />)}</div>
+              <div className="financial-movement-list">{dayPayouts.map((item) => <PayoutMovementCard key={item.id} item={item} operation={item.kind === 'Repasse Societário' ? undefined : operationForPlan(item.record, item.kind === 'Comissão de Agente' ? 'commission' : 'alvara')} />)}</div>
             </section>}
 
             {dayExpenses.length === 0 && dayReceivables.length === 0 && dayPayouts.length === 0 && <div className="financial-day-empty">Sem movimento</div>}
