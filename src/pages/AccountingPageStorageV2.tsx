@@ -222,29 +222,25 @@ export function AccountingPageStorageV2() {
     ) {
       if (!finalStatus) {
         addIssue(type, reference, value, 'Lançamento ainda não finalizado; demonstrativo de pagamento não aplicável')
-        return
       }
       let demonstrative = demonstrativeOf(record)
-      if (!demonstrative) {
+      if (finalStatus && (!demonstrative || Number(record.demonstrative?.layoutVersion ?? 0) < 3)) {
         try {
           record.demonstrative = await ensureOfficialDemonstrative(kind, record, { generatedBy: profile?.uid ?? null })
           demonstrative = demonstrativeOf(record)
         } catch (error) {
           addIssue(type, reference, value, `Falha ao gerar demonstrativo: ${String(error)}`)
-          return
         }
       }
-      if (!demonstrative) {
-        addIssue(type, reference, value, 'Demonstrativo ausente após tentativa de geração')
-        return
-      }
-      let pdf: Uint8Array
-      try {
-        pdf = await bytesFromAttachment(demonstrative)
-        if (!pdf.byteLength) throw new Error('arquivo PDF vazio')
-      } catch (error) {
-        addIssue(type, reference, value, `Falha ao ler demonstrativo do Storage: ${String(error)}`)
-        return
+      if (!demonstrative && finalStatus) addIssue(type, reference, value, 'Demonstrativo ausente após tentativa de geração')
+      let pdf: Uint8Array | null = null
+      if (demonstrative && finalStatus) {
+        try {
+          pdf = await bytesFromAttachment(demonstrative)
+          if (!pdf.byteLength) throw new Error('arquivo PDF vazio')
+        } catch (error) {
+          addIssue(type, reference, value, `Falha ao ler demonstrativo do Storage: ${String(error)}`)
+        }
       }
 
       const documents = attachmentsOf(record)
@@ -266,7 +262,8 @@ export function AccountingPageStorageV2() {
         addIssue(type, reference, value, 'Sem documento comprobatório anexado ao lançamento')
       }
 
-      entries.push({ name: `${root}${folder}/demonstrativo.pdf`, content: pdf }, ...supportingFiles)
+      if (pdf) entries.push({ name: `${root}${folder}/demonstrativo.pdf`, content: pdf })
+      entries.push(...supportingFiles)
     }
 
     if (statement?.storagePath) {

@@ -338,5 +338,48 @@ service cloud.firestore {
       allow read: if activeUser();
       allow write: if masterRestoreMode() || (isPrimaryAdminEmail() && hasRole(['master']));
     }
+    // Metadados de PDF oficial: somente lançamentos finalizados, sem tocar
+    // em valores, parcelas, status, fluxo de aprovação ou dados bancários.
+    function officialPdfMetadataOnly(folder, documentId) {
+      return hasRole(['master', 'diretor', 'gerente', 'tesouraria'])
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['demonstrative', 'demonstrativePath', 'demonstrativeUrl', 'demonstrativeGeneratedAt'])
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['demonstrative', 'demonstrativePath', 'demonstrativeUrl'])
+        && request.resource.data.demonstrative is map
+        && request.resource.data.demonstrativePath is string
+        && request.resource.data.demonstrativePath ==
+           'demonstrativos/' + folder + '/' + documentId + '/v3/demonstrativo.pdf'
+        && request.resource.data.demonstrative.path == request.resource.data.demonstrativePath
+        && request.resource.data.demonstrativeUrl is string
+        && request.resource.data.demonstrative.url == request.resource.data.demonstrativeUrl
+        && request.resource.data.demonstrativeGeneratedAt is string;
+    }
+
+    match /expenses/{documentId} {
+      allow update: if resource.data.status in ['pago', 'arquivado']
+        && officialPdfMetadataOnly('despesas', documentId);
+    }
+
+    match /receivables/{documentId} {
+      allow update: if resource.data.status in ['recebido_tesouraria', 'encerrado']
+        && officialPdfMetadataOnly('receitas', documentId);
+    }
+
+    match /alvaraTransfers/{documentId} {
+      allow update: if resource.data.status in ['parcialmente_pago', 'pago']
+        && officialPdfMetadataOnly('repasses-alvaras', documentId);
+    }
+
+    match /agentCommissions/{documentId} {
+      allow update: if resource.data.status in ['parcialmente_pago', 'pago']
+        && officialPdfMetadataOnly('comissoes', documentId);
+    }
+
+    match /societaryTransfers/{documentId} {
+      allow update: if resource.data.status == 'pago'
+        && officialPdfMetadataOnly('repasses-societarios', documentId);
+    }
+
   }
 }
