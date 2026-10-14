@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthContext'
 import { createZip } from '../lib/simpleZip'
 import { createXlsx, type XlsxSheet } from '../lib/simpleXlsx'
 import { ensureOfficialDemonstrative } from '../lib/officialDemonstrative'
+import { creditFolder, receivableForFinancialPlan } from '../lib/creditOperations'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const dateTimeBR = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
@@ -147,8 +148,31 @@ export function AccountingPageStorageV2() {
     } catch (error) { console.error(error); setMessage('Não foi possível enviar o extrato consolidado.') } finally { setBusy('') }
   }
 
+  const debitFolder = (item: AnyRecord) => 'Debitos/' + safeName(String(item.competencia || competence)) + '_' + safeName(String(item.fornecedor || item.nome || 'fornecedor')) + '_' + safeName(item.id)
+  const sourceOfPlan = (plan: AnyRecord) => receivableForFinancialPlan(plan, receivables)
+  const creditFolderOfPlan = (plan: AnyRecord) => {
+    const source = sourceOfPlan(plan)
+    return creditFolder(source || { id: plan.id, processo: plan.processo || plan.sourceSnapshot?.processo, reclamante: plan.sourceSnapshot?.reclamante })
+  }
+  const accountingPath = (folder: string) => 'Contabilidade_' + competence + '/' + folder + '/'
+  const operationFolderPaths = () => {
+    const paths = new Map<string, string>()
+    for (const item of selectedExpenses) paths.set('expense:' + item.id, accountingPath(debitFolder(item)))
+    for (const item of selectedReceivables) paths.set('revenue:' + item.id, accountingPath(creditFolder(item)))
+    for (const item of selectedTransfers) {
+      const plan = transfers.find((r) => r.id === item.planId)
+      if (plan) paths.set('transfer:' + plan.id, accountingPath(creditFolderOfPlan(plan)))
+    }
+    for (const item of selectedCommissions) {
+      const plan = commissions.find((r) => r.id === item.planId)
+      if (plan) paths.set('commission:' + plan.id, accountingPath(creditFolderOfPlan(plan)))
+    }
+    return paths
+  }
+
   function workbookSheets(packageIssues: PackageIssue[] = []): XlsxSheet[] {
     const pendingDemonstratives = packageIssues.filter((issue) => issue.reason.toLowerCase().includes('demonstrativo'))
+    const paths = operationFolderPaths()
     const summaryRows = [
       ['FLÁVIO MARQUES ADVOGADOS ASSOCIADOS'],
       ['Movimento mensal para Contabilidade'],
@@ -160,31 +184,33 @@ export function AccountingPageStorageV2() {
       ['Documentos anexados', documentCount], ['Lançamentos sem anexo', packageIssues.filter((issue) => issue.reason.toLowerCase().includes('comprovan')).length], ['Lançamentos sem demonstrativo', pendingDemonstratives.length], ['Extrato consolidado', statement?.fileName || 'NÃO ANEXADO (OPCIONAL)'],
       ['Gerado por', profile?.displayName || profile?.email || 'Usuário'], ['Gerado em', dateTimeBR.format(new Date())],
     ]
-    const expenseRows: (string | number)[][] = [['Competência', 'Unidade', 'Responsável', 'Fornecedor/Favorecido', 'CPF/CNPJ', 'Plano de Contas', 'Descrição da Conta', 'DRE', 'Status', 'Valor', 'Documentos', 'Demonstrativo']]
+    const expenseRows: (string | number)[][] = [['Competência', 'Unidade', 'Responsável', 'Fornecedor/Favorecido', 'CPF/CNPJ', 'Plano de Contas', 'Descrição da Conta', 'DRE', 'Status', 'Valor', 'Documentos', 'Demonstrativo', 'Pasta da Operação']]
     for (const item of selectedExpenses) {
       const classification = classificationMap.get(`expense__${item.id}`)
-      expenseRows.push([item.competencia ?? '', item.unidade ?? '', item.nome ?? '', item.fornecedor ?? '', item.documento ?? '', classification?.accountCode ?? item.expenseAccountCode ?? item.classificacaoContabil ?? '', classification?.accountName ?? item.expenseAccountName ?? '', classification?.accountDre ?? item.expenseAccountDre ?? '', statusLabel(String(item.status ?? '')), toNumber(item.valorTotal), attachmentsOf(item).length, demonstrativeOf(item)?.path ?? ''])
+      expenseRows.push([item.competencia ?? '', item.unidade ?? '', item.nome ?? '', item.fornecedor ?? '', item.documento ?? '', classification?.accountCode ?? item.expenseAccountCode ?? item.classificacaoContabil ?? '', classification?.accountName ?? item.expenseAccountName ?? '', classification?.accountDre ?? item.expenseAccountDre ?? '', statusLabel(String(item.status ?? '')), toNumber(item.valorTotal), attachmentsOf(item).length, demonstrativeOf(item)?.path ?? '', paths.get('expense:' + item.id) || ''])
     }
-    const revenueRows: (string | number)[][] = [['Data', 'Unidade', 'Processo', 'Reclamante', 'Reclamada', 'Origem', 'Plano de Contas', 'Descrição da Conta', 'DRE', 'Status', 'Valor do Alvará', 'Líquido Cliente', 'Honorários Escritório', 'Comissão', 'Documentos', 'Demonstrativo']]
+    const revenueRows: (string | number)[][] = [['Data', 'Unidade', 'Processo', 'Reclamante', 'Reclamada', 'Origem', 'Plano de Contas', 'Descrição da Conta', 'DRE', 'Status', 'Valor do Alvará', 'Líquido Cliente', 'Honorários Escritório', 'Comissão', 'Documentos', 'Demonstrativo', 'Pasta da Operação']]
     for (const item of selectedReceivables) {
       const classification = classificationMap.get(`revenue__${item.id}`)
-      revenueRows.push([item.data ?? '', item.unidade ?? '', item.processo ?? '', item.reclamante ?? '', item.reclamada ?? '', item.origem ?? '', classification?.accountCode ?? item.revenueAccountCode ?? item.classificacaoContabil ?? '', classification?.accountName ?? item.revenueAccountName ?? '', classification?.accountDre ?? item.revenueAccountDre ?? '', statusLabel(String(item.status ?? '')), toNumber(item.valorAlvara), toNumber(item.valorLiquidoCliente), revenueComponentValue(item, 'Honorários do Escritório'), revenueComponentValue(item, 'Outras Deduções / Participações'), attachmentsOf(item).length, demonstrativeOf(item)?.path ?? ''])
+      revenueRows.push([item.data ?? '', item.unidade ?? '', item.processo ?? '', item.reclamante ?? '', item.reclamada ?? '', item.origem ?? '', classification?.accountCode ?? item.revenueAccountCode ?? item.classificacaoContabil ?? '', classification?.accountName ?? item.revenueAccountName ?? '', classification?.accountDre ?? item.revenueAccountDre ?? '', statusLabel(String(item.status ?? '')), toNumber(item.valorAlvara), toNumber(item.valorLiquidoCliente), revenueComponentValue(item, 'Honorários do Escritório'), revenueComponentValue(item, 'Outras Deduções / Participações'), attachmentsOf(item).length, demonstrativeOf(item)?.path ?? '', paths.get('revenue:' + item.id) || ''])
     }
-    const transferRows: (string | number)[][] = [['Data do Pagamento', 'Unidade', 'Processo', 'Cliente / Beneficiário', 'Parcela', 'Valor', 'Natureza']]
-    selectedTransfers.forEach((item) => transferRows.push([item.paidDate, item.unit, item.process, item.beneficiary, item.installment, item.value, 'Repasse de valor de terceiro — não classificar como despesa operacional/DRE']))
-    const commissionRows: (string | number)[][] = [['Data do Pagamento', 'Unidade', 'Processo', 'Agente / Beneficiário', 'Parcela', 'Valor', 'Natureza']]
-    selectedCommissions.forEach((item) => commissionRows.push([item.paidDate, item.unit, item.process, item.beneficiary, item.installment, item.value, 'Comissão / participação vinculada ao Alvará']))
-    const documentRows: (string | number)[][] = [['Tipo', 'Referência', 'Arquivo', 'Tamanho (bytes)']]
-    selectedExpenses.forEach((item) => attachmentsOf(item).forEach((file) => documentRows.push(['Despesa', `${item.nome ?? ''} · ${item.fornecedor ?? ''}`, file.name ?? 'Documento', toNumber(file.size)])))
-    selectedReceivables.forEach((item) => attachmentsOf(item).forEach((file) => documentRows.push(['Receita', `${item.processo ?? ''} · ${item.reclamante ?? ''}`, file.name ?? 'Documento', toNumber(file.size)])))
+    const transferRows: (string | number)[][] = [['Data do Pagamento', 'Unidade', 'Processo', 'Cliente / Beneficiário', 'Parcela', 'Valor', 'Natureza', 'Pasta da Operação']]
+    selectedTransfers.forEach((item) => transferRows.push([item.paidDate, item.unit, item.process, item.beneficiary, item.installment, item.value, 'Repasse de valor de terceiro — não classificar como despesa operacional/DRE', paths.get('transfer:' + item.planId) || '']))
+    const commissionRows: (string | number)[][] = [['Data do Pagamento', 'Unidade', 'Processo', 'Agente / Beneficiário', 'Parcela', 'Valor', 'Natureza', 'Pasta da Operação']]
+    selectedCommissions.forEach((item) => commissionRows.push([item.paidDate, item.unit, item.process, item.beneficiary, item.installment, item.value, 'Comissão / participação vinculada ao Alvará', paths.get('commission:' + item.planId) || '']))
+    const documentRows: (string | number)[][] = [['Tipo', 'Referência', 'Arquivo', 'Tamanho (bytes)', 'Pasta da Operação']]
+    selectedExpenses.forEach((item) => attachmentsOf(item).forEach((file) => documentRows.push(['Despesa', `${item.nome ?? ''} · ${item.fornecedor ?? ''}`, file.name ?? 'Documento', toNumber(file.size), paths.get('expense:' + item.id) || ''])))
+    selectedReceivables.forEach((item) => attachmentsOf(item).forEach((file) => documentRows.push(['Receita', `${item.processo ?? ''} · ${item.reclamante ?? ''}`, file.name ?? 'Documento', toNumber(file.size), paths.get('revenue:' + item.id) || ''])))
     selectedTransfers.forEach((item) => {
       const plan = transfers.find((record) => record.id === item.planId)
-      if (plan) attachmentsOf(plan).forEach((file) => documentRows.push(['Repasse de Alvará', `${item.process} · Parcela ${item.installment}`, file.name ?? 'Comprovante', toNumber(file.size)]))
+      if (plan) attachmentsOf(plan).forEach((file) => documentRows.push(['Repasse de Alvará', `${item.process} · Parcela ${item.installment}`, file.name ?? 'Comprovante', toNumber(file.size), paths.get('transfer:' + item.planId) || '']))
     })
     selectedCommissions.forEach((item) => {
       const plan = commissions.find((record) => record.id === item.planId)
-      if (plan) attachmentsOf(plan).forEach((file) => documentRows.push(['Comissão de Agente', `${item.process} · Parcela ${item.installment}`, file.name ?? 'Comprovante', toNumber(file.size)]))
+      if (plan) attachmentsOf(plan).forEach((file) => documentRows.push(['Comissão de Agente', `${item.process} · Parcela ${item.installment}`, file.name ?? 'Comprovante', toNumber(file.size), paths.get('commission:' + item.planId) || '']))
     })
+    const operationRows: (string | number)[][] = [['Operação', 'Pasta da Operação']]
+    for (const [key, folder] of paths) operationRows.push([key, folder])
     const pendingRows: (string | number)[][] = [['Tipo', 'Referência', 'Valor', 'Pendência']]
     packageIssues.forEach((issue) => pendingRows.push([issue.type, issue.reference, issue.value, issue.reason]))
     return [
@@ -194,6 +220,7 @@ export function AccountingPageStorageV2() {
       { name: 'Repasses_Alvaras', rows: transferRows, currencyColumns: [5] },
       { name: 'Comissoes_Agentes', rows: commissionRows, currencyColumns: [5] },
       { name: 'Documentos', rows: documentRows },
+      { name: 'Operacoes', rows: operationRows },
       { name: 'Pendencias', rows: pendingRows, currencyColumns: [2] },
     ]
   }
