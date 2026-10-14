@@ -224,7 +224,7 @@ export function AccountingPageStorageV2() {
         addIssue(type, reference, value, 'Lançamento ainda não finalizado; demonstrativo de pagamento não aplicável')
       }
       let demonstrative = demonstrativeOf(record)
-      if (finalStatus && (!demonstrative || Number(record.demonstrative?.layoutVersion ?? 0) < 2)) {
+      if (finalStatus && (!demonstrative || Number(record.demonstrative?.layoutVersion ?? 0) < 3)) {
         try {
           record.demonstrative = await ensureOfficialDemonstrative(kind, record, { generatedBy: profile?.uid ?? null })
           demonstrative = demonstrativeOf(record)
