@@ -1,0 +1,9 @@
+/* FM Assistente - launcher ao lado do controle de tema */
+.fm-header-controls{position:fixed;top:18px;right:18px;z-index:1000;display:flex;align-items:center;gap:10px}
+.fm-header-controls .theme-toggle{position:static!important;top:auto!important;right:auto!important;bottom:auto!important;left:auto!important}
+.fm-assistente-trigger{width:50px;height:50px;border:1px solid #bad0df;border-radius:999px;background:#fff;display:grid;place-items:center;padding:4px;cursor:pointer;box-shadow:0 6px 18px rgba(23,44,67,.10)}
+.fm-assistente-trigger img{width:42px;height:42px;object-fit:contain;display:block}
+.fm-assistente-trigger:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(23,44,67,.16)}
+.fm-assistente-trigger:focus-visible{outline:3px solid #2888d2;outline-offset:3px}
+html[data-theme='dark'] .fm-assistente-trigger{background:#1b3347;border-color:#54748d}
+@media(max-width:720px){.fm-header-controls{top:10px;right:12px;gap:6px}.fm-assistente-trigger{width:44px;height:44px}.fm-assistente-trigger img{width:36px;height:36px}}
