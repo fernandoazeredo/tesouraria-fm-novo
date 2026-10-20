@@ -48,8 +48,8 @@ export function ThemeControls() {
   return (
     <div className="fm-header-controls">
       <button type="button" className="fm-assistente-trigger" aria-label="Abrir FM Assistente" title="FM Assistente" onClick={() => {
-        const width = 480
-        const height = 760
+        const width = 880
+        const height = 820
         const left = Math.max(0, window.screenX + (window.outerWidth - width) / 2)
         const top = Math.max(0, window.screenY + (window.outerHeight - height) / 2)
         window.open(
