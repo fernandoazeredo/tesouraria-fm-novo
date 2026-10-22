@@ -325,7 +325,7 @@ function AppShell() {
           <Route path="/plano-contas" element={<AccountsPageFernando />} />
           <Route path="/contabilidade" element={<AccountingPageStorageV2 />} />
           <Route path="/calendario-financeiro" element={<FinancialCalendarPage />} />
-          <Route path="/fluxo-caixa" element={<CashFlowMonthlyPage />} />
+          <Route path="/fluxo-caixa" element={['master', 'diretor', 'gerente', 'tesouraria'].includes(accessRole) ? <CashFlowMonthlyPage /> : <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>Seu perfil não tem permissão para consultar o Fluxo de Caixa.</p></section>} />
           <Route path="/conciliacao-bancaria" element={<BankReconciliationPage />} />
           <Route path="/documentos" element={<DocumentsPageStorage />} />
           <Route path="/usuarios" element={<UsersPageKitFernando />} />
