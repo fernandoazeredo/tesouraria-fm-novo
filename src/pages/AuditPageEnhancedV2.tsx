@@ -46,7 +46,7 @@ export function AuditPageEnhancedV2() {
 
     <section className="page-card audit-explainer">
       <ShieldCheck size={24} />
-      <div><strong>Regra do fluxo de Alvarás</strong><span>O recebimento do Alvará não passa pela fila de Aprovações. Ele é enviado e confirmado pela Tesouraria. A aprovação financeira ocorre no Repasse de Alvarás e nas Comissões de Agentes. Todas essas etapas ficam registradas aqui.</span></div>
+      <div><strong>Regra do fluxo de Alvarás</strong><span>Regra 1 — Recebimento do Alvará: NÃO passa pela fila de Aprovações; a Tesouraria confirma diretamente o crédito. Regra 2 — Repasse de Alvarás: PASSA pela fila central de Aprovações, assim como Despesas, Comissões de Agentes e Repasse Societário. Após a aprovação, a Tesouraria registra o pagamento efetivo de cada parcela. A Auditoria registra as ações realizadas em cada etapa.</span></div>
     </section>
 
     <section className="page-card module-card audit-card">
