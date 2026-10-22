@@ -211,3 +211,33 @@
     gap: 8px;
   }
 }
+
+/* Correção definitiva: PDF fica em uma linha própria, abaixo do título.
+   Os controles fixos de tema e assistente permanecem no topo. */
+.page-heading.payment-control-heading {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 14px !important;
+  padding-right: 0 !important;
+}
+.payment-control-heading > div:first-child {
+  width: 100%;
+  max-width: 100%;
+}
+.payment-control-heading > .quick-actions {
+  display: flex;
+  width: 100%;
+  flex: 0 0 auto;
+  justify-content: flex-start;
+  margin: 0 !important;
+}
+.payment-control-heading > .quick-actions > button {
+  position: static;
+  max-width: 100%;
+  min-height: 44px;
+  white-space: normal;
+}
+@media (max-width: 600px) {
+  .payment-control-heading > .quick-actions > button { width: 100%; }
+}
