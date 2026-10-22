@@ -5,7 +5,6 @@ import '../theme.css'
 type ThemeMode = 'light' | 'dark'
 
 const STORAGE_KEY = 'mm-theme-mode'
-const FM_ASSISTENTE_URL = 'https://cloud.activepieces.com/chats/Odqvny7ajdtEmRvsSJmRt'
 
 function initialTheme(): ThemeMode {
   if (typeof window === 'undefined') return 'light'
