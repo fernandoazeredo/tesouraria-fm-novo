@@ -1,5 +1,5 @@
 /** Pure, read-only cash-flow classification logic. No Firebase calls. */
-export type RecordRow = { id: string } & DocumentData
+export type RecordRow = { id: string } & Record<string, any>
 export type Movement = { id: string; origin: string; description: string; date: string; value: number; direction: 'entrada' | 'saida'; stage: 'realizado' | 'previsto'; bank: 'itau' | 'outro' | 'indefinido'; observation?: string; treasuryDate?: string; alternativeDate?: boolean }
 const bankOf = (raw: unknown): Movement['bank'] => raw === 'itau' || raw === 'itau-pj' ? 'itau' : raw === 'bb' || raw === 'bb-pf' || raw === 'cef' || raw === 'cef-pf' ? 'outro' : 'indefinido'
 const dateOf = (raw: unknown) => { const value = typeof raw === 'string' ? raw.slice(0, 10) : ''; return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '' }
