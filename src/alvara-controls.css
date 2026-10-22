@@ -175,3 +175,33 @@
   .fiscal-metrics { grid-template-columns: 1fr; }
   .obligation-modal { width: min(100% - 14px, 980px); padding: 15px; }
 }
+
+/* Apenas cabeçalho de Repasse de Alvarás/Comissões: mantém PDF longe dos
+   controles fixos FM Assistente e tema, sem mudar seus posicionamentos. */
+.page-heading.payment-control-heading {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 12px !important;
+  padding-right: 0 !important;
+}
+.payment-control-heading > div:first-child { width: 100%; min-width: 0; }
+.payment-control-heading > .quick-actions {
+  width: 100%;
+  display: flex;
+  justify-content: flex-start;
+  flex: 0 0 auto;
+  margin: 0;
+}
+.payment-control-heading > .quick-actions > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  gap: 8px;
+  max-width: 100%;
+  white-space: normal;
+}
+@media (max-width: 600px) {
+  .payment-control-heading > .quick-actions > button { width: 100%; }
+}
