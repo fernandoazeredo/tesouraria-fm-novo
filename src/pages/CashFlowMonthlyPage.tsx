@@ -27,12 +27,15 @@ export function movements(receivables: RecordRow[], expenses: RecordRow[], alvar
     const bank = bankOf(item.receivingBankAccountId)
     const description = String(item.processo || item.reclamante || item.descricao || 'Receita')
     if (String(item.tipoRecebimento) === 'acordo_trabalhista') {
+      const status = String(item.status || '')
+      if (!['recebido_tesouraria', 'encerrado', 'enviado_tesouraria'].includes(status)) continue
+      const confirmed = status === 'recebido_tesouraria' || status === 'encerrado'
       const parts = Array.isArray(item.parcelas) ? item.parcelas as DocumentData[] : []
       parts.forEach((part, i) => {
-        const actualDate = dateOf(part.dataRealizada)
+        const actualDate = confirmed ? dateOf(part.dataRealizada) : ''
         const date = actualDate || dateOf(part.dataPrevista)
         const value = numberOf(part.valorParcela)
-        if (value) output.push({ id: 'acordo-' + item.id + '-' + i, origin: 'Acordo Trabalhista', description: description + ' · parcela ' + (i + 1), date, value, direction: 'entrada', stage: actualDate ? 'realizado' : 'previsto', bank, observation: 'Valor individual da parcela do acordo' })
+        if (value) output.push({ id: 'acordo-' + item.id + '-' + i, origin: 'Acordo Trabalhista', description: description + ' · parcela ' + (i + 1), date, value, direction: 'entrada', stage: actualDate ? 'realizado' : 'previsto', bank, observation: 'Valor individual da parcela do acordo; confirmação conforme status da receita' })
       })
       continue
     }
