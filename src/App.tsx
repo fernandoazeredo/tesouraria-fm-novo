@@ -29,7 +29,7 @@ import {
   X,
 } from 'lucide-react'
 import { NavLink, Route, Routes } from 'react-router-dom'
-import { useAuth, type UserRole } from './auth/AuthContext'
+import { useAuth, PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL, type UserRole } from './auth/AuthContext'
 import { TreasuryPage } from './pages/SystemPages'
 import { ReceivablesPageStorageV2 } from './pages/ReceivablesPageStorageV2'
 import { ExpensesPageStorage } from './pages/ExpensesPageStorage'
@@ -93,7 +93,7 @@ const menu: MenuItem[] = [
   { to: '/plano-contas', label: 'Plano de Contas', icon: BookOpenCheck, roles: ['master'] },
   { to: '/contabilidade', label: 'Contabilidade', icon: Calculator, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/calendario-financeiro', label: 'Calendário Financeiro', icon: CalendarDays, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
-  { to: '/fluxo-caixa', label: 'Fluxo de Caixa', icon: Wallet, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
+  { to: '/fluxo-caixa', label: 'Fluxo de Caixa', icon: Wallet, roles: ['master', 'diretor'] },
   { to: '/conciliacao-bancaria', label: 'Conciliação Bancária', icon: Landmark, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/documentos', label: 'Arquivo de Documentos', icon: FolderArchive, roles: ['master', 'diretor', 'gerente', 'tesouraria', 'operador'] },
   { to: '/usuarios', label: 'Usuários', icon: Users, roles: ['master'] },
@@ -272,7 +272,8 @@ function AppShell() {
   const { profile, logout } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const accessRole = accessRoleFromUserRole(profile?.role)
-  const visibleMenu = menu.filter((item) => !item.roles || item.roles.includes(accessRole))
+  const canViewCashFlow = Boolean(profile?.email && [PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL].includes(profile.email.trim().toLowerCase()))
+  const visibleMenu = menu.filter((item) => (!item.roles || item.roles.includes(accessRole)) && (item.to !== '/fluxo-caixa' || canViewCashFlow))
 
   useEffect(() => {
     document.body.classList.toggle('mobile-menu-lock', mobileMenuOpen)
@@ -325,7 +326,7 @@ function AppShell() {
           <Route path="/plano-contas" element={<AccountsPageFernando />} />
           <Route path="/contabilidade" element={<AccountingPageStorageV2 />} />
           <Route path="/calendario-financeiro" element={<FinancialCalendarPage />} />
-          <Route path="/fluxo-caixa" element={['master', 'diretor', 'gerente', 'tesouraria'].includes(accessRole) ? <CashFlowMonthlyPage /> : <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>Seu perfil não tem permissão para consultar o Fluxo de Caixa.</p></section>} />
+          <Route path="/fluxo-caixa" element={canViewCashFlow ? <CashFlowMonthlyPage /> : <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>Seu perfil não tem permissão para consultar o Fluxo de Caixa.</p></section>} />
           <Route path="/conciliacao-bancaria" element={<BankReconciliationPage />} />
           <Route path="/documentos" element={<DocumentsPageStorage />} />
           <Route path="/usuarios" element={<UsersPageKitFernando />} />
