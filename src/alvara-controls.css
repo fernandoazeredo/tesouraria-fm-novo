@@ -175,3 +175,39 @@
   .fiscal-metrics { grid-template-columns: 1fr; }
   .obligation-modal { width: min(100% - 14px, 980px); padding: 15px; }
 }
+
+/* Cabeçalho dos repasses: espaço reservado aos controles fixos do aplicativo
+   (FM Assistente e alternador claro/escuro), sem afetar demais páginas. */
+@media (min-width: 901px) {
+  .page-heading.payment-control-heading {
+    padding-right: 230px !important;
+    gap: 20px;
+    align-items: flex-start;
+  }
+  .payment-control-heading > div:first-child { min-width: 0; flex: 1 1 auto; }
+  .payment-control-heading > .quick-actions { flex: 0 0 auto; margin: 0; }
+  .payment-control-heading > .quick-actions > button {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+}
+@media (max-width: 900px) {
+  .page-heading.payment-control-heading {
+    padding-right: 0 !important;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .payment-control-heading > .quick-actions { width: 100%; margin: 0; }
+  .payment-control-heading > .quick-actions > button {
+    min-height: 44px;
+    max-width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+}
