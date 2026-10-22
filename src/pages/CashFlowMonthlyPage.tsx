@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, onSnapshot, type DocumentData } from 'firebase/firestore'
+import { collection, onSnapshot } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import './CashFlowMonthly.css'
 
-import { movements, validatePlan, type Movement } from '../lib/cashFlowMovements'
+import { movements, validatePlan, type Movement, type RecordRow } from '../lib/cashFlowMovements'
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const monthNow = () => { const date = new Date(); return String(date.getFullYear()) + '-' + String(date.getMonth() + 1).padStart(2, '0') }
 const monthLabel = (value: string) => { const [y, m] = value.split('-').map(Number); return Number.isInteger(y) && Number.isInteger(m) && m >= 1 && m <= 12 ? new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(y, m - 1, 1))) : value }
