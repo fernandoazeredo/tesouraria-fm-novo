@@ -97,7 +97,7 @@ const menu: MenuItem[] = [
   { to: '/conciliacao-bancaria', label: 'Conciliação Bancária', icon: Landmark, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/documentos', label: 'Arquivo de Documentos', icon: FolderArchive, roles: ['master', 'diretor', 'gerente', 'tesouraria', 'operador'] },
   { to: '/usuarios', label: 'Usuários', icon: Users, roles: ['master'] },
-  { to: '/auditoria', label: 'Auditoria', icon: ShieldCheck, roles: ['master', 'diretor', 'gerente'] },
+  { to: '/auditoria', label: 'Auditoria', icon: ShieldCheck, roles: ['master'] },
   { to: '/utilitarios', label: 'Utilitários', icon: Wrench, roles: ['master'] },
   { to: '/configuracoes', label: 'Configurações', icon: Settings, roles: ['master'] },
 ]
@@ -274,7 +274,8 @@ function AppShell() {
   const accessRole = accessRoleFromUserRole(profile?.role)
   const canViewCashFlow = Boolean(profile?.email && [PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL].includes(profile.email.trim().toLowerCase()))
   const canViewManagementReports = accessRole !== 'tesouraria'
-  const visibleMenu = menu.filter((item) => (!item.roles || item.roles.includes(accessRole)) && (item.to !== '/fluxo-caixa' || canViewCashFlow))
+  const canViewAudit = Boolean(profile?.email && profile.email.trim().toLowerCase() === PRIMARY_ADMIN_EMAIL && profile.role === 'master')
+  const visibleMenu = menu.filter((item) => (!item.roles || item.roles.includes(accessRole)) && (item.to !== '/fluxo-caixa' || canViewCashFlow) && (item.to !== '/auditoria' || canViewAudit))
 
   useEffect(() => {
     document.body.classList.toggle('mobile-menu-lock', mobileMenuOpen)
@@ -331,7 +332,7 @@ function AppShell() {
           <Route path="/conciliacao-bancaria" element={<BankReconciliationPage />} />
           <Route path="/documentos" element={<DocumentsPageStorage />} />
           <Route path="/usuarios" element={<UsersPageKitFernando />} />
-          <Route path="/auditoria" element={canViewManagementReports ? <AuditPageEnhancedV2 /> : <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>Seu perfil não tem permissão para consultar a Auditoria.</p></section>} />
+          <Route path="/auditoria" element={canViewAudit ? <AuditPageEnhancedV2 /> : <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>A Auditoria é exclusiva do Administrador Master.</p></section>} />
           <Route path="/utilitarios" element={<UtilitiesPage />} />
           <Route path="/configuracoes" element={<Configuracoes />} />
           <Route path="/dicas" element={<TipsPageEnhanced />} />
