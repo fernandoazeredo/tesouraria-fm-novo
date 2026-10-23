@@ -89,7 +89,7 @@ const menu: MenuItem[] = [
   { to: '/comissoes-agentes', label: 'Comissões de Agentes', icon: Users, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/tesouraria', label: 'Tesouraria — Recebimentos', icon: CircleDollarSign, tone: 'revenue', roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/aprovacoes', label: 'Aprovações', icon: FileCheck2, roles: ['master', 'diretor', 'gerente', 'tesouraria', 'operador'] },
-  { to: '/dre-gerencial', label: 'DRE Gerencial', icon: BarChart3, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
+  { to: '/dre-gerencial', label: 'DRE Gerencial', icon: BarChart3, roles: ['master', 'diretor', 'gerente'] },
   { to: '/plano-contas', label: 'Plano de Contas', icon: BookOpenCheck, roles: ['master'] },
   { to: '/contabilidade', label: 'Contabilidade', icon: Calculator, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/calendario-financeiro', label: 'Calendário Financeiro', icon: CalendarDays, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
@@ -97,7 +97,7 @@ const menu: MenuItem[] = [
   { to: '/conciliacao-bancaria', label: 'Conciliação Bancária', icon: Landmark, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/documentos', label: 'Arquivo de Documentos', icon: FolderArchive, roles: ['master', 'diretor', 'gerente', 'tesouraria', 'operador'] },
   { to: '/usuarios', label: 'Usuários', icon: Users, roles: ['master'] },
-  { to: '/auditoria', label: 'Auditoria', icon: ShieldCheck, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
+  { to: '/auditoria', label: 'Auditoria', icon: ShieldCheck, roles: ['master', 'diretor', 'gerente'] },
   { to: '/utilitarios', label: 'Utilitários', icon: Wrench, roles: ['master'] },
   { to: '/configuracoes', label: 'Configurações', icon: Settings, roles: ['master'] },
 ]
@@ -273,6 +273,7 @@ function AppShell() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const accessRole = accessRoleFromUserRole(profile?.role)
   const canViewCashFlow = Boolean(profile?.email && [PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL].includes(profile.email.trim().toLowerCase()))
+  const canViewManagementReports = accessRole !== 'tesouraria'
   const visibleMenu = menu.filter((item) => (!item.roles || item.roles.includes(accessRole)) && (item.to !== '/fluxo-caixa' || canViewCashFlow))
 
   useEffect(() => {
@@ -322,7 +323,7 @@ function AppShell() {
           <Route path="/comissoes-agentes" element={<AgentCommissionsPageV4 />} />
           <Route path="/tesouraria" element={<><TreasuryPage /><SocietaryTreasuryPanel /></>} />
           <Route path="/aprovacoes" element={<ApprovalsPageEnhanced />} />
-          <Route path="/dre-gerencial" element={<DreGerencialPageV2 />} />
+          <Route path="/dre-gerencial" element={canViewManagementReports ? <DreGerencialPageV2 /> : <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>Seu perfil não tem permissão para consultar a DRE Gerencial.</p></section>} />
           <Route path="/plano-contas" element={<AccountsPageFernando />} />
           <Route path="/contabilidade" element={<AccountingPageStorageV2 />} />
           <Route path="/calendario-financeiro" element={<FinancialCalendarPage />} />
@@ -330,7 +331,7 @@ function AppShell() {
           <Route path="/conciliacao-bancaria" element={<BankReconciliationPage />} />
           <Route path="/documentos" element={<DocumentsPageStorage />} />
           <Route path="/usuarios" element={<UsersPageKitFernando />} />
-          <Route path="/auditoria" element={<AuditPageEnhancedV2 />} />
+          <Route path="/auditoria" element={canViewManagementReports ? <AuditPageEnhancedV2 /> : <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>Seu perfil não tem permissão para consultar a Auditoria.</p></section>} />
           <Route path="/utilitarios" element={<UtilitiesPage />} />
           <Route path="/configuracoes" element={<Configuracoes />} />
           <Route path="/dicas" element={<TipsPageEnhanced />} />
