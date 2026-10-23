@@ -273,7 +273,7 @@ function AppShell() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const accessRole = accessRoleFromUserRole(profile?.role)
   const canViewCashFlow = Boolean(profile?.email && [PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL].includes(profile.email.trim().toLowerCase()))
-  const canViewManagementReports = accessRole !== 'tesouraria'
+  const canViewManagementReports = ['master', 'diretor', 'gerente'].includes(accessRole)
   const canViewAudit = Boolean(profile?.email && profile.email.trim().toLowerCase() === PRIMARY_ADMIN_EMAIL && profile.role === 'master')
   const visibleMenu = menu.filter((item) => (!item.roles || item.roles.includes(accessRole)) && (item.to !== '/fluxo-caixa' || canViewCashFlow) && (item.to !== '/auditoria' || canViewAudit))
 
