@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test": "node --experimental-strip-types --test tests/cash-flow.test.mjs",
     "preview": "vite preview",
     "firebase:deploy": "npm run build && firebase deploy"
   },
