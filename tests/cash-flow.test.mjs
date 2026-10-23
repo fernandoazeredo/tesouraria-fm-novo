@@ -55,3 +55,46 @@ test('testes de consistencia acusam diferenca de soma ou pagos', () => {
   const result=validatePlan({id:'divergente',amountDue:100000,paidValue:60000,installments:[{value:70000,paid:true},{value:20000,paid:false}]})
   assert.equal(result.length,2)
 })
+
+// ===== Testes adicionais (homologação Claude) =====
+test('100 mil recebidos, 70 mil repassados: honorarios de 30 mil nao viram lancamento', () => {
+  const rows = calc({
+    receivables:[{id:'r1',status:'recebido_tesouraria',valorAlvara:100000,valorLiquidoCliente:70000,invoiceValue:30000,receiptDate:'2026-10-05',receivingBankAccountId:'itau'}],
+    alvaraTransfers:[{id:'r1',status:'pago',amountDue:70000,paidValue:70000,installments:[{value:70000,paid:true,paidDate:'2026-10-10'}]}],
+  })
+  assert.equal(rows.length,2)
+  assert.equal(rows.filter(r=>r.direction==='entrada').reduce((s,r)=>s+r.value,0),100000)
+  assert.equal(rows.filter(r=>r.direction==='saida').reduce((s,r)=>s+r.value,0),70000)
+  assert.equal(rows.find(r=>r.direction==='saida').bank,'indefinido')
+})
+test('comissao sem conta nunca vai para o Itau', () => {
+  const rows = calc({agentCommissions:[{id:'c',status:'aprovado',installments:[{value:500,paid:false,dueDate:'2026-10-30'}]}]})
+  assert.equal(rows[0].bank,'indefinido')
+})
+test('plano aguardando aprovacao nao gera previsto', () => {
+  assert.equal(calc({alvaraTransfers:[{id:'p',status:'aguardando_aprovacao',installments:[{value:1,paid:false,dueDate:'2026-10-30'}]}]}).length,0)
+})
+test('despesa enviada para aprovacao nao entra; aprovada entra como previsto', () => {
+  const rows = calc({expenses:[
+    {id:'e1',status:'enviado_aprovacao',valorTotal:10,paymentDate:'2026-10-30',paymentBankAccountId:'itau'},
+    {id:'e2',status:'aprovado',valorTotal:20,paymentDate:'2026-10-30',paymentBankAccountId:'itau'},
+  ]})
+  assert.deepEqual(rows.map(r=>[r.id,r.stage]),[['despesa-e2','previsto']])
+})
+test('despesa sem conta fica indefinida (nao presume Itau)', () => {
+  assert.equal(calc({expenses:[{id:'e',status:'pago',valorTotal:5,paymentDate:'2026-10-01'}]})[0].bank,'indefinido')
+})
+test('receita realizada sem receiptDate usa data alternativa marcada', () => {
+  const r = calc({receivables:[{id:'x',status:'recebido_tesouraria',valorAlvara:9,data:'2026-10-02'}]})[0]
+  assert.equal(r.date,'2026-10-02')
+  assert.equal(r.alternativeDate,true)
+})
+test('chaves unicas entre receita, repasse, comissao e societario do mesmo processo', () => {
+  const rows = calc({
+    receivables:[{id:'r',status:'recebido_tesouraria',valorAlvara:1,receiptDate:'2026-10-01'}],
+    alvaraTransfers:[{id:'r',status:'aprovado',installments:[{value:1,dueDate:'2026-10-02'},{value:1,dueDate:'2026-10-03'}]}],
+    agentCommissions:[{id:'r',status:'aprovado',installments:[{value:1,dueDate:'2026-10-02'}]}],
+    societaryTransfers:[{id:'r',status:'pago',paidValue:1,paymentDate:'2026-10-04'}],
+  })
+  assert.equal(new Set(rows.map(r=>r.id)).size, rows.length)
+})
