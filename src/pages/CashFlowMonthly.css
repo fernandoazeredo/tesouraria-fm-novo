@@ -1,0 +1,16 @@
+.cash-flow{display:grid;gap:18px}.cash-flow .page-card{padding:20px}.cash-flow-disclaimer{border-left:4px solid #b98733}.cash-flow-disclaimer p{margin-bottom:0;line-height:1.5}.cash-flow-filters{display:flex;gap:16px;flex-wrap:wrap;align-items:center}.cash-flow-filters label{display:grid;gap:6px;font-weight:600}.cash-flow-filters input,.cash-flow-filters select{max-width:100%;padding:9px;border:1px solid #a6b2c1;border-radius:8px;background:var(--surface,#fff);color:inherit}.cash-flow-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}.cash-flow-grid h2{font-size:18px}.cash-flow-grid p{display:flex;justify-content:space-between;gap:14px}.cash-flow-table-wrap{overflow-x:auto}.cash-flow-table{width:100%;border-collapse:collapse;text-align:left;min-width:650px}.cash-flow-table th,.cash-flow-table td{padding:11px 10px;border-bottom:1px solid rgba(128,128,128,.25)}.cash-flow-number{text-align:right;white-space:nowrap}.cash-flow-footnote{font-size:13px;opacity:.85;line-height:1.5}@media(max-width:600px){.cash-flow-grid{grid-template-columns:1fr}.cash-flow-filters{display:grid}.cash-flow-filters select{width:100%}}
+/* Fase 1: impedir que o conteúdo imponha largura mínima ao layout mobile */
+.cash-flow{width:100%;max-width:100%;min-width:0;box-sizing:border-box;grid-template-columns:minmax(0,1fr);overflow-wrap:anywhere}
+.cash-flow > *, .cash-flow .page-heading, .cash-flow .page-heading > *, .cash-flow .page-card, .cash-flow .cash-flow-disclaimer, .cash-flow .cash-flow-filters, .cash-flow .cash-flow-grid, .cash-flow .cash-flow-grid > *{min-width:0;max-width:100%;box-sizing:border-box}
+.cash-flow .page-heading{flex-wrap:wrap}
+.cash-flow .cash-flow-table-wrap{width:100%;min-width:0;max-width:100%;overflow-x:auto}
+.cash-flow .cash-flow-filters label{min-width:0}
+.cash-flow .cash-flow-filters input,.cash-flow .cash-flow-filters select{width:100%;min-width:0;box-sizing:border-box}
+@media(max-width:600px){
+  .cash-flow{gap:12px}
+  .cash-flow .page-heading{display:block;width:100%}
+  .cash-flow .page-card{padding:14px}
+  .cash-flow .cash-flow-filters{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+  .cash-flow .cash-flow-grid{grid-template-columns:minmax(0,1fr)}
+  .cash-flow .cash-flow-grid p{flex-wrap:wrap}
+}
