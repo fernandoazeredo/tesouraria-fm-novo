@@ -255,7 +255,8 @@ export function SocietaryTransferSync() {
               officeFees,
               sourceGrossAmount: toNumber(source.valorAlvara),
               // valorLiquidoCliente incorpora outras deduções: não equivale necessariamente à parcela do cliente.
-              sourceClientAmount: null,
+              sourceClientAmount: Number.isFinite(Number(source.valorLiquidoCliente)) ? Number(source.valorLiquidoCliente) : null,
+              sourceComponents: Array.isArray(source.components) ? source.components : [],
               taxesPercent: split.taxPercent,
               taxesValue: split.taxes,
               netOfficeFees: split.netFees,
@@ -353,6 +354,8 @@ export function SocietaryTransfersPage() {
   const { records, loading } = useSocietaryTransfers()
   const [search, setSearch] = useState('')
   const [month, setMonth] = useState('')
+  const [dateStart, setDateStart] = useState('')
+  const [dateEnd, setDateEnd] = useState('')
   const [status, setStatus] = useState('todos')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
@@ -364,10 +367,12 @@ export function SocietaryTransfersPage() {
       const haystack = normalize(`${item.processo ?? ''} ${item.reclamante ?? ''} ${item.reclamada ?? ''} ${item.beneficiary ?? ''}`)
       if (search && !haystack.includes(normalize(search))) return false
       if (month && String(item.competence ?? '') !== month) return false
+      if (dateStart && String(item.receiptDate ?? '') < dateStart) return false
+      if (dateEnd && String(item.receiptDate ?? '') > dateEnd) return false
       if (status !== 'todos' && String(item.status ?? '') !== status) return false
       return true
     })
-    .sort((a, b) => String(a.receiptDate ?? '').localeCompare(String(b.receiptDate ?? ''))), [month, records, search, status])
+    .sort((a, b) => String(a.receiptDate ?? '').localeCompare(String(b.receiptDate ?? ''))), [month, dateStart, dateEnd, records, search, status])
 
   const rowBalances = useMemo(() => {
     let running = 0
@@ -660,6 +665,7 @@ export function SocietaryTransfersPage() {
     <section className="page-card soc-card">
       <div className="soc-toolbar">
         <div className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar processo, reclamante ou reclamada" /></div>
+        <label>De <input type="date" value={dateStart} onChange={e=>setDateStart(e.target.value)}/></label><label>Até <input type="date" value={dateEnd} onChange={e=>setDateEnd(e.target.value)}/></label>
         <input className="soc-month" type="month" value={month} onChange={(event) => setMonth(event.target.value)} aria-label="Filtrar por competência" />
         <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filtrar por status">
           <option value="todos">Todos os status</option><option value="apurado">Apurado</option><option value="aguardando_aprovacao">Aguardando Aprovação</option><option value="devolvido">Devolvido / Ajuste</option><option value="rejeitado">Rejeitado</option><option value="aprovado">Aprovado</option><option value="enviado_tesouraria">Enviado à Tesouraria</option><option value="pago">Pago</option><option value="cancelado">Cancelado</option>
@@ -674,15 +680,17 @@ export function SocietaryTransfersPage() {
           return group
         },{})).map(([cnj,items])=><article className="page-card" key={cnj}>
           <h3>CNJ: {cnj}</h3>
+          <p><strong>Subtotal dos repasses deste CNJ: {money.format(items.reduce((sum,item)=>sum+toNumber(item.transferValue),0))}</strong></p>
           {items.map(item=><div key={item.id} style={{padding:'12px 0',borderTop:'1px solid var(--border-color, #ccc)'}}>
             <p><strong>{item.reclamante||'Reclamante não informado'}</strong> · {item.reclamada||'Reclamada não informada'}</p>
             <p>Recebimento: {dateBR(item.receiptDate)} · Status: {statusLabel(item)}</p>
             {item.calculationVersion!=='net-1133-60-40-v1'&&<strong>Cálculo anterior — memória tributária indisponível</strong>}
-            <p>Total recebido: {item.calculationVersion==='net-1133-60-40-v1'&&typeof item.sourceGrossAmount==='number'?money.format(item.sourceGrossAmount):'Não informado'} · Cliente: {item.calculationVersion==='net-1133-60-40-v1'&&typeof item.sourceClientAmount==='number'?money.format(item.sourceClientAmount):'Não informado'}</p>
+            <p>Total recebido: {item.calculationVersion==='net-1133-60-40-v1'&&typeof item.sourceGrossAmount==='number'?money.format(item.sourceGrossAmount):'Não informado'} · Líquido do cliente: {item.calculationVersion==='net-1133-60-40-v1'&&typeof item.sourceClientAmount==='number'?money.format(item.sourceClientAmount):'Não informado'}</p>
+            {Array.isArray(item.sourceComponents)&&item.sourceComponents.map((part:DocumentData,index:number)=><p key={index}>{String(part.nome||'Dedução')}: {money.format(toNumber(part.valor))}</p>)}
             <p>Honorários: {money.format(toNumber(item.officeFees))} · Impostos 11,33%: {item.calculationVersion==='net-1133-60-40-v1'?money.format(toNumber(item.taxesValue)):'Não disponível'}</p>
             <p>Líquido: {item.calculationVersion==='net-1133-60-40-v1'?money.format(toNumber(item.netOfficeFees)):'Não disponível'} · Flávio 60% (informativo): {item.calculationVersion==='net-1133-60-40-v1'?money.format(toNumber(item.flavioShare)):'Não disponível'}</p>
             <p>Ana Paula Müller 40%: {item.calculationVersion==='net-1133-60-40-v1'?money.format(toNumber(item.anaShare)):'Não disponível'} · Pago: {money.format(toNumber(item.paidValue))} · Saldo: {money.format(Math.max(0,toNumber(item.transferValue)-toNumber(item.paidValue)))}</p>
-            <button className="small-neutral-button" type="button" onClick={()=>void exportRepassePdf([item],false)}><FileDown size={14}/> Baixar PDF individual</button>
+            <button className="small-neutral-button" type="button" onClick={()=>void exportRepassePdf(items,false)}><FileDown size={14}/> Baixar PDF individual</button>
           </div>)}
         </article>)}
       </div>}
