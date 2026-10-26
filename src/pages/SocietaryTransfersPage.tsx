@@ -26,6 +26,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { db } from '../lib/firebase'
+import { calculateSocietaryDistribution } from '../lib/societaryDistribution'
 import { ensureOfficialDemonstrative } from '../lib/officialDemonstrative'
 import { isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
 import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
@@ -96,8 +97,9 @@ function receiptDateOf(receivable: AnyRecord) {
 
 function isAlvara(receivable: AnyRecord) {
   const type = normalize(receivable.tipoRecebimento)
-  if (type === 'outras_receitas' || type === 'acordo_trabalhista') return false
-  return normalize(receivable.origem).includes('alvara')
+  if (type === 'outras_receitas') return false
+  if (type === 'acordo_trabalhista') return true
+  return normalize(receivable.origem).includes('alvara') || normalize(receivable.origem).includes('acordo')
 }
 
 function isEligible(receivable: AnyRecord, settings: Settings) {
@@ -238,8 +240,10 @@ export function SocietaryTransferSync() {
           const batch = writeBatch(db)
           for (const source of chunk) {
             const officeFees = officeFeesOf(source)
+            const split = calculateSocietaryDistribution(officeFees)
             const percent = settings.defaultPercent
-            const transferValue = calculateTransferValue(officeFees, percent)
+            // Configuração societária aprovada: 40% Ana, 60% Flávio, após 11,33% de impostos.
+            const transferValue = percent === 40 ? split.anaShare : calculateTransferValue(split.netFees, percent)
             batch.set(doc(db, 'societaryTransfers', source.id), {
               sourceReceivableId: source.id,
               processo: String(source.processo ?? ''),
@@ -248,6 +252,12 @@ export function SocietaryTransferSync() {
               receiptDate: receiptDateOf(source),
               competence: receiptDateOf(source).slice(0, 7),
               officeFees,
+              taxesPercent: split.taxPercent,
+              taxesValue: split.taxes,
+              netOfficeFees: split.netFees,
+              flavioShare: split.flavioShare,
+              anaShare: split.anaShare,
+              calculationVersion: 'net-1133-60-40-v1',
               percent,
               originalPercent: percent,
               originalTransferValue: transferValue,
@@ -385,7 +395,7 @@ export function SocietaryTransfersPage() {
 
   function changePercent(item: AnyRecord, raw: string) {
     const percent = Math.max(0, Math.min(100, toNumber(raw)))
-    const value = calculateTransferValue(toNumber(item.officeFees), percent)
+    const value = calculateTransferValue(toNumber(item.netOfficeFees ?? item.officeFees), percent)
     setDrafts((current) => ({ ...current, [item.id]: { percent: raw, value: moneyInput(value) } }))
   }
 
@@ -623,6 +633,7 @@ export function SocietaryTransfersPage() {
 
     <SettingsPanel />
 
+    <p className="soc-rule-note">Novas apurações: Honorários do Escritório − 11,33% de impostos = base líquida; 60% Flávio e 40% Ana Paula. Repasses anteriores não são recalculados automaticamente.</p>
     <div className="soc-metrics">
       <article><span>Honorários do Escritório</span><strong>{money.format(totals.office)}</strong><small>Base integral dos alvarás filtrados</small></article>
       <article><span>Repasse Apurado</span><strong>{money.format(totals.apurado)}</strong><small>Percentual aplicado linha a linha</small></article>
