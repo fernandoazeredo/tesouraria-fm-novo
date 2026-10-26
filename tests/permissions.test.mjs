@@ -37,3 +37,9 @@ test('Sem configuração, módulo usa padrão do perfil',()=>{
   assert.equal(effectiveView('dre','tesouraria','t@example.test',null,admin,director),false)
   assert.equal(defaultRoles['receitas'].includes('operador'),true)
 })
+
+test('Socorro não recebe Plano de Contas nem por concessão explícita',()=>{
+  const socorro='socorro@marquesemuller.adv.br'
+  assert.equal(effectiveView('plano_contas','tesouraria',socorro,null,admin,director),false)
+  assert.equal(effectiveView('plano_contas','tesouraria',socorro,config('plano_contas',true),admin,director),false)
+})
