@@ -43,6 +43,8 @@ export function effectiveView(id: ModuleId, role: string, email: string, config:
   const e = email.trim().toLowerCase()
   const master = e === masterEmail && role === 'master'
   if (master) return true
+  // A fila de Aprovações é visível para todos os perfis ativos, nunca decisória por esse motivo.
+  if (id === 'aprovacoes') return true
   // Reinaldo: somente Receitas e consulta à fila de Aprovações, sem outras rotas.
   if (e === 'reinaldo@marquesemuller.adv.br' && id !== 'receitas' && id !== 'aprovacoes') return false
   // Proibição expressa: Socorro não pode ver nem operar Plano de Contas.
