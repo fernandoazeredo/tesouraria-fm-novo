@@ -43,8 +43,18 @@ export function effectiveView(id: ModuleId, role: string, email: string, config:
   const e = email.trim().toLowerCase()
   const master = e === masterEmail && role === 'master'
   if (master) return true
-  if (['auditoria','usuarios','configuracoes','utilitarios','plano_contas'].includes(id)) return false
+  if (['auditoria','usuarios','configuracoes','utilitarios'].includes(id)) return false
   if (id === 'fluxo_caixa' && !(role === 'diretor' && e === directorEmail)) return false
+  if (!defaultRoles[id].includes(role) && id !== 'plano_contas') return false // Sem concessões incompatíveis com as Rules atuais.
   const configured = config?.modules?.[id]?.ver
   return typeof configured === 'boolean' ? configured : defaultRoles[id].includes(role)
+}
+
+/** Apenas consulta, até homologação da Etapa 3. Não concede operações. */
+export function canDecideApproval(role: string, email: string, masterEmail: string, directorEmail: string) {
+  const value = email.trim().toLowerCase()
+  return (role === 'master' && value === masterEmail) || (role === 'diretor' && value === directorEmail)
+}
+export function firestoreViewSupported(id: ModuleId, role: string) {
+  return id === 'plano_contas' || defaultRoles[id].includes(role)
 }
