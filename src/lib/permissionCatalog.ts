@@ -43,6 +43,8 @@ export function effectiveView(id: ModuleId, role: string, email: string, config:
   const e = email.trim().toLowerCase()
   const master = e === masterEmail && role === 'master'
   if (master) return true
+  // Proibição expressa: Socorro não pode ver nem operar Plano de Contas.
+  if (id === 'plano_contas' && e === 'socorro@marquesemuller.adv.br') return false
   if (['auditoria','usuarios','configuracoes','utilitarios'].includes(id)) return false
   if (id === 'fluxo_caixa' && !(role === 'diretor' && e === directorEmail)) return false
   if (!defaultRoles[id].includes(role) && id !== 'plano_contas') return false // Sem concessões incompatíveis com as Rules atuais.
