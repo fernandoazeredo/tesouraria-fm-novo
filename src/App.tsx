@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import {
   BarChart3,
   BookOpenCheck,
@@ -278,7 +278,6 @@ function AppShell() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const accessRole = accessRoleFromUserRole(profile?.role)
   const canViewCashFlow = Boolean(profile?.email && [PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL].includes(profile.email.trim().toLowerCase()))
-  const canViewManagementReports = ['master', 'diretor', 'gerente'].includes(accessRole)
   const canViewAudit = Boolean(profile?.email && profile.email.trim().toLowerCase() === PRIMARY_ADMIN_EMAIL && profile.role === 'master')
   const [permissionDoc, setPermissionDoc] = useState<PermissionDocument | null>(null)
   const [permissionsLoaded, setPermissionsLoaded] = useState(false)
@@ -298,7 +297,7 @@ function AppShell() {
     return effectiveView(id, accessRole, profile.email || '', permissionDoc, PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL)
   }
   const denied = <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>Seu usuário não possui permissão para acessar este módulo.</p></section>
-  const guarded = (path: string, content: React.ReactNode) => canOpen(path) ? content : denied
+  const guarded = (path: string, content: ReactNode) => canOpen(path) ? content : denied
   const visibleMenu = menu.filter(item => canOpen(item.to))
 
   useEffect(() => {
@@ -348,7 +347,7 @@ function AppShell() {
           <Route path="/comissoes-agentes" element={guarded('/comissoes-agentes', <AgentCommissionsPageV4 />)} />
           <Route path="/tesouraria" element={guarded('/tesouraria', <><TreasuryPage /><SocietaryTreasuryPanel /></>)} />
           <Route path="/aprovacoes" element={guarded('/aprovacoes', <ApprovalsPageEnhanced />)} />
-          <Route path="/dre-gerencial" element={canViewManagementReports ? <DreGerencialPageV2 /> : <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>Seu perfil não tem permissão para consultar a DRE Gerencial.</p></section>} />
+          <Route path="/dre-gerencial" element={guarded("/dre-gerencial", <DreGerencialPageV2 />)} />
           <Route path="/plano-contas" element={guarded('/plano-contas', <AccountsPageFernando />)} />
           <Route path="/contabilidade" element={guarded('/contabilidade', <AccountingPageStorageV2 />)} />
           <Route path="/calendario-financeiro" element={guarded('/calendario-financeiro', <FinancialCalendarPage />)} />
