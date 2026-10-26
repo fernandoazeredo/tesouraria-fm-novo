@@ -51,7 +51,7 @@ const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL
 const moneyInput = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const today = () => new Date().toISOString().slice(0, 10)
 const DEFAULT_SETTINGS: Settings = {
-  beneficiary: 'Ana Müller',
+  beneficiary: 'Ana Paula Müller',
   defaultPercent: 40,
   startDate: today(),
   endDate: '',
@@ -98,8 +98,8 @@ function receiptDateOf(receivable: AnyRecord) {
 function isAlvara(receivable: AnyRecord) {
   const type = normalize(receivable.tipoRecebimento)
   if (type === 'outras_receitas') return false
-  if (type === 'acordo_trabalhista') return true
-  return normalize(receivable.origem).includes('alvara') || normalize(receivable.origem).includes('acordo')
+  if (type === 'acordo_trabalhista') return false
+  return normalize(receivable.origem).includes('alvara')
 }
 
 function isEligible(receivable: AnyRecord, settings: Settings) {
@@ -765,6 +765,6 @@ export function SocietaryTreasuryPanel() {
   return <section className="page-card soc-treasury-card">
     <div className="soc-treasury-heading"><div><span className="eyebrow">Fila de pagamentos</span><h2>Repasse Societário</h2><p>Obrigações societárias já aprovadas e encaminhadas para pagamento.</p></div><CircleDollarSign size={28} /></div>
     {canPay && selected.size > 0 && <div className="soc-batchbar"><strong>{selected.size} selecionado(s)</strong><button className="small-success-button" onClick={() => void payItems(queue.filter((item) => selected.has(item.id)))}><CheckCircle2 size={14} /> Confirmar pagamento consolidado</button></div>}
-    {loading ? <div className="module-empty"><RefreshCw className="spin" size={26} /><strong>Carregando repasses societários</strong></div> : queue.length === 0 ? <div className="module-empty"><FileText size={28} /><strong>Nenhum repasse societário aguardando pagamento</strong></div> : <div className="soc-table-wrap"><table className="soc-table treasury"><thead><tr><th></th><th>Data</th><th>Processo</th><th>Beneficiário</th><th>Honorários</th><th>%</th><th>Valor</th><th>Ações</th></tr></thead><tbody>{queue.map((item) => <tr key={item.id}><td><input type="checkbox" disabled={!canPay} checked={selected.has(item.id)} onChange={() => toggle(item.id)} /></td><td>{dateBR(item.receiptDate)}</td><td>{item.processo || '—'}</td><td><strong>{item.beneficiary || 'Ana Müller'}</strong></td><td className="numeric">{money.format(toNumber(item.officeFees))}</td><td className="numeric">{toNumber(item.percent).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td><td className="numeric"><strong>{money.format(toNumber(item.transferValue))}</strong></td><td><div className="soc-actions">{canPay && <button className="small-success-button" onClick={() => void payItems([item])}><CheckCircle2 size={14} /> Confirmar pagamento</button>}{canPay && <button className="small-neutral-button" onClick={() => void returnForAdjustment(item)}>Devolver</button>}{!canPay && <span className="soc-action-note">Somente leitura</span>}</div></td></tr>)}</tbody></table></div>}
+    {loading ? <div className="module-empty"><RefreshCw className="spin" size={26} /><strong>Carregando repasses societários</strong></div> : queue.length === 0 ? <div className="module-empty"><FileText size={28} /><strong>Nenhum repasse societário aguardando pagamento</strong></div> : <div className="soc-table-wrap"><table className="soc-table treasury"><thead><tr><th></th><th>Data</th><th>Processo</th><th>Beneficiário</th><th>Honorários</th><th>%</th><th>Valor</th><th>Ações</th></tr></thead><tbody>{queue.map((item) => <tr key={item.id}><td><input type="checkbox" disabled={!canPay} checked={selected.has(item.id)} onChange={() => toggle(item.id)} /></td><td>{dateBR(item.receiptDate)}</td><td>{item.processo || '—'}</td><td><strong>{item.beneficiary || 'Ana Paula Müller'}</strong></td><td className="numeric">{money.format(toNumber(item.officeFees))}</td><td className="numeric">{toNumber(item.percent).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td><td className="numeric"><strong>{money.format(toNumber(item.transferValue))}</strong></td><td><div className="soc-actions">{canPay && <button className="small-success-button" onClick={() => void payItems([item])}><CheckCircle2 size={14} /> Confirmar pagamento</button>}{canPay && <button className="small-neutral-button" onClick={() => void returnForAdjustment(item)}>Devolver</button>}{!canPay && <span className="soc-action-note">Somente leitura</span>}</div></td></tr>)}</tbody></table></div>}
   </section>
 }
