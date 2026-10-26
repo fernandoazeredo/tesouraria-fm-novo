@@ -289,7 +289,7 @@ function AppShell() {
       setPermissionsLoaded(true)
     }, () => { setPermissionDoc(null); setPermissionsLoaded(true) })
   }, [profile?.uid])
-  const pathToId = new Map(Object.entries(modulePaths).map(([id, path]) => [path, id as ModuleId]))
+  const pathToId = new Map<string, ModuleId>(Object.entries(modulePaths).map(([id, path]) => [path, id as ModuleId]))
   const canOpen = (path: string) => {
     if (!permissionsLoaded || !profile) return false
     const id = pathToId.get(path)
