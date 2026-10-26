@@ -26,6 +26,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { db } from '../lib/firebase'
+import { saveRepassePdf, type RepassePdfRow } from '../lib/societaryPdf'
 import { calculateSocietaryDistribution } from '../lib/societaryDistribution'
 import { ensureOfficialDemonstrative } from '../lib/officialDemonstrative'
 import { isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
@@ -595,6 +596,16 @@ export function SocietaryTransfersPage() {
     setSelected(new Set())
   }
 
+  async function exportRepassePdf(items: AnyRecord[], all: boolean) {
+    if (!profile || items.length===0) return
+    try {
+      saveRepassePdf(items as RepassePdfRow[], profile.displayName||profile.email||'', all?'Extrato Geral do Repasse Societário':'Repasse Societário — Memória de Cálculo', all?'Extrato_Geral_Repasse_Societario.pdf':'Memoria_Repasse_'+String(items[0].processo||items[0].id).replace(/[^0-9A-Za-z.-]/g,'_')+'.pdf')
+      await audit(profile, all?'Extrato geral do Repasse Societário gerado':'PDF individual do Repasse Societário gerado', (all?'Registros: '+items.length:'CNJ: '+String(items[0].processo||'não informado')), all?undefined:items[0].id)
+    } catch (error) {
+      window.alert('Não foi possível concluir a emissão do PDF e seu registro: '+String(error))
+    }
+  }
+
   function exportExcel() {
     const header = ['Data', 'Processo', 'Reclamante', 'Reclamada', 'Honorários Escritório', '% Repasse', 'Valor Repasse', 'Valor Pago', 'Saldo', 'Aprovação', 'Status', 'Data Pagamento', 'Saldo Acumulado']
     const body = rows.map((item) => [
@@ -652,8 +663,28 @@ export function SocietaryTransfersPage() {
         <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filtrar por status">
           <option value="todos">Todos os status</option><option value="apurado">Apurado</option><option value="aguardando_aprovacao">Aguardando Aprovação</option><option value="devolvido">Devolvido / Ajuste</option><option value="rejeitado">Rejeitado</option><option value="aprovado">Aprovado</option><option value="enviado_tesouraria">Enviado à Tesouraria</option><option value="pago">Pago</option><option value="cancelado">Cancelado</option>
         </select>
-        <div className="soc-report-actions"><button className="small-neutral-button" type="button" onClick={() => window.print()}><FileText size={14} /> PDF / Imprimir</button><button className="small-neutral-button" type="button" onClick={exportExcel}><FileDown size={14} /> Excel</button></div>
+        <div className="soc-report-actions"><button className="small-neutral-button" type="button" disabled={!rows.length} onClick={() => void exportRepassePdf(rows,true)}><FileText size={14} /> Extrato Geral PDF</button><button className="small-neutral-button" type="button" onClick={exportExcel}><FileDown size={14} /> Excel</button></div>
       </div>
+
+      {!loading && rows.length>0 && <div className="soc-cnjs" style={{display:'grid',gap:12,marginTop:16}}>
+        {Object.entries(rows.reduce<Record<string,AnyRecord[]>>((group,item)=>{
+          const key=String(item.processo||'CNJ ausente — '+item.id)
+          ;(group[key]??=[]).push(item)
+          return group
+        },{})).map(([cnj,items])=><article className="page-card" key={cnj}>
+          <h3>CNJ: {cnj}</h3>
+          {items.map(item=><div key={item.id} style={{padding:'12px 0',borderTop:'1px solid var(--border-color, #ccc)'}}>
+            <p><strong>{item.reclamante||'Reclamante não informado'}</strong> · {item.reclamada||'Reclamada não informada'}</p>
+            <p>Recebimento: {dateBR(item.receiptDate)} · Status: {statusLabel(item)}</p>
+            {item.calculationVersion!=='net-1133-60-40-v1'&&<strong>Cálculo anterior — memória tributária indisponível</strong>}
+            <p>Total recebido: {item.calculationVersion==='net-1133-60-40-v1'&&typeof item.sourceGrossAmount==='number'?money.format(item.sourceGrossAmount):'Não informado'} · Cliente: {item.calculationVersion==='net-1133-60-40-v1'&&typeof item.sourceClientAmount==='number'?money.format(item.sourceClientAmount):'Não informado'}</p>
+            <p>Honorários: {money.format(toNumber(item.officeFees))} · Impostos 11,33%: {item.calculationVersion==='net-1133-60-40-v1'?money.format(toNumber(item.taxesValue)):'Não disponível'}</p>
+            <p>Líquido: {item.calculationVersion==='net-1133-60-40-v1'?money.format(toNumber(item.netOfficeFees)):'Não disponível'} · Flávio 60% (informativo): {item.calculationVersion==='net-1133-60-40-v1'?money.format(toNumber(item.flavioShare)):'Não disponível'}</p>
+            <p>Ana Paula Müller 40%: {item.calculationVersion==='net-1133-60-40-v1'?money.format(toNumber(item.anaShare)):'Não disponível'} · Pago: {money.format(toNumber(item.paidValue))} · Saldo: {money.format(Math.max(0,toNumber(item.transferValue)-toNumber(item.paidValue)))}</p>
+            <button className="small-neutral-button" type="button" onClick={()=>void exportRepassePdf([item],false)}><FileDown size={14}/> Baixar PDF individual</button>
+          </div>)}
+        </article>)}
+      </div>}
 
       {canDecide && selected.size > 0 && <div className="soc-batchbar"><strong>{selected.size} selecionado(s)</strong><button className="small-success-button" onClick={() => void approveSelected()}><BadgeCheck size={15} /> Aprovar selecionados</button><button className="small-revenue-button" onClick={() => void sendSelected()}><Send size={15} /> Enviar aprovados à Tesouraria</button></div>}
 
