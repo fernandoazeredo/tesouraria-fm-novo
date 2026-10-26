@@ -32,3 +32,9 @@ test('As parcelas divididas sempre recompõem a base líquida ao centavo', () =>
 test('Valor inválido não permite apuração', () => {
   assert.throws(()=>calculateSocietaryDistribution(-10))
 })
+
+test('Regra homologada de arredondamento: 10000,05 gera 1133,00 de imposto',()=>{
+  const x=calculateSocietaryDistribution(10000.05)
+  assert.equal(x.taxes,1133)
+  assert.equal(x.netFees,8867.05)
+})
