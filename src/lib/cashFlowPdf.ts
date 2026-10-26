@@ -88,6 +88,7 @@ export function downloadCashFlowPdf(r: Report) {
     const wrapped = values.map((v, i) => pdf.splitTextToSize(v, widths[i] - 2) as string[])
     const rowH = Math.max(6, Math.max(...wrapped.map(a => a.length)) * 3.5 + 2)
     if (y + rowH > ph - 17) { page(); tableHeader() }
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7)
     wrapped.forEach((v, i) => pdf.text(v, xs[i] + 1, y + 2))
     y += rowH
     pdf.setDrawColor(225); pdf.line(margin, y - 1, right, y - 1)
