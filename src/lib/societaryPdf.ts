@@ -10,6 +10,7 @@ const brl=(v:number)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'
 const amount=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)?brl(v):'Não informado'
 const name=(v:unknown)=>String(v||'Não informado')
 const dateBR=(v:unknown)=>{const t=String(v||'');return /^\d{4}-\d{2}-\d{2}$/.test(t)?t.slice(8,10)+'/'+t.slice(5,7)+'/'+t.slice(0,4):name(v)}
+const competenceBR=(v:unknown)=>{const t=String(v||'');return /^\d{4}-\d{2}$/.test(t)?t.slice(5,7)+'/'+t.slice(0,4):name(v)}
 const statusBR:Record<string,string>={apurado:'Apurado',aguardando_aprovacao:'Aguardando aprovação',devolvido:'Devolvido',rejeitado:'Rejeitado',aprovado:'Aprovado',enviado_tesouraria:'Enviado à Tesouraria',pago:'Pago',cancelado:'Cancelado'}
 export function saveRepassePdf(rows:RepassePdfRow[],userName:string,label:string,fileName:string) {
   const pdf=new jsPDF({unit:'mm',format:'a4'})
@@ -32,7 +33,7 @@ export function saveRepassePdf(rows:RepassePdfRow[],userName:string,label:string
     draw('CNJ / Processo: '+name(items[0].processo),11,true)
     draw('Reclamante: '+name(items[0].reclamante)+' | Reclamada: '+name(items[0].reclamada))
     for(const item of items){
-    draw('Recebimento: '+dateBR(item.receiptDate)+' | Competência: '+name(item.competence)+' | Status: '+(statusBR[String(item.status)]||name(item.status)))
+    draw('Recebimento: '+dateBR(item.receiptDate)+' | Competência: '+competenceBR(item.competence)+' | Status: '+(statusBR[String(item.status)]||name(item.status)))
     const current=item.calculationVersion==='net-1133-60-40-v1'
     if(!current)draw('CÁLCULO ANTERIOR — valores fiscais não disponíveis ou não apurados pela nova regra.',9,true)
     draw('Valor recebido: '+(current?amount(item.sourceGrossAmount):'Não informado'))
@@ -48,7 +49,7 @@ export function saveRepassePdf(rows:RepassePdfRow[],userName:string,label:string
     draw('Ana Paula Müller (40%): '+(current?amount(item.anaShare):'Não disponível'))
     if(current){
       draw('Honorários × 11,33% = Impostos: '+amount(item.officeFees)+' × 11,33% = '+amount(item.taxesValue),8)
-      draw('Honorários − Impostos = Líquido: '+amount(item.officeFees)+' − '+amount(item.taxesValue)+' = '+amount(item.netOfficeFees),8)
+      draw('Honorários - Impostos = Líquido: '+amount(item.officeFees)+' - '+amount(item.taxesValue)+' = '+amount(item.netOfficeFees),8)
       draw('Líquido × 60% = Flávio: '+amount(item.netOfficeFees)+' × 60% = '+amount(item.flavioShare),8)
       draw('Líquido × 40% = Ana Paula Müller: '+amount(item.netOfficeFees)+' × 40% = '+amount(item.anaShare),8)
     }
