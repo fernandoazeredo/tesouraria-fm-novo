@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, onSnapshot } from 'firebase/firestore'
+import { addDoc, collection, onSnapshot, serverTimestamp } from 'firebase/firestore'
+import { FileDown } from 'lucide-react'
+import { useAuth } from '../auth/AuthContext'
+import { downloadCashFlowPdf } from '../lib/cashFlowPdf'
 import { db } from '../lib/firebase'
 import './CashFlowMonthly.css'
 
@@ -18,6 +21,9 @@ function useRecords(name: string) {
 }
 const sum = (items: Movement[], stage: Movement['stage'], direction: Movement['direction']) => items.filter(item => item.stage === stage && item.direction === direction).reduce((total, item) => total + item.value, 0)
 export function CashFlowMonthlyPage() {
+  const { profile } = useAuth()
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const [pdfError, setPdfError] = useState('')
   const [month, setMonth] = useState(monthNow)
   const [scope, setScope] = useState<'itau' | 'indefinido' | 'outro'>('itau')
   const sources = [useRecords('receivables'), useRecords('expenses'), useRecords('alvaraTransfers'), useRecords('agentCommissions'), useRecords('societaryTransfers')]
@@ -35,8 +41,39 @@ export function CashFlowMonthlyPage() {
   const pfExcluded = rows.filter(item => item.bank === 'outro').length
   const loading = sources.some(item => !item.loaded)
   const error = sources.map(item => item.error).filter(Boolean).join(' · ')
+  const accountLabels = { itau: 'Itaú PJ — identificados', indefinido: 'Sem conta identificada', outro: 'Outras contas (fora do escopo PJ)' }
+  const handleDownloadPdf = async () => {
+    if (loading || error || pdfBusy || !profile) return
+    setPdfBusy(true)
+    setPdfError('')
+    try {
+      downloadCashFlowPdf({
+        month, monthTitle: monthLabel(month), account: accountLabels[scope],
+        user: profile.displayName || profile.email, issuedAt: new Date(),
+        actualIn, actualOut, plannedIn, plannedOut, pending,
+        noDate, pfExcluded, validationIssues, movements: visible,
+      })
+      await addDoc(collection(db, 'auditLogs'), {
+        action: 'PDF do Fluxo de Caixa gerado',
+        module: 'Fluxo de Caixa',
+        detail: 'Mês: ' + month + ' · Conta: ' + accountLabels[scope] + ' · Usuário: ' + (profile.displayName || profile.email),
+        entityId: month,
+        userId: profile.uid,
+        userName: profile.displayName,
+        userEmail: profile.email,
+        month,
+        bankScope: scope,
+        createdAt: serverTimestamp(),
+      })
+    } catch (err) {
+      setPdfError('Não foi possível concluir a geração ou o registro de auditoria do PDF: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setPdfBusy(false)
+    }
+  }
   return <section className="cash-flow">
-    <div className="page-heading"><div><span className="eyebrow">Tesouraria · consulta</span><h1>Fluxo de Caixa Mensal</h1><p>Previsto x Realizado · sem editar lançamentos</p></div></div>
+    <div className="page-heading payment-control-heading"><div><span className="eyebrow">Tesouraria · consulta</span><h1>Fluxo de Caixa Mensal</h1><p>Previsto x Realizado · sem editar lançamentos</p></div><div className="quick-actions"><button type="button" className="secondary-button" disabled={loading || !!error || pdfBusy} onClick={() => void handleDownloadPdf()}><FileDown size={17} />{pdfBusy ? 'Gerando PDF...' : 'Baixar PDF'}</button></div></div>
+    {pdfError && <div className="page-card" role="alert">{pdfError}</div>}
     <div className="page-card cash-flow-disclaimer"><strong>Fase 1 — demonstrativo gerencial, não saldo bancário.</strong><p>Os valores seguem os registros existentes, não um extrato conciliado. Não há saldo inicial ou projeção de saldo final. Recebimentos realizados usam a data declarada no lançamento; a data efetiva do crédito pode ser diferente. Operações sem conta identificada ficam separadas para evitar atribuição indevida ao Itaú PJ.</p></div>
     <div className="page-card cash-flow-filters"><label>Mês de referência <input type="month" value={month} onChange={event => setMonth(event.target.value)} /></label><label>Contas <select value={scope} onChange={event => setScope(event.target.value as typeof scope)}><option value="itau">Itaú PJ — identificados</option><option value="indefinido">Sem conta identificada</option><option value="outro">Outras contas (fora do escopo PJ)</option></select></label></div>
     {error && <div className="page-card" role="alert">Consulta incompleta: {error}. Não use totais até todas as fontes estarem disponíveis.</div>}
