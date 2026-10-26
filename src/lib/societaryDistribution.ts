@@ -7,12 +7,21 @@ function cents(value: number) {
   if (!Number.isFinite(value) || value < 0) throw new Error('Valor monetário inválido')
   return Math.round(value * 100)
 }
+/** Arredondamento homologado: terceira casa decimal de 0 a 5 desce, 6 a 9 sobe. */
+function roundFinance(amountCents: number, basisPoints: number) {
+  const numerator = BigInt(amountCents) * BigInt(basisPoints)
+  const denominator = 10000n
+  let result = numerator / denominator
+  const thirdDigit = Number(((numerator % denominator) * 10n) / denominator)
+  if (thirdDigit >= 6) result += 1n
+  return Number(result)
+}
 export function calculateSocietaryDistribution(officeFees: number) {
   const grossCents = cents(officeFees)
-  const taxCents = Math.round(grossCents * SOCIETARY_TAX_BASIS_POINTS / 10000)
+  const taxCents = roundFinance(grossCents, SOCIETARY_TAX_BASIS_POINTS)
   const netCents = grossCents - taxCents
-  const flavioCents = Math.round(netCents * 60 / 100)
-  const anaCents = netCents - flavioCents
+  const anaCents = roundFinance(netCents, 4000)
+  const flavioCents = netCents - anaCents
   return {
     officeFees: grossCents / 100,
     taxPercent: 11.33,
