@@ -320,7 +320,7 @@ function SettingsPanel() {
         updatedBy: profile?.uid,
         updatedByName: profile?.displayName,
       }, { merge: true })
-      await audit(profile, 'Parâmetros do acordo alterados', `${form.beneficiary.trim()} · ${form.defaultPercent.toLocaleString('pt-BR')}% · início ${dateBR(form.startDate)}${form.endDate ? ` · fim ${dateBR(form.endDate)}` : ''} · ${form.active ? 'ativo' : 'inativo'}`)
+      await audit(profile, 'Parâmetros do acordo alterados', `${form.beneficiary.trim()} · ${(40).toLocaleString('pt-BR')}% · início ${dateBR(form.startDate)}${form.endDate ? ` · fim ${dateBR(form.endDate)}` : ''} · ${form.active ? 'ativo' : 'inativo'}`)
     } catch (error) {
       console.error(error)
       window.alert('Não foi possível salvar os parâmetros do Repasse Societário.')
@@ -333,7 +333,7 @@ function SettingsPanel() {
     <summary><Settings2 size={17} /> Parâmetros do acordo</summary>
     <div className="soc-settings-grid soc-settings-grid-full">
       <label><span>Beneficiário</span><input data-required-key="soc-beneficiary" value={form.beneficiary} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, beneficiary: event.target.value }))} /></label>
-      <label><span>Percentual padrão</span><input type="number" min="0" max="100" step="0.01" value={form.defaultPercent} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, defaultPercent: toNumber(event.target.value) }))} /></label>
+      <label><span>Percentual fixo de Ana Paula Müller</span><input type="number" value={40} readOnly disabled /></label>
       <label><span>Data de início</span><input type="date" value={form.startDate} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></label>
       <label><span>Data de encerramento</span><input type="date" value={form.endDate} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></label>
       <label><span>Dia de vencimento</span><input type="number" min="0" max="31" value={form.dueDay} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, dueDay: toNumber(event.target.value) }))} /></label>
@@ -342,7 +342,7 @@ function SettingsPanel() {
       <label className="soc-active-check"><input type="checkbox" checked={form.active} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, active: event.target.checked }))} /><span> acordo ativo</span></label>
       {canEdit && <button className="secondary-button soc-settings-save" type="button" disabled={saving} onClick={() => void save()}><Save size={16} /> {saving ? 'Salvando...' : 'Salvar parâmetros'}</button>}
     </div>
-    <p>O percentual padrão vale somente para novos alvarás apurados. Alterações futuras não recalculam lançamentos já existentes.</p>
+    <p>Percentual fixo de 40% para Ana Paula Müller, sobre honorários líquidos de 11,33% de impostos. Registros antigos não são recalculados.</p>
   </details>
 }
 
