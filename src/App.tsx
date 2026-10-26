@@ -28,7 +28,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react'
-import { NavLink, Route, Routes } from 'react-router-dom'
+import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from './lib/firebase'
 import { effectiveView, modulePaths, type ModuleId, type PermissionDocument } from './lib/permissionCatalog'
@@ -338,7 +338,8 @@ function AppShell() {
       </aside>
       <main className="main-content">
         <Routes>
-          <Route path="/" element={guarded('/', <DashboardPageEnhanced />)} />
+          <Route path="/" element={!permissionsLoaded ? <section className="page-card" role="status">Carregando…</section> : canOpen('/') ? <DashboardPageEnhanced /> : <Navigate to={canOpen('/alvaras') ? '/alvaras' : canOpen('/aprovacoes') ? '/aprovacoes' : '/sem-acesso'} replace />} />
+          <Route path="/sem-acesso" element={denied} />
           <Route path="/despesas" element={guarded('/despesas', <><ExpensesPageStorage /><ExpenseSettlementPanel /></>)} />
           <Route path="/alvaras" element={guarded('/alvaras', <ReceivablesPageStorageV2 />)} />
           <Route path="/repasse-alvaras" element={guarded('/repasse-alvaras', <AlvaraTransfersPageV3 />)} />
