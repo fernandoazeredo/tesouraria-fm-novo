@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { saveRepassePdf, type RepassePdfRow } from '../lib/societaryPdf'
+import { groupByProcess } from '../lib/societaryGrouping'
 import { calculateSocietaryDistribution } from '../lib/societaryDistribution'
 import { ensureOfficialDemonstrative } from '../lib/officialDemonstrative'
 import { isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
@@ -674,12 +675,8 @@ export function SocietaryTransfersPage() {
       </div>
 
       {!loading && rows.length>0 && <div className="soc-cnjs" style={{display:'grid',gap:12,marginTop:16}}>
-        {Object.entries(rows.reduce<Record<string,AnyRecord[]>>((group,item)=>{
-          const key=String(item.processo||'CNJ ausente — '+item.id)
-          ;(group[key]??=[]).push(item)
-          return group
-        },{})).map(([cnj,items])=><article className="page-card" key={cnj}>
-          <h3>CNJ: {cnj}</h3>
+        {groupByProcess(rows).map((items)=><article className="page-card" key={items[0].id}>
+          <h3>CNJ: {items[0].processo || 'Não informado'}</h3>
           <p><strong>Subtotal dos repasses deste CNJ: {money.format(items.reduce((sum,item)=>sum+toNumber(item.transferValue),0))}</strong></p>
           {items.map(item=><div key={item.id} style={{padding:'12px 0',borderTop:'1px solid var(--border-color, #ccc)'}}>
             <p><strong>{item.reclamante||'Reclamante não informado'}</strong> · {item.reclamada||'Reclamada não informada'}</p>
