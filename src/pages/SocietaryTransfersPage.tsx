@@ -241,9 +241,9 @@ export function SocietaryTransferSync() {
           for (const source of chunk) {
             const officeFees = officeFeesOf(source)
             const split = calculateSocietaryDistribution(officeFees)
-            const percent = settings.defaultPercent
+            const percent = 40
             // Configuração societária aprovada: 40% Ana, 60% Flávio, após 11,33% de impostos.
-            const transferValue = percent === 40 ? split.anaShare : calculateTransferValue(split.netFees, percent)
+            const transferValue = split.anaShare
             batch.set(doc(db, 'societaryTransfers', source.id), {
               sourceReceivableId: source.id,
               processo: String(source.processo ?? ''),
@@ -252,6 +252,8 @@ export function SocietaryTransferSync() {
               receiptDate: receiptDateOf(source),
               competence: receiptDateOf(source).slice(0, 7),
               officeFees,
+              sourceGrossAmount: toNumber(source.valorAlvara),
+              sourceClientAmount: toNumber(source.valorLiquidoCliente),
               taxesPercent: split.taxPercent,
               taxesValue: split.taxes,
               netOfficeFees: split.netFees,
