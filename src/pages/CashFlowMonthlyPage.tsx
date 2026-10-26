@@ -73,7 +73,7 @@ export function CashFlowMonthlyPage() {
   }
   return <section className="cash-flow">
     <div className="page-heading payment-control-heading"><div><span className="eyebrow">Tesouraria · consulta</span><h1>Fluxo de Caixa Mensal</h1><p>Previsto x Realizado · sem editar lançamentos</p></div><div className="quick-actions"><button type="button" className="secondary-button" disabled={loading || !!error || pdfBusy} onClick={() => void handleDownloadPdf()}><FileDown size={17} />{pdfBusy ? 'Gerando PDF...' : 'Baixar PDF'}</button></div></div>
-    {pdfError && <div className="page-card" role="alert">{pdfError}</div>
+    {pdfError && <div className="page-card" role="alert">{pdfError}</div>}
     <div className="page-card cash-flow-disclaimer"><strong>Fase 1 — demonstrativo gerencial, não saldo bancário.</strong><p>Os valores seguem os registros existentes, não um extrato conciliado. Não há saldo inicial ou projeção de saldo final. Recebimentos realizados usam a data declarada no lançamento; a data efetiva do crédito pode ser diferente. Operações sem conta identificada ficam separadas para evitar atribuição indevida ao Itaú PJ.</p></div>
     <div className="page-card cash-flow-filters"><label>Mês de referência <input type="month" value={month} onChange={event => setMonth(event.target.value)} /></label><label>Contas <select value={scope} onChange={event => setScope(event.target.value as typeof scope)}><option value="itau">Itaú PJ — identificados</option><option value="indefinido">Sem conta identificada</option><option value="outro">Outras contas (fora do escopo PJ)</option></select></label></div>
     {error && <div className="page-card" role="alert">Consulta incompleta: {error}. Não use totais até todas as fontes estarem disponíveis.</div>}
