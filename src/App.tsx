@@ -297,7 +297,7 @@ function AppShell() {
     return effectiveView(id, accessRole, profile.email || '', permissionDoc, PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL)
   }
   const denied = <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>Seu usuário não possui permissão para acessar este módulo.</p></section>
-  const guarded = (path: string, content: ReactNode) => canOpen(path) ? content : denied
+  const guarded = (path: string, content: ReactNode) => !permissionsLoaded ? <section className="page-card" role="status"><p>Carregando…</p></section> : canOpen(path) ? content : denied
   const visibleMenu = menu.filter(item => canOpen(item.to))
 
   useEffect(() => {
