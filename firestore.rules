@@ -219,6 +219,15 @@ service cloud.firestore {
       allow delete: if (hasRole(['master']) && request.auth.uid != userId) || masterRestoreMode();
     }
 
+    match /userPermissions/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId || (isPrimaryAdminEmail() && hasRole(['master'])));
+      allow create, update: if masterRestoreMode() ||
+        (isPrimaryAdminEmail() && hasRole(['master'])
+          && request.resource.data.keys().hasOnly(['schemaVersion', 'modules', 'updatedBy', 'updatedAt'])
+          && request.resource.data.updatedBy == request.auth.uid);
+      allow delete: if isPrimaryAdminEmail() && hasRole(['master']);
+    }
+
     match /userInvites/{document=**} {
       allow read, write: if false;
     }
