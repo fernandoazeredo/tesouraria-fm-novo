@@ -309,7 +309,7 @@ function SettingsPanel() {
     try {
       await setDoc(doc(db, 'appConfig', 'societaryTransfer'), {
         beneficiary: form.beneficiary.trim(),
-        defaultPercent: form.defaultPercent,
+        defaultPercent: 40,
         startDate: form.startDate,
         endDate: form.endDate,
         dueDay: form.dueDay,
@@ -408,6 +408,7 @@ export function SocietaryTransfersPage() {
 
   async function saveAdjustment(item: AnyRecord) {
     if (!canDecide || !['apurado', 'devolvido', 'rejeitado'].includes(String(item.status ?? ''))) return
+    if (item.calculationVersion === 'net-1133-60-40-v1') { window.alert('O ajuste manual está bloqueado para repasses calculados pela nova regra societária.'); return }
     const draft = draftFor(item)
     const percent = Math.max(0, Math.min(100, toNumber(draft.percent)))
     const transferValue = parseMoney(draft.value)
@@ -660,7 +661,7 @@ export function SocietaryTransfersPage() {
         <thead><tr><th><input type="checkbox" checked={rows.length > 0 && rows.every((item) => selected.has(item.id))} onChange={toggleAll} /></th><th>Data</th><th>Processo</th><th>Reclamante / Reclamada</th><th>Honorários do Escritório</th><th>% Repasse</th><th>Valor do Repasse</th><th>Valor Pago</th><th>Saldo Linha</th><th>Aprovação</th><th>Status</th><th>Data Pagamento</th><th>Saldo Acumulado</th><th>Ações</th></tr></thead>
         <tbody>{rows.map((item) => {
           const draft = draftFor(item)
-          const editable = canDecide && ['apurado', 'devolvido', 'rejeitado'].includes(String(item.status ?? ''))
+          const editable = canDecide && item.calculationVersion !== 'net-1133-60-40-v1' && ['apurado', 'devolvido', 'rejeitado'].includes(String(item.status ?? ''))
           const balance = Math.max(0, toNumber(item.transferValue) - toNumber(item.paidValue))
           const currentApproval = approvalLabel(item)
           return <tr key={item.id}>
