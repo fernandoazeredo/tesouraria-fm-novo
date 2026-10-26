@@ -254,7 +254,8 @@ export function SocietaryTransferSync() {
               competence: receiptDateOf(source).slice(0, 7),
               officeFees,
               sourceGrossAmount: toNumber(source.valorAlvara),
-              sourceClientAmount: toNumber(source.valorLiquidoCliente),
+              // valorLiquidoCliente incorpora outras deduções: não equivale necessariamente à parcela do cliente.
+              sourceClientAmount: null,
               taxesPercent: split.taxPercent,
               taxesValue: split.taxes,
               netOfficeFees: split.netFees,
