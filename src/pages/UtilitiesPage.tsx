@@ -17,6 +17,7 @@ import { PRIMARY_ADMIN_EMAIL, useAuth } from '../auth/AuthContext'
 
 const BACKUP_COLLECTIONS = [
   'users',
+  'userPermissions',
   'expenses',
   'receivables',
   'alvaraTransfers',
@@ -33,7 +34,7 @@ const BACKUP_COLLECTIONS = [
   'bankStatements',
 ] as const
 
-const PROTECTED_COLLECTIONS = new Set<string>(['users', 'settings', 'chartOfAccounts'])
+const PROTECTED_COLLECTIONS = new Set<string>(['users', 'userPermissions', 'settings', 'chartOfAccounts'])
 const WIPE_COLLECTIONS = BACKUP_COLLECTIONS.filter((name) => !PROTECTED_COLLECTIONS.has(name) && name !== 'auditLogs').concat(['auditLogs'] as const)
 
 type BackupFile = {
