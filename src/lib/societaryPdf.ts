@@ -9,7 +9,7 @@ export type RepassePdfRow = {
 const brl=(v:number)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v)
 const amount=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)?brl(v):'Não informado'
 const name=(v:unknown)=>String(v||'Não informado')
-const dateBR=(v:unknown)=>{const t=String(v||'');return /^\\d{4}-\\d{2}-\\d{2}$/.test(t)?t.slice(8,10)+'/'+t.slice(5,7)+'/'+t.slice(0,4):name(v)}
+const dateBR=(v:unknown)=>{const t=String(v||'');return /^\d{4}-\d{2}-\d{2}$/.test(t)?t.slice(8,10)+'/'+t.slice(5,7)+'/'+t.slice(0,4):name(v)}
 const statusBR:Record<string,string>={apurado:'Apurado',aguardando_aprovacao:'Aguardando aprovação',devolvido:'Devolvido',rejeitado:'Rejeitado',aprovado:'Aprovado',enviado_tesouraria:'Enviado à Tesouraria',pago:'Pago',cancelado:'Cancelado'}
 export function saveRepassePdf(rows:RepassePdfRow[],userName:string,label:string,fileName:string) {
   const pdf=new jsPDF({unit:'mm',format:'a4'})
@@ -39,7 +39,7 @@ export function saveRepassePdf(rows:RepassePdfRow[],userName:string,label:string
     draw('Valor líquido do cliente (demonstrativo): '+(current?amount(item.sourceClientAmount):'Não informado'))
     if(current){
       draw('Composição do Demonstrativo',9,true)
-      for(const part of item.sourceComponents||[])if(String(part.nome||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().trim()!=='honorarios do escritorio')draw(name(part.nome)+': '+amount(part.valor),8)
+      for(const part of item.sourceComponents||[])if(String(part.nome||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()!=='honorarios do escritorio')draw(name(part.nome)+': '+amount(part.valor),8)
     }
     draw('Honorários do escritório: '+amount(item.officeFees))
     draw('Impostos (11,33%): '+(current?amount(item.taxesValue):'Não disponível'))
