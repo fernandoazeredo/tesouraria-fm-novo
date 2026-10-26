@@ -267,7 +267,7 @@ export function SocietaryTransferSync() {
               originalTransferValue: transferValue,
               transferValue,
               paidValue: 0,
-              beneficiary: settings.beneficiary,
+              beneficiary: 'Ana Paula Müller',
               status: 'apurado',
               sourceStatus: String(source.status ?? ''),
               createdBy: profile.uid,
@@ -310,7 +310,7 @@ function SettingsPanel() {
     setSaving(true)
     try {
       await setDoc(doc(db, 'appConfig', 'societaryTransfer'), {
-        beneficiary: form.beneficiary.trim(),
+        beneficiary: 'Ana Paula Müller',
         defaultPercent: 40,
         startDate: form.startDate,
         endDate: form.endDate,
@@ -334,7 +334,7 @@ function SettingsPanel() {
   return <details className="soc-settings">
     <summary><Settings2 size={17} /> Parâmetros do acordo</summary>
     <div className="soc-settings-grid soc-settings-grid-full">
-      <label><span>Beneficiário</span><input data-required-key="soc-beneficiary" value={form.beneficiary} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, beneficiary: event.target.value }))} /></label>
+      <label><span>Beneficiária (fixa)</span><input value="Ana Paula Müller" disabled readOnly /></label>
       <label><span>Percentual fixo de Ana Paula Müller</span><input type="number" value={40} readOnly disabled /></label>
       <label><span>Data de início</span><input type="date" value={form.startDate} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></label>
       <label><span>Data de encerramento</span><input type="date" value={form.endDate} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></label>
