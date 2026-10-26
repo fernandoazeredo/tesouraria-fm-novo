@@ -13,6 +13,7 @@ const labels: Record<ModuleId,string> = {
   usuarios:'Usuários',auditoria:'Auditoria',utilitarios:'Utilitários',configuracoes:'Configurações',
 }
 type UserOption={id:string;displayName?:string;email:string;role:string}
+const SOCORRO_EMAIL = 'socorro@marquesemuller.adv.br'
 const locks = new Set<ModuleId>(['auditoria','usuarios','utilitarios','configuracoes'])
 export function PermissionsPanel() {
   const {profile}=useAuth()
@@ -29,7 +30,7 @@ export function PermissionsPanel() {
   useEffect(()=>{if(!master||!selected)return;let live=true;setLoaded(false);getDoc(doc(db,'userPermissions',selected)).then(s=>{if(!live)return;const value=s.exists()?s.data() as PermissionDocument:null;setOriginal(value);setValues(Object.fromEntries(Object.entries(value?.modules||{}).map(([k,v])=>[k,v?.ver]).filter(([,v])=>typeof v==='boolean')) as Partial<Record<ModuleId,boolean>>);setLoaded(true)}).catch(e=>{if(live){setMessage('Erro ao consultar permissões: '+String(e));setLoaded(false)}});return()=>{live=false}},[selected,master])
   if(!master)return null
   const ids=Object.keys(modulePaths) as ModuleId[]
-  const isLocked=(id:ModuleId)=>!!user && ((user.role==='master'&&user.email.toLowerCase()===PRIMARY_ADMIN_EMAIL)||locks.has(id)||(!firestoreViewSupported(id,user.role))||(id==='fluxo_caixa'&&!(user.role==='diretor'&&user.email.toLowerCase()===DIRECTOR_EMAIL)))
+  const isLocked=(id:ModuleId)=>!!user && ((user.role==='master'&&user.email.toLowerCase()===PRIMARY_ADMIN_EMAIL)||locks.has(id)||(id==='plano_contas'&&user.email.trim().toLowerCase()===SOCORRO_EMAIL)||(!firestoreViewSupported(id,user.role))||(id==='fluxo_caixa'&&!(user.role==='diretor'&&user.email.toLowerCase()===DIRECTOR_EMAIL)))
   const effective=(id:ModuleId)=>user?effectiveView(id,user.role,user.email,{schemaVersion:1,modules:{...(original?.modules||{}),[id]:{...(original?.modules?.[id]||{}),...(values[id]===undefined?{}:{ver:values[id]})}}},PRIMARY_ADMIN_EMAIL,DIRECTOR_EMAIL):false
   const restore=()=>setValues({})
   const save=async()=>{
