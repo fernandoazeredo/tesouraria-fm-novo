@@ -33,6 +33,7 @@ import { collection, doc, getDoc, onSnapshot, serverTimestamp, writeBatch } from
 import { db } from './lib/firebase'
 import { effectiveView, modulePaths, type ModuleId, type PermissionDocument } from './lib/permissionCatalog'
 import { PermissionsPanel } from './components/PermissionsPanel'
+import { isValidCNPJ } from './lib/cpfCnpjValidator'
 import { useAuth, PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL, type UserRole } from './auth/AuthContext'
 import { TreasuryPage } from './pages/SystemPages'
 import { ReceivablesPageStorageV2 } from './pages/ReceivablesPageStorageV2'
@@ -254,7 +255,7 @@ function Configuracoes() {
       cnpj: institution.cnpj.trim(),
       endereco: institution.endereco.trim(),
     }
-    if (!next.razaoSocial || !next.endereco || next.cnpj.replace(/\D/g, '').length !== 14) {
+    if (!next.razaoSocial || !next.endereco || !isValidCNPJ(next.cnpj)) {
       setMessage('Preencha Razão Social, Endereço e um CNPJ de 14 dígitos.')
       return
     }
