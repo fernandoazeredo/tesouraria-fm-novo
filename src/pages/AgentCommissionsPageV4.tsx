@@ -1,3 +1,4 @@
+import { getCurrentInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
 import { CheckCircle2, FileText, Plus, RefreshCw, Search, Send, Trash2, Users, X } from 'lucide-react'
@@ -153,7 +154,7 @@ function openPdfPrint(body: string) {
   if (!reportWindow) { window.alert('O navegador bloqueou a janela do relatório. Libere pop-ups para gerar o PDF.'); return }
   reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Comissões</title><style>
     @page{size:A4 portrait;margin:13mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;font-size:11px}h1{text-align:center;font-size:18px;font-weight:500;margin:0 0 24px}.generated{margin-bottom:22px}.meta{display:grid;grid-template-columns:180px 1fr;gap:8px 14px;margin-bottom:25px}.meta b{font-size:11px}.section{page-break-inside:avoid;margin-bottom:26px}.page-break{page-break-before:always}table{width:100%;border-collapse:collapse}th{background:#24557d;color:#fff;padding:8px;text-align:center}td{padding:8px;border-bottom:1px solid #eee;vertical-align:top}tbody tr:nth-child(odd){background:#f5f5f5}.num{text-align:right;white-space:nowrap}.center{text-align:center}.balance{font-weight:700}.summary{margin-top:18px;font-size:13px}.summary b{font-size:14px}.note{margin-top:8px;color:#555}.company{font-weight:700}.process{font-size:10px;line-height:1.4}.footer{margin-top:26px;border-top:1px solid #bbb;padding-top:7px;color:#666;font-size:9px}
-  </style></head><body>${body}<div class="footer">FLÁVIO MARQUES ADVOGADOS ASSOCIADOS · Controle de Despesas e Receitas · Relatório gerado em ${new Date().toLocaleString('pt-BR')}</div><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`)
+  </style></head><body>${body}<div class="footer">${getCurrentInstitutionalSettings().razaoSocial} · Controle de Despesas e Receitas · Relatório gerado em ${new Date().toLocaleString('pt-BR')}</div><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`)
   reportWindow.document.close()
 }
 
