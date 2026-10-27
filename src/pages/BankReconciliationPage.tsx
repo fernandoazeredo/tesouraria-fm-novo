@@ -50,8 +50,21 @@ function safeName(value: string) {
 
 async function deleteStorageTree(path: string) {
   const root = storageRef(storage, path)
-  const result = await listAll(root)
-  await Promise.all(result.items.map((item) => deleteObject(item)))
+  let result
+  try {
+    result = await listAll(root)
+  } catch (error) {
+    // Prefixo inexistente não deve impedir a exclusão. Erros de autorização permanecem fatais.
+    if ((error as { code?: string })?.code === 'storage/object-not-found') return
+    throw error
+  }
+  await Promise.all(result.items.map(async (item) => {
+    try {
+      await deleteObject(item)
+    } catch (error) {
+      if ((error as { code?: string })?.code !== 'storage/object-not-found') throw error
+    }
+  }))
   for (const prefix of result.prefixes) {
     await deleteStorageTree(prefix.fullPath)
   }
@@ -361,6 +374,10 @@ export function BankReconciliationPage() {
 
     setStatementBusy(true)
     setMessage('')
+    const progress: string[] = []
+    let processedTransactions = 0
+    let removedTransactions = 0
+    let removedReconciliations = 0
     try {
       const deletedTransactionIds = new Set<string>()
 
@@ -381,8 +398,12 @@ export function BankReconciliationPage() {
           }
         })
         await batch.commit()
+        processedTransactions += relatedTransactions.slice(start, start + 350).length
+        removedTransactions = deletedTransactionIds.size
+        progress.push(`Lote de movimentos confirmado: ${processedTransactions}/${relatedTransactions.length}; exclusões planejadas confirmadas: ${removedTransactions}`)
       }
 
+      progress.push(`Movimentações processadas: ${processedTransactions}; excluídas: ${removedTransactions}`)
       const relatedReconciliations = reconciliations.filter((item) => deletedTransactionIds.has(String(item.bankTransactionId)))
       for (let start = 0; start < relatedReconciliations.length; start += 400) {
         const batch = writeBatch(db)
@@ -390,23 +411,45 @@ export function BankReconciliationPage() {
           batch.delete(doc(db, 'bankReconciliations', item.id))
         })
         await batch.commit()
+        removedReconciliations += relatedReconciliations.slice(start, start + 400).length
+        progress.push(`Lote de conciliações confirmado: ${removedReconciliations}/${relatedReconciliations.length}`)
       }
 
+      progress.push(`Conciliações vinculadas removidas: ${removedReconciliations}`)
       // Remove todas as cópias históricas do extrato da competência/unidade.
       await deleteStorageTree(`extratos-bancarios/${competence}/Todas`)
+      progress.push('Cópias do extrato no Storage verificadas e removidas')
 
       // Remove ZIPs já gerados que poderiam conter o extrato apagado.
       await deleteStorageTree(`envios-contabilidade/${competence}`)
+      progress.push('Cópias dos ZIPs da competência verificadas e removidas')
 
       await deleteDoc(doc(db, 'bankStatements', statementId))
-      await audit(
-        'Extrato bancário apagado definitivamente',
-        `${competence} · Todas · ${statement.fileName} · ${relatedTransactions.length} movimentação(ões) revisada(s) · ${deletedTransactionIds.size} removida(s) · ZIPs da competência removidos`,
-        statementId
-      )
-      setMessage('Extrato apagado definitivamente. Arquivo, movimentações exclusivas e ZIPs da competência foram removidos.')
+      progress.push('Registro bankStatements removido')
+      try {
+        await audit(
+          'Extrato bancário apagado definitivamente',
+          `${competence} · Todas · ${statement.fileName} · ${processedTransactions} movimentação(ões) revisada(s) · ${removedTransactions} removida(s) · ZIPs da competência removidos`,
+          statementId
+        )
+        setMessage('Extrato apagado definitivamente. Arquivo, movimentações exclusivas e ZIPs da competência foram removidos.')
+      } catch (auditError) {
+        console.error('Exclusão concluída, mas auditoria falhou', auditError)
+        setMessage('A exclusão foi concluída, mas não foi possível registrar a Auditoria. Comunique o administrador; não repita a exclusão.')
+      }
     } catch (error) {
       console.error(error)
+      const detail = [
+        `${competence} · Todas · extrato ${statement.fileName} · documento ${statementId}`,
+        ...progress,
+        `Falha: ${error instanceof Error ? error.message : String(error)}`,
+        'Estado parcial: verificar Firestore e Storage antes de nova exclusão',
+      ].join(' | ')
+      try {
+        await audit('Falha parcial ao apagar extrato bancário', detail, statementId)
+      } catch (auditError) {
+        console.error('Falha ao registrar auditoria da exclusão parcial', auditError)
+      }
       setMessage('Não foi possível apagar completamente o extrato. Nenhuma nova exclusão deve ser tentada até revisar a Auditoria e o estado da competência.')
     } finally {
       setStatementBusy(false)
