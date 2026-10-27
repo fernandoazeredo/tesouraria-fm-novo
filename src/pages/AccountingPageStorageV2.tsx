@@ -1,3 +1,4 @@
+import { getCurrentInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import { useEffect, useMemo, useState } from 'react'
 import { BadgeDollarSign, Calculator, CheckCircle2, Download, FileSpreadsheet, Landmark, Paperclip, ReceiptText, Send, Upload } from 'lucide-react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
@@ -183,7 +184,7 @@ export function AccountingPageStorageV2() {
     const pendingDemonstratives = packageIssues.filter((issue) => issue.reason.toLowerCase().includes('demonstrativo'))
     const paths = operationFolderPaths()
     const summaryRows = [
-      ['FLÁVIO MARQUES ADVOGADOS ASSOCIADOS'],
+      [getCurrentInstitutionalSettings().razaoSocial],
       ['Movimento mensal para Contabilidade'],
       ['Competência', competence], ['Unidade', unit], ['Movimento', movement],
       ['Despesas aptas', expenseCount],
