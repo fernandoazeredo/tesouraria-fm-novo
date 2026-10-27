@@ -102,6 +102,8 @@ service firebase.storage {
       allow delete: if financialWriter();
     }
 
+    match /envios-contabilidade/{allPaths=**}
+
     // Estrutura antiga mantida somente para leitura/limpeza de pacotes já existentes.
     match /pacotes-contabeis/{allPaths=**} {
       allow read: if financialReader();
