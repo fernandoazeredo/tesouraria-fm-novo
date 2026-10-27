@@ -1,3 +1,5 @@
+import { getCurrentInstitutionalSettings } from '../hooks/useInstitutionalSettings'
+
 export type BankAccount = {
   id: 'itau' | 'bb' | 'cef' | 'itau-pj' | 'bb-pf' | 'cef-pf'
   bank: string
@@ -13,7 +15,9 @@ export const BANK_ACCOUNTS: BankAccount[] = [
     bank: 'Itaú',
     agency: '8548',
     account: '26486-3',
-    holder: 'MARQUES & MÜLLER ADVOGADOS ASSOCIADOS',
+    get holder() {
+      return getCurrentInstitutionalSettings().razaoSocial || 'FLÁVIO MARQUES ADVOGADOS ASSOCIADOS'
+    },
     holderType: 'PJ',
   },
   {
