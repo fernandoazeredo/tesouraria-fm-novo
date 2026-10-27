@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf'
+import { getCurrentInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import { groupByProcess } from './societaryGrouping'
 export type RepassePdfRow = {
   id:string; processo?:string; reclamante?:string; reclamada?:string; receiptDate?:string; competence?:string;
@@ -22,7 +23,10 @@ export function saveRepassePdf(rows:RepassePdfRow[],userName:string,label:string
     for(const line of lines){if(y>h-22){pdf.addPage();y=19}pdf.text(line,margin,y);y+=size*0.53}
     y+=2
   }
-  draw('FLÁVIO MARQUES ADVOGADOS ASSOCIADOS',12,true)
+  const institutional = getCurrentInstitutionalSettings()
+  draw(institutional.razaoSocial,12,true)
+  draw('CNPJ: ' + institutional.cnpj,8)
+  draw(institutional.endereco,8)
   draw(label,11,true)
   draw('Emissão: '+new Date().toLocaleString('pt-BR')+' · Usuário: '+userName,8)
   draw('Registros: '+rows.length,9)
