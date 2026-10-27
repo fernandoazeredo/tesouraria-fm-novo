@@ -29,7 +29,7 @@ import {
   X,
 } from 'lucide-react'
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
-import { doc, onSnapshot } from 'firebase/firestore'
+import { collection, doc, getDoc, onSnapshot, serverTimestamp, writeBatch } from 'firebase/firestore'
 import { db } from './lib/firebase'
 import { effectiveView, modulePaths, type ModuleId, type PermissionDocument } from './lib/permissionCatalog'
 import { PermissionsPanel } from './components/PermissionsPanel'
@@ -220,11 +220,86 @@ function PendingScreen() {
 }
 
 function Configuracoes() {
+  const { profile } = useAuth()
+  const [institution, setInstitution] = useState({ ...companyData })
+  const [saved, setSaved] = useState({ ...companyData })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+  useEffect(() => {
+    let active = true
+    getDoc(doc(db, 'appConfig', 'institutional')).then(snapshot => {
+      if (!active) return
+      if (snapshot.exists()) {
+        const value = snapshot.data()
+        const next = {
+          razaoSocial: typeof value.razaoSocial === 'string' ? value.razaoSocial : companyData.razaoSocial,
+          cnpj: typeof value.cnpj === 'string' ? value.cnpj : companyData.cnpj,
+          endereco: typeof value.endereco === 'string' ? value.endereco : companyData.endereco,
+        }
+        setInstitution(next)
+        setSaved(next)
+      }
+    }).catch(() => {
+      if (active) setMessage('Não foi possível consultar o cadastro institucional. O salvamento está indisponível até uma nova leitura.')
+    }).finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+  const changed = JSON.stringify(institution) !== JSON.stringify(saved)
+  const saveInstitution = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!profile || saving || loading || !changed || message.includes('salvamento está indisponível')) return
+    const next = {
+      razaoSocial: institution.razaoSocial.trim(),
+      cnpj: institution.cnpj.trim(),
+      endereco: institution.endereco.trim(),
+    }
+    if (!next.razaoSocial || !next.endereco || next.cnpj.replace(/\D/g, '').length !== 14) {
+      setMessage('Preencha Razão Social, Endereço e um CNPJ de 14 dígitos.')
+      return
+    }
+    if (!window.confirm('Confirmar atualização dos dados institucionais?')) return
+    setSaving(true)
+    setMessage('')
+    try {
+      const batch = writeBatch(db)
+      batch.set(doc(db, 'appConfig', 'institutional'), { ...next, updatedAt: serverTimestamp(), updatedBy: profile.uid }, { merge: true })
+      batch.set(doc(collection(db, 'auditLogs')), {
+        action: 'Dados institucionais alterados', module: 'Configurações',
+        userId: profile.uid, userEmail: profile.email || '',
+        before: saved, after: next, createdAt: serverTimestamp(),
+      })
+      await batch.commit()
+      setInstitution(next)
+      setSaved(next)
+      setMessage('Dados institucionais salvos com sucesso.')
+    } catch (error) {
+      setMessage('Não foi possível salvar os dados institucionais: ' + String(error))
+    } finally {
+      setSaving(false)
+    }
+  }
   return (
     <>
       <div className="page-heading"><div><span className="eyebrow">Administração Master</span><h1>Configurações</h1><p>Dados institucionais utilizados pelo aplicativo.</p></div></div>
       <PermissionsPanel />
-      <section className="page-card"><span className="eyebrow">Dados institucionais</span><h2>Configurações do Aplicativo</h2><p>Cadastro utilizado nos demonstrativos, relatórios e documentos gerados pelo sistema.</p><div className="settings-grid"><label><span>Razão Social</span><input value={companyData.razaoSocial} readOnly /></label><label><span>CNPJ</span><input value={companyData.cnpj} readOnly /></label><label className="settings-full-width"><span>Endereço</span><input value={companyData.endereco} readOnly /></label></div></section>
+      <section className="page-card">
+        <span className="eyebrow">Dados institucionais</span>
+        <h2>Configurações do Aplicativo</h2>
+        <p>Cadastro institucional. Altere os campos quando houver atualização oficial da empresa.</p>
+        <form onSubmit={event => void saveInstitution(event)}>
+          <div className="settings-grid">
+            <label><span>Razão Social</span><input value={institution.razaoSocial} disabled={loading || saving} onChange={event => setInstitution(previous => ({ ...previous, razaoSocial: event.target.value }))} required /></label>
+            <label><span>CNPJ</span><input value={institution.cnpj} disabled={loading || saving} onChange={event => setInstitution(previous => ({ ...previous, cnpj: event.target.value }))} required inputMode="numeric" /></label>
+            <label className="settings-full-width"><span>Endereço</span><input value={institution.endereco} disabled={loading || saving} onChange={event => setInstitution(previous => ({ ...previous, endereco: event.target.value }))} required /></label>
+          </div>
+          <div className="quick-actions" style={{ marginTop: 16 }}>
+            <button type="button" className="secondary-button" disabled={loading || saving || !changed} onClick={() => { setInstitution({ ...saved }); setMessage('Alterações descartadas.') }}>Cancelar alterações</button>
+            <button type="submit" className="primary-button" disabled={loading || saving || !changed || message.includes('salvamento está indisponível')}>{saving ? 'Salvando…' : 'Salvar alterações'}</button>
+          </div>
+          {message && <p role="status">{message}</p>}
+        </form>
+      </section>
     </>
   )
 }
