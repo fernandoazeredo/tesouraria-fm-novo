@@ -375,6 +375,9 @@ export function BankReconciliationPage() {
     setStatementBusy(true)
     setMessage('')
     const progress: string[] = []
+    let processedTransactions = 0
+    let removedTransactions = 0
+    let removedReconciliations = 0
     try {
       const deletedTransactionIds = new Set<string>()
 
@@ -395,9 +398,12 @@ export function BankReconciliationPage() {
           }
         })
         await batch.commit()
+        processedTransactions += relatedTransactions.slice(start, start + 350).length
+        removedTransactions = deletedTransactionIds.size
+        progress.push(`Lote de movimentos confirmado: ${processedTransactions}/${relatedTransactions.length}; exclusões planejadas confirmadas: ${removedTransactions}`)
       }
 
-      progress.push(`Movimentações processadas: ${relatedTransactions.length}; excluídas: ${deletedTransactionIds.size}`)
+      progress.push(`Movimentações processadas: ${processedTransactions}; excluídas: ${removedTransactions}`)
       const relatedReconciliations = reconciliations.filter((item) => deletedTransactionIds.has(String(item.bankTransactionId)))
       for (let start = 0; start < relatedReconciliations.length; start += 400) {
         const batch = writeBatch(db)
@@ -405,9 +411,11 @@ export function BankReconciliationPage() {
           batch.delete(doc(db, 'bankReconciliations', item.id))
         })
         await batch.commit()
+        removedReconciliations += relatedReconciliations.slice(start, start + 400).length
+        progress.push(`Lote de conciliações confirmado: ${removedReconciliations}/${relatedReconciliations.length}`)
       }
 
-      progress.push(`Conciliações vinculadas removidas: ${relatedReconciliations.length}`)
+      progress.push(`Conciliações vinculadas removidas: ${removedReconciliations}`)
       // Remove todas as cópias históricas do extrato da competência/unidade.
       await deleteStorageTree(`extratos-bancarios/${competence}/Todas`)
       progress.push('Cópias do extrato no Storage verificadas e removidas')
@@ -418,12 +426,17 @@ export function BankReconciliationPage() {
 
       await deleteDoc(doc(db, 'bankStatements', statementId))
       progress.push('Registro bankStatements removido')
-      await audit(
-        'Extrato bancário apagado definitivamente',
-        `${competence} · Todas · ${statement.fileName} · ${relatedTransactions.length} movimentação(ões) revisada(s) · ${deletedTransactionIds.size} removida(s) · ZIPs da competência removidos`,
-        statementId
-      )
-      setMessage('Extrato apagado definitivamente. Arquivo, movimentações exclusivas e ZIPs da competência foram removidos.')
+      try {
+        await audit(
+          'Extrato bancário apagado definitivamente',
+          `${competence} · Todas · ${statement.fileName} · ${processedTransactions} movimentação(ões) revisada(s) · ${removedTransactions} removida(s) · ZIPs da competência removidos`,
+          statementId
+        )
+        setMessage('Extrato apagado definitivamente. Arquivo, movimentações exclusivas e ZIPs da competência foram removidos.')
+      } catch (auditError) {
+        console.error('Exclusão concluída, mas auditoria falhou', auditError)
+        setMessage('A exclusão foi concluída, mas não foi possível registrar a Auditoria. Comunique o administrador; não repita a exclusão.')
+      }
     } catch (error) {
       console.error(error)
       const detail = [
