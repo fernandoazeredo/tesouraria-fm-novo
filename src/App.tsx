@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import {
   BarChart3,
   BookOpenCheck,
@@ -28,7 +28,11 @@ import {
   Wrench,
   X,
 } from 'lucide-react'
-import { NavLink, Route, Routes } from 'react-router-dom'
+import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
+import { doc, onSnapshot } from 'firebase/firestore'
+import { db } from './lib/firebase'
+import { effectiveView, modulePaths, type ModuleId, type PermissionDocument } from './lib/permissionCatalog'
+import { PermissionsPanel } from './components/PermissionsPanel'
 import { useAuth, PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL, type UserRole } from './auth/AuthContext'
 import { TreasuryPage } from './pages/SystemPages'
 import { ReceivablesPageStorageV2 } from './pages/ReceivablesPageStorageV2'
@@ -219,6 +223,7 @@ function Configuracoes() {
   return (
     <>
       <div className="page-heading"><div><span className="eyebrow">Administração Master</span><h1>Configurações</h1><p>Dados institucionais utilizados pelo aplicativo.</p></div></div>
+      <PermissionsPanel />
       <section className="page-card"><span className="eyebrow">Dados institucionais</span><h2>Configurações do Aplicativo</h2><p>Cadastro utilizado nos demonstrativos, relatórios e documentos gerados pelo sistema.</p><div className="settings-grid"><label><span>Razão Social</span><input value={companyData.razaoSocial} readOnly /></label><label><span>CNPJ</span><input value={companyData.cnpj} readOnly /></label><label className="settings-full-width"><span>Endereço</span><input value={companyData.endereco} readOnly /></label></div></section>
     </>
   )
@@ -273,9 +278,27 @@ function AppShell() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const accessRole = accessRoleFromUserRole(profile?.role)
   const canViewCashFlow = Boolean(profile?.email && [PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL].includes(profile.email.trim().toLowerCase()))
-  const canViewManagementReports = ['master', 'diretor', 'gerente'].includes(accessRole)
   const canViewAudit = Boolean(profile?.email && profile.email.trim().toLowerCase() === PRIMARY_ADMIN_EMAIL && profile.role === 'master')
-  const visibleMenu = menu.filter((item) => (!item.roles || item.roles.includes(accessRole)) && (item.to !== '/fluxo-caixa' || canViewCashFlow) && (item.to !== '/auditoria' || canViewAudit))
+  const [permissionDoc, setPermissionDoc] = useState<PermissionDocument | null>(null)
+  const [permissionsLoaded, setPermissionsLoaded] = useState(false)
+  useEffect(() => {
+    if (!profile?.uid) { setPermissionDoc(null); setPermissionsLoaded(false); return }
+    setPermissionDoc(null); setPermissionsLoaded(false)
+    return onSnapshot(doc(db, 'userPermissions', profile.uid), snapshot => {
+      setPermissionDoc(snapshot.exists() ? snapshot.data() as PermissionDocument : null)
+      setPermissionsLoaded(true)
+    }, () => { setPermissionDoc(null); setPermissionsLoaded(true) })
+  }, [profile?.uid])
+  const pathToId = new Map<string, ModuleId>(Object.entries(modulePaths).map(([id, path]) => [path, id as ModuleId]))
+  const canOpen = (path: string) => {
+    if (!permissionsLoaded || !profile) return false
+    const id = pathToId.get(path)
+    if (!id) return true
+    return effectiveView(id, accessRole, profile.email || '', permissionDoc, PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL)
+  }
+  const denied = <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>Seu usuário não possui permissão para acessar este módulo.</p></section>
+  const guarded = (path: string, content: ReactNode) => !permissionsLoaded ? <section className="page-card" role="status"><p>Carregando…</p></section> : canOpen(path) ? content : denied
+  const visibleMenu = menu.filter(item => canOpen(item.to))
 
   useEffect(() => {
     document.body.classList.toggle('mobile-menu-lock', mobileMenuOpen)
@@ -315,26 +338,27 @@ function AppShell() {
       </aside>
       <main className="main-content">
         <Routes>
-          <Route path="/" element={<DashboardPageEnhanced />} />
-          <Route path="/despesas" element={<><ExpensesPageStorage /><ExpenseSettlementPanel /></>} />
-          <Route path="/alvaras" element={<ReceivablesPageStorageV2 />} />
-          <Route path="/repasse-alvaras" element={<AlvaraTransfersPageV3 />} />
-          <Route path="/repasse-societario" element={<SocietaryTransfersPage />} />
-          <Route path="/nota-fiscal" element={<FiscalNotesPageV3 />} />
-          <Route path="/comissoes-agentes" element={<AgentCommissionsPageV4 />} />
-          <Route path="/tesouraria" element={<><TreasuryPage /><SocietaryTreasuryPanel /></>} />
-          <Route path="/aprovacoes" element={<ApprovalsPageEnhanced />} />
-          <Route path="/dre-gerencial" element={canViewManagementReports ? <DreGerencialPageV2 /> : <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>Seu perfil não tem permissão para consultar a DRE Gerencial.</p></section>} />
-          <Route path="/plano-contas" element={<AccountsPageFernando />} />
-          <Route path="/contabilidade" element={<AccountingPageStorageV2 />} />
-          <Route path="/calendario-financeiro" element={<FinancialCalendarPage />} />
-          <Route path="/fluxo-caixa" element={canViewCashFlow ? <CashFlowMonthlyPage /> : <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>Seu perfil não tem permissão para consultar o Fluxo de Caixa.</p></section>} />
-          <Route path="/conciliacao-bancaria" element={<BankReconciliationPage />} />
-          <Route path="/documentos" element={<DocumentsPageStorage />} />
-          <Route path="/usuarios" element={<UsersPageKitFernando />} />
-          <Route path="/auditoria" element={canViewAudit ? <AuditPageEnhancedV2 /> : <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>A Auditoria é exclusiva do Administrador Master.</p></section>} />
-          <Route path="/utilitarios" element={<UtilitiesPage />} />
-          <Route path="/configuracoes" element={<Configuracoes />} />
+          <Route path="/" element={!permissionsLoaded ? <section className="page-card" role="status">Carregando…</section> : canOpen('/') ? <DashboardPageEnhanced /> : <Navigate to={canOpen('/alvaras') ? '/alvaras' : canOpen('/aprovacoes') ? '/aprovacoes' : '/sem-acesso'} replace />} />
+          <Route path="/sem-acesso" element={denied} />
+          <Route path="/despesas" element={guarded('/despesas', <><ExpensesPageStorage /><ExpenseSettlementPanel /></>)} />
+          <Route path="/alvaras" element={guarded('/alvaras', <ReceivablesPageStorageV2 />)} />
+          <Route path="/repasse-alvaras" element={guarded('/repasse-alvaras', <AlvaraTransfersPageV3 />)} />
+          <Route path="/repasse-societario" element={guarded('/repasse-societario', <SocietaryTransfersPage />)} />
+          <Route path="/nota-fiscal" element={guarded('/nota-fiscal', <FiscalNotesPageV3 />)} />
+          <Route path="/comissoes-agentes" element={guarded('/comissoes-agentes', <AgentCommissionsPageV4 />)} />
+          <Route path="/tesouraria" element={guarded('/tesouraria', <><TreasuryPage /><SocietaryTreasuryPanel /></>)} />
+          <Route path="/aprovacoes" element={guarded('/aprovacoes', <ApprovalsPageEnhanced />)} />
+          <Route path="/dre-gerencial" element={guarded("/dre-gerencial", <DreGerencialPageV2 />)} />
+          <Route path="/plano-contas" element={guarded('/plano-contas', <AccountsPageFernando />)} />
+          <Route path="/contabilidade" element={guarded('/contabilidade', <AccountingPageStorageV2 />)} />
+          <Route path="/calendario-financeiro" element={guarded('/calendario-financeiro', <FinancialCalendarPage />)} />
+          <Route path="/fluxo-caixa" element={guarded('/fluxo-caixa', canViewCashFlow ? <CashFlowMonthlyPage /> : <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>Seu perfil não tem permissão para consultar o Fluxo de Caixa.</p></section>)} />
+          <Route path="/conciliacao-bancaria" element={guarded('/conciliacao-bancaria', <BankReconciliationPage />)} />
+          <Route path="/documentos" element={guarded('/documentos', <DocumentsPageStorage />)} />
+          <Route path="/usuarios" element={guarded('/usuarios', <UsersPageKitFernando />)} />
+          <Route path="/auditoria" element={guarded('/auditoria', canViewAudit ? <AuditPageEnhancedV2 /> : <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>A Auditoria é exclusiva do Administrador Master.</p></section>)} />
+          <Route path="/utilitarios" element={guarded('/utilitarios', <UtilitiesPage />)} />
+          <Route path="/configuracoes" element={guarded('/configuracoes', <Configuracoes />)} />
           <Route path="/dicas" element={<TipsPageEnhanced />} />
           <Route path="/como-usar" element={<HowToPageEnhanced />} />
         </Routes>
