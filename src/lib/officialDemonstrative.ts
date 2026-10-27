@@ -1,3 +1,4 @@
+import { getCurrentInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import { doc, updateDoc, type DocumentData } from 'firebase/firestore'
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
 import { db, storage } from './firebase'
@@ -57,7 +58,7 @@ export function createExpenseDemonstrativePdf(record: AnyFinancialRecord) {
     ? items.map((item: DocumentData) => `${s(item?.data)} · ${s(item?.historico)} · ${money.format(n(item?.valor))}`)
     : ['Nenhum item detalhado informado.']
 
-  return createStyledDemonstrativePdf('FLÁVIO MARQUES ADVOGADOS ASSOCIADOS', [
+  return createStyledDemonstrativePdf(getCurrentInstitutionalSettings().razaoSocial, [
     'DEMONSTRATIVO DE DESPESAS',
     '',
     'DADOS DO LANÇAMENTO',
@@ -93,7 +94,7 @@ export function createExpenseDemonstrativePdf(record: AnyFinancialRecord) {
 }
 
 export function createRevenueDemonstrativePdf(record: AnyFinancialRecord) {
-  return createStyledDemonstrativePdf('FLÁVIO MARQUES ADVOGADOS ASSOCIADOS', [
+  return createStyledDemonstrativePdf(getCurrentInstitutionalSettings().razaoSocial, [
     'DEMONSTRATIVO DE RECEBIMENTO DE HONORÁRIOS',
     '',
     'DADOS DO PROCESSO',
@@ -191,7 +192,7 @@ export function createPaymentDemonstrativePdf(kind: Exclude<DemonstrativeKind, '
     `Pago por: ${s(record.paidByName || record.updatedByName)}`,
   )
 
-  return createStyledDemonstrativePdf('FLÁVIO MARQUES ADVOGADOS ASSOCIADOS', lines)
+  return createStyledDemonstrativePdf(getCurrentInstitutionalSettings().razaoSocial, lines)
 }
 
 function pathFor(kind: DemonstrativeKind, id: string) {

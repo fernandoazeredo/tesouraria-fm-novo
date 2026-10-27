@@ -211,3 +211,23 @@ html[data-theme] .destructive-button:hover,
 html[data-theme] .small-expense-button:hover {
   background: #be123c !important;
 }
+
+
+/* Botões primários: contraste AA no tema escuro, inclusive quando ativos. */
+html[data-theme='dark'] button.primary-button:not(:disabled),
+html[data-theme='dark'] .primary-button:not(:disabled) {
+  background: #17618a !important;
+  color: #ffffff !important;
+  border-color: #2589b5 !important;
+}
+html[data-theme='dark'] button.primary-button:not(:disabled):hover,
+html[data-theme='dark'] .primary-button:not(:disabled):hover {
+  background: #115071 !important;
+  color: #ffffff !important;
+}
+html[data-theme='dark'] button.primary-button:disabled,
+html[data-theme='dark'] .primary-button:disabled {
+  background: #243744 !important;
+  color: #d6e4ed !important;
+  border-color: #4f6775 !important;
+}
