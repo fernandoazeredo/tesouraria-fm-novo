@@ -50,8 +50,21 @@ function safeName(value: string) {
 
 async function deleteStorageTree(path: string) {
   const root = storageRef(storage, path)
-  const result = await listAll(root)
-  await Promise.all(result.items.map((item) => deleteObject(item)))
+  let result
+  try {
+    result = await listAll(root)
+  } catch (error) {
+    // Prefixo inexistente não deve impedir a exclusão. Erros de autorização permanecem fatais.
+    if ((error as { code?: string })?.code === 'storage/object-not-found') return
+    throw error
+  }
+  await Promise.all(result.items.map(async (item) => {
+    try {
+      await deleteObject(item)
+    } catch (error) {
+      if ((error as { code?: string })?.code !== 'storage/object-not-found') throw error
+    }
+  }))
   for (const prefix of result.prefixes) {
     await deleteStorageTree(prefix.fullPath)
   }
@@ -361,6 +374,7 @@ export function BankReconciliationPage() {
 
     setStatementBusy(true)
     setMessage('')
+    const progress: string[] = []
     try {
       const deletedTransactionIds = new Set<string>()
 
@@ -383,6 +397,7 @@ export function BankReconciliationPage() {
         await batch.commit()
       }
 
+      progress.push(`Movimentações processadas: ${relatedTransactions.length}; excluídas: ${deletedTransactionIds.size}`)
       const relatedReconciliations = reconciliations.filter((item) => deletedTransactionIds.has(String(item.bankTransactionId)))
       for (let start = 0; start < relatedReconciliations.length; start += 400) {
         const batch = writeBatch(db)
@@ -392,13 +407,17 @@ export function BankReconciliationPage() {
         await batch.commit()
       }
 
+      progress.push(`Conciliações vinculadas removidas: ${relatedReconciliations.length}`)
       // Remove todas as cópias históricas do extrato da competência/unidade.
       await deleteStorageTree(`extratos-bancarios/${competence}/Todas`)
+      progress.push('Cópias do extrato no Storage verificadas e removidas')
 
       // Remove ZIPs já gerados que poderiam conter o extrato apagado.
       await deleteStorageTree(`envios-contabilidade/${competence}`)
+      progress.push('Cópias dos ZIPs da competência verificadas e removidas')
 
       await deleteDoc(doc(db, 'bankStatements', statementId))
+      progress.push('Registro bankStatements removido')
       await audit(
         'Extrato bancário apagado definitivamente',
         `${competence} · Todas · ${statement.fileName} · ${relatedTransactions.length} movimentação(ões) revisada(s) · ${deletedTransactionIds.size} removida(s) · ZIPs da competência removidos`,
@@ -407,6 +426,17 @@ export function BankReconciliationPage() {
       setMessage('Extrato apagado definitivamente. Arquivo, movimentações exclusivas e ZIPs da competência foram removidos.')
     } catch (error) {
       console.error(error)
+      const detail = [
+        `${competence} · Todas · extrato ${statement.fileName} · documento ${statementId}`,
+        ...progress,
+        `Falha: ${error instanceof Error ? error.message : String(error)}`,
+        'Estado parcial: verificar Firestore e Storage antes de nova exclusão',
+      ].join(' | ')
+      try {
+        await audit('Falha parcial ao apagar extrato bancário', detail, statementId)
+      } catch (auditError) {
+        console.error('Falha ao registrar auditoria da exclusão parcial', auditError)
+      }
       setMessage('Não foi possível apagar completamente o extrato. Nenhuma nova exclusão deve ser tentada até revisar a Auditoria e o estado da competência.')
     } finally {
       setStatementBusy(false)
