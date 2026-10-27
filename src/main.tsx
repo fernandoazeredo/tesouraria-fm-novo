@@ -12,7 +12,6 @@ import { ExpenseFormSemanticsEnhancer } from './components/ExpenseFormSemanticsE
 import { ExpenseFiltersPanel } from './components/ExpenseFiltersPanel'
 import { ExpenseSettlementPanel } from './components/ExpenseSettlementPanel'
 import { InstitutionalDisplaySync } from './components/InstitutionalDisplaySync'
-import { InstitutionalSettingsEditor } from './components/InstitutionalSettingsEditor'
 import { LaborAgreementReceivableLauncher } from './components/LaborAgreementReceivable'
 import { NavigationCopyEnhancer } from './components/NavigationCopyEnhancer'
 import { OtherRevenueReceivable } from './components/OtherRevenueReceivable'
@@ -51,7 +50,6 @@ createRoot(document.getElementById('root')!).render(
         <DreRegimeViewEnhancer />
         <DynamicAgreementInstallmentsEnhancer />
         <InstitutionalDisplaySync />
-        <InstitutionalSettingsEditor />
         <LaborAgreementReceivableLauncher />
         <OtherRevenueReceivable />
         <RevenueTypeChooser />
