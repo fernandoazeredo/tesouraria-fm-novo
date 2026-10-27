@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf'
+import { getCurrentInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import type { Movement } from './cashFlowMovements'
 
 type Report = {
@@ -46,7 +47,9 @@ export function downloadCashFlowPdf(r: Report) {
     text('Saídas: ' + brl.format(outgoing))
     text(resultLabel + ': ' + brl.format(incoming - outgoing), { bold: true })
   }
-  text('FLÁVIO MARQUES ADVOGADOS ASSOCIADOS — Fluxo de Caixa Mensal', { bold: true, size: 13 })
+  const institutional = getCurrentInstitutionalSettings()
+  text(institutional.razaoSocial + ' — Fluxo de Caixa Mensal', { bold: true, size: 13 })
+  text('CNPJ: ' + institutional.cnpj + ' · ' + institutional.endereco, { size: 8 })
   text('Referência: ' + r.monthTitle + ' (' + r.month + ') · Conta: ' + r.account)
   text('Emissão: ' + r.issuedAt.toLocaleString('pt-BR') + ' · Usuário: ' + r.user)
   pdf.setDrawColor(160); pdf.line(margin, y, right, y); y += 5
