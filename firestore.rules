@@ -204,6 +204,27 @@ service cloud.firestore {
         && request.resource.data.status in ['pago', 'rejeitado'];
     }
 
+    function bankPeriodOpen(periodId) {
+      return periodId != null
+        && (
+          !exists(/databases/$(database)/documents/bankReconciliationPeriods/$(periodId))
+          || get(/databases/$(database)/documents/bankReconciliationPeriods/$(periodId)).data.status != 'fechada'
+        );
+    }
+
+    function canCloseBankPeriod() {
+      return hasRole(['master', 'gerente', 'tesouraria'])
+        && resource.data.status == 'aberta'
+        && request.resource.data.status == 'fechada';
+    }
+
+    function canReopenBankPeriod() {
+      return isPrimaryAdminEmail()
+        && hasRole(['master'])
+        && resource.data.status == 'fechada'
+        && request.resource.data.status == 'aberta';
+    }
+
     match /systemControl/{document=**} {
       allow read, create, update, delete: if isPrimaryAdminEmail();
     }
@@ -333,6 +354,12 @@ service cloud.firestore {
       allow create, update: if masterRestoreMode() || hasRole(['master', 'gerente', 'tesouraria']);
       allow delete: if masterRestoreMode() || hasRole(['master', 'gerente', 'tesouraria']);
     }
+
+    match /bankTransactions/{document=**}
+
+    match /bankReconciliations/{document=**}
+
+    match /bankReconciliationPeriods/{document=**}
 
     match /auditLogs/{document=**} {
       allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
