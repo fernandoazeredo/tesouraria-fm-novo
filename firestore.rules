@@ -355,11 +355,46 @@ service cloud.firestore {
       allow delete: if masterRestoreMode() || hasRole(['master', 'gerente', 'tesouraria']);
     }
 
-    match /bankTransactions/{document=**}
+    match /bankTransactions/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create, update: if masterRestoreMode()
+        || (
+          hasRole(['master', 'gerente', 'tesouraria'])
+          && bankPeriodOpen(request.resource.data.reconciliationPeriodId)
+        );
+      allow delete: if masterRestoreMode()
+        || (
+          isPrimaryAdminEmail()
+          && hasRole(['master'])
+          && bankPeriodOpen(resource.data.reconciliationPeriodId)
+        );
+    }
 
-    match /bankReconciliations/{document=**}
+    match /bankReconciliations/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create: if masterRestoreMode()
+        || (
+          hasRole(['master', 'gerente', 'tesouraria'])
+          && bankPeriodOpen(request.resource.data.periodId)
+        );
+      allow delete: if masterRestoreMode()
+        || (
+          hasRole(['master', 'gerente', 'tesouraria'])
+          && bankPeriodOpen(resource.data.periodId)
+        );
+      allow update: if masterRestoreMode();
+    }
 
-    match /bankReconciliationPeriods/{document=**}
+    match /bankReconciliationPeriods/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create: if masterRestoreMode()
+        || (
+          hasRole(['master', 'gerente', 'tesouraria'])
+          && request.resource.data.status == 'fechada'
+        );
+      allow update: if masterRestoreMode() || canCloseBankPeriod() || canReopenBankPeriod();
+      allow delete: if masterRestoreMode();
+    }
 
     match /auditLogs/{document=**} {
       allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
