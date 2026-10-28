@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
+import { addDoc, arrayUnion, collection, doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc, type DocumentData } from 'firebase/firestore'
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytesResumable, type UploadTask } from 'firebase/storage'
-import { BadgeDollarSign, CheckCircle2, ExternalLink, FileText, Paperclip, Plus, RefreshCw, Search, Send, Trash2, Upload, X } from 'lucide-react'
+import { BadgeDollarSign, CheckCircle2, ExternalLink, FileText, Paperclip, PencilLine, Plus, RefreshCw, Search, Send, Trash2, Upload, X } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { db, storage } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
@@ -10,13 +10,14 @@ import { WorkflowStatusBadge } from '../components/WorkflowStatusBadge'
 import { DEFAULT_BANK_ACCOUNT_ID, getBankAccount, type BankAccount } from '../data/bankAccounts'
 import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 import { isEffectiveAlvaraReceivable } from '../lib/receivableClassification'
+import { canEditReceivable, isAllowedReceivableTransition, receivableAuditAction, receivableEditMode, restoreComponents, stripImmutableFields, type ReceivableSaveStatus } from '../lib/receivableEditing'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const decimalBR = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 type AnyRecord = { id: string } & DocumentData
 type RevenueComponent = { nome: string; percentual: number; valor: number; detalhe?: string }
 type AttachmentMeta = { name: string; url: string; path: string; size: number; type: string; uploadedAt: string; uploadedBy: string }
-type UploadItem = { id: string; name: string; size: number; progress: number; status: 'uploading' | 'success' | 'error'; meta?: AttachmentMeta; error?: string }
+type UploadItem = { id: string; name: string; size: number; progress: number; status: 'uploading' | 'success' | 'error'; meta?: AttachmentMeta; error?: string; existing?: boolean }
 
 const statusLabels: Record<string, string> = {
   rascunho: 'Rascunho', enviado_tesouraria: 'Enviado à Tesouraria', recebido_tesouraria: 'Recebido pela Tesouraria', devolvido: 'Devolvido para Correção', encerrado: 'Encerrado / Arquivado',
@@ -153,46 +154,53 @@ async function audit(profile: ReturnType<typeof useAuth>['profile'], action: str
   await addDoc(collection(db, 'auditLogs'), { action, module: 'Recebimento de Alvarás', detail, entityId, userId: profile.uid, userName: profile.displayName, userEmail: profile.email, createdAt: serverTimestamp() })
 }
 
-function ReceivableModal({ onClose }: { onClose: () => void }) {
+const DEFAULT_REVENUE_COMPONENTS: RevenueComponent[] = [
+  { nome: 'Imposto de Renda', percentual: 0, valor: 0 },
+  { nome: 'INSS', percentual: 0, valor: 0 },
+  { nome: 'INSS Empregador', percentual: 0, valor: 0 },
+  { nome: 'Honorários do Escritório', percentual: 0, valor: 0 },
+  { nome: 'Honorários Perito', percentual: 0, valor: 0 },
+  { nome: 'Ressarcimento de Custas', percentual: 0, valor: 0 },
+  { nome: 'Despesas Bancárias / Tarifas', percentual: 0, valor: 0 },
+  { nome: 'Outras Deduções / Participações - Geral 1', percentual: 0, valor: 0, detalhe: '' },
+  { nome: 'Outras Deduções / Participações - Geral 2', percentual: 0, valor: 0, detalhe: '' },
+  { nome: 'Outras Deduções / Participações', percentual: 0, valor: 0, detalhe: '' },
+]
+
+function existingUploads(record?: AnyRecord | null): UploadItem[] {
+  return attachmentsOf(record ?? { id: '' }).map((meta, index) => ({ id: `existing-${index}-${meta.path}`, name: meta.name, size: toNumber(meta.size), progress: 100, status: 'success', meta, existing: true }))
+}
+
+function ReceivableModal({ onClose, existing }: { onClose: () => void; existing?: AnyRecord | null }) {
   const { profile } = useAuth()
-  const [recordRef] = useState(() => doc(collection(db, 'receivables')))
+  const editMode = existing ? receivableEditMode(existing.status) : null
+  const [recordRef] = useState(() => existing ? doc(db, 'receivables', existing.id) : doc(collection(db, 'receivables')))
   const tasks = useRef<Record<string, UploadTask>>({})
   const [busy, setBusy] = useState(false)
-  const [unidade, setUnidade] = useState<'RJ' | 'SP'>('RJ')
-  const [data, setData] = useState(new Date().toISOString().slice(0, 10))
-  const [natureza, setNatureza] = useState('Trabalhista')
-  const [processo, setProcesso] = useState('')
-  const [reclamada, setReclamada] = useState('')
-  const [reclamante, setReclamante] = useState('')
-  const [origem, setOrigem] = useState('Alvará')
-  const [formaRecebimento, setFormaRecebimento] = useState('')
-  const [dataPrevista, setDataPrevista] = useState('')
-  const [receivingBankAccountId, setReceivingBankAccountId] = useState<BankAccount['id']>(DEFAULT_BANK_ACCOUNT_ID)
-  const [receiptDate, setReceiptDate] = useState(new Date().toISOString().slice(0, 10))
-  const [totalAlvara, setTotalAlvara] = useState(0)
-  const [baseCalculo, setBaseCalculo] = useState(0)
-  const [banco, setBanco] = useState('')
-  const [agencia, setAgencia] = useState('')
-  const [conta, setConta] = useState('')
-  const [titular, setTitular] = useState('')
-  const [cpf, setCpf] = useState('')
-  const [pix, setPix] = useState('')
-  const [emailNf, setEmailNf] = useState('')
-  const [enderecoNf, setEnderecoNf] = useState('')
-  const [agentName, setAgentName] = useState('')
-  const [uploads, setUploads] = useState<UploadItem[]>([])
-  const [components, setComponents] = useState<RevenueComponent[]>([
-    { nome: 'Imposto de Renda', percentual: 0, valor: 0 },
-    { nome: 'INSS', percentual: 0, valor: 0 },
-    { nome: 'INSS Empregador', percentual: 0, valor: 0 },
-    { nome: 'Honorários do Escritório', percentual: 0, valor: 0 },
-    { nome: 'Honorários Perito', percentual: 0, valor: 0 },
-    { nome: 'Ressarcimento de Custas', percentual: 0, valor: 0 },
-    { nome: 'Despesas Bancárias / Tarifas', percentual: 0, valor: 0 },
-    { nome: 'Outras Deduções / Participações - Geral 1', percentual: 0, valor: 0, detalhe: '' },
-    { nome: 'Outras Deduções / Participações - Geral 2', percentual: 0, valor: 0, detalhe: '' },
-    { nome: 'Outras Deduções / Participações', percentual: 0, valor: 0, detalhe: '' },
-  ])
+  const [unidade, setUnidade] = useState<'RJ' | 'SP'>(existing?.unidade === 'SP' ? 'SP' : 'RJ')
+  const [data, setData] = useState(String(existing?.data || new Date().toISOString().slice(0, 10)))
+  const [natureza, setNatureza] = useState(String(existing?.natureza || 'Trabalhista'))
+  const [processo, setProcesso] = useState(String(existing?.processo ?? ''))
+  const [reclamada, setReclamada] = useState(String(existing?.reclamada ?? ''))
+  const [reclamante, setReclamante] = useState(String(existing?.reclamante ?? ''))
+  const [origem, setOrigem] = useState(String(existing?.origem || 'Alvará'))
+  const [formaRecebimento, setFormaRecebimento] = useState(String(existing?.formaRecebimento ?? ''))
+  const [dataPrevista, setDataPrevista] = useState(String(existing?.dataPrevista ?? ''))
+  const [receivingBankAccountId, setReceivingBankAccountId] = useState<BankAccount['id']>((existing?.receivingBankAccountId as BankAccount['id']) || DEFAULT_BANK_ACCOUNT_ID)
+  const [receiptDate, setReceiptDate] = useState(String(existing?.receiptDate || new Date().toISOString().slice(0, 10)))
+  const [totalAlvara, setTotalAlvara] = useState(toNumber(existing?.valorAlvara))
+  const [baseCalculo, setBaseCalculo] = useState(toNumber(existing?.baseCalculo))
+  const [banco, setBanco] = useState(String(existing?.banco ?? ''))
+  const [agencia, setAgencia] = useState(String(existing?.agencia ?? ''))
+  const [conta, setConta] = useState(String(existing?.conta ?? ''))
+  const [titular, setTitular] = useState(String(existing?.titular ?? ''))
+  const [cpf, setCpf] = useState(String(existing?.cpf ?? ''))
+  const [pix, setPix] = useState(String(existing?.pix ?? ''))
+  const [emailNf, setEmailNf] = useState(String(existing?.emailNf ?? ''))
+  const [enderecoNf, setEnderecoNf] = useState(String(existing?.enderecoNf ?? ''))
+  const [agentName, setAgentName] = useState(String(existing?.agentName ?? ''))
+  const [uploads, setUploads] = useState<UploadItem[]>(() => existingUploads(existing))
+  const [components, setComponents] = useState<RevenueComponent[]>(() => existing ? restoreComponents(DEFAULT_REVENUE_COMPONENTS, existing.components) : DEFAULT_REVENUE_COMPONENTS.map((item) => ({ ...item })))
   const totalDeducoes = useMemo(() => components.reduce((sum, component) => sum + toNumber(component.valor), 0), [components])
   const liquidoCliente = useMemo(() => Math.max(0, Number((totalAlvara - totalDeducoes).toFixed(2))), [totalAlvara, totalDeducoes])
   const agentCommissionValue = useMemo(() => toNumber(components.find((item) => item.nome === 'Outras Deduções / Participações')?.valor), [components])
@@ -266,6 +274,13 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
   }
 
   async function removeUpload(item: UploadItem) {
+    if (item.existing) {
+      // Anexo já gravado no documento: remove apenas da lista desta edição.
+      // O arquivo permanece no Storage para preservar a rastreabilidade.
+      if (!window.confirm(`Retirar "${item.name}" dos anexos desta receita? O arquivo original permanecerá arquivado.`)) return
+      setUploads((current) => current.filter((row) => row.id !== item.id))
+      return
+    }
     tasks.current[item.id]?.cancel()
     delete tasks.current[item.id]
     if (item.meta?.path) { try { await deleteObject(storageRef(storage, item.meta.path)) } catch {} }
@@ -274,11 +289,11 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
 
   async function closeAndClean() {
     for (const task of Object.values(tasks.current)) task.cancel()
-    for (const item of uploads) if (item.meta?.path) { try { await deleteObject(storageRef(storage, item.meta.path)) } catch {} }
+    for (const item of uploads) if (!item.existing && item.meta?.path) { try { await deleteObject(storageRef(storage, item.meta.path)) } catch {} }
     onClose()
   }
 
-  async function save(status: 'rascunho' | 'enviado_tesouraria') {
+  async function save(status: ReceivableSaveStatus) {
     if (uploading) { window.alert('Aguarde o término do envio dos documentos.'); return }
     const missingKeys: string[] = []
     if (!processo.trim()) missingKeys.push('alvara-processo')
@@ -304,7 +319,7 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
     const receivingBankAccount = getBankAccount(receivingBankAccountId)
     setBusy(true)
     try {
-      await setDoc(recordRef, {
+      const payload = {
         unidade, data, natureza, processo: processo.trim(), reclamada: reclamada.trim(), reclamante: reclamante.trim(), origem,
         formaRecebimento: formaRecebimento.trim(), dataPrevista,
         receivingBankAccountId, receivingBankAccount, receiptDate,
@@ -312,9 +327,28 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
         agentName: agentName.trim(), agentCommissionValue, invoiceValue,
         banco, agencia, conta, titular, cpf, pix, emailNf, enderecoNf, status,
         attachments: uploaded, attachmentCount: uploaded.length, storageStatus: 'active',
-        createdBy: profile?.uid, createdByName: profile?.displayName, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-      })
-      await audit(profile, status === 'rascunho' ? 'Receita salva como rascunho' : 'Receita enviada à Tesouraria', `Processo ${processo} — ${money.format(totalAlvara)} · ${receivingBankAccount.bank} · ${uploaded.length} anexo(s)`, recordRef.id)
+      }
+      const auditAction = receivableAuditAction(editMode, status)
+      if (existing) {
+        if (!editMode || !isAllowedReceivableTransition(existing.status, status)) { window.alert('Esta receita não pode mais ser alterada pela área de origem.'); return }
+        const current = await getDoc(recordRef)
+        if (!current.exists() || current.data().status !== existing.status) {
+          window.alert('A situação desta receita foi alterada por outro usuário. Feche e abra novamente antes de salvar.')
+          return
+        }
+        await updateDoc(recordRef, {
+          ...stripImmutableFields(payload),
+          updatedAt: serverTimestamp(), updatedBy: profile?.uid, updatedByName: profile?.displayName,
+          editHistory: arrayUnion({ action: auditAction, fromStatus: existing.status, toStatus: status, at: new Date().toISOString(), by: profile?.uid ?? '', byName: profile?.displayName ?? '' }),
+        })
+        await audit(profile, auditAction, `Documento ${recordRef.id} · Processo ${processo} — ${money.format(totalAlvara)} · ${receivingBankAccount.bank} · ${uploaded.length} anexo(s) · ${statusLabels[String(existing.status)] ?? existing.status} → ${statusLabels[status] ?? status} · criado por ${existing.createdByName || existing.createdBy || '—'}`, recordRef.id)
+      } else {
+        await setDoc(recordRef, {
+          ...payload,
+          createdBy: profile?.uid, createdByName: profile?.displayName, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        })
+        await audit(profile, auditAction, `Processo ${processo} — ${money.format(totalAlvara)} · ${receivingBankAccount.bank} · ${uploaded.length} anexo(s)`, recordRef.id)
+      }
       onClose()
     } catch (error) {
       console.error(error)
@@ -323,7 +357,7 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
   }
 
   return <div className="modal-backdrop"><section className="modal-sheet legacy-sheet revenue-sheet">
-    <div className="modal-toolbar"><div><span className="eyebrow revenue-text">Recebimento de Alvarás</span><h2>Demonstrativo de Recebimento de Honorários</h2></div><button className="icon-button" onClick={() => void closeAndClean()}><X size={20} /></button></div>
+    <div className="modal-toolbar"><div><span className="eyebrow revenue-text">Recebimento de Alvarás</span><h2>{editMode === 'draft' ? 'Editar rascunho — Demonstrativo de Recebimento de Honorários' : editMode === 'returned' ? 'Corrigir e reenviar — Demonstrativo de Recebimento de Honorários' : 'Demonstrativo de Recebimento de Honorários'}</h2></div><button className="icon-button" onClick={() => void closeAndClean()}><X size={20} /></button></div>
     <div className="legacy-title-block revenue-title"><strong>FLÁVIO MARQUES ADVOGADOS ASSOCIADOS</strong><span>DEMONSTRATIVO DE RECEBIMENTO DE HONORÁRIOS</span></div>
     <h3 className="form-section-title">Dados do Processo</h3>
     <div className="form-grid compact-grid"><label><span>Unidade</span><select value={unidade} onChange={(e) => setUnidade(e.target.value as 'RJ' | 'SP')}><option>RJ</option><option>SP</option></select></label><label><span>Data</span><input type="date" value={data} onChange={(e) => setData(e.target.value)} /></label><label><span>Natureza</span><select value={natureza} onChange={(e) => setNatureza(e.target.value)}><option>Trabalhista</option><option>Cível</option></select></label><label className="span-2"><span>Número do processo</span><input data-required-key="alvara-processo" value={processo} onChange={(e) => setProcesso(e.target.value)} /></label><label className="span-2"><span>Reclamada</span><input value={reclamada} onChange={(e) => setReclamada(e.target.value)} /></label><label className="span-2"><span>Reclamante</span><input data-required-key="alvara-reclamante" value={reclamante} onChange={(e) => setReclamante(e.target.value)} /></label><label><span>Origem</span><select value={origem} onChange={(e) => setOrigem(e.target.value)}><option>Alvará</option><option>Acordo</option></select></label><label><span>Forma de recebimento</span><input value={formaRecebimento} onChange={(e) => setFormaRecebimento(e.target.value)} /></label><label><span>Data prevista</span><input type="date" value={dataPrevista} onChange={(e) => setDataPrevista(e.target.value)} /></label></div>
@@ -368,7 +402,7 @@ function ReceivableModal({ onClose }: { onClose: () => void }) {
     <div className="document-zone storage-document-zone revenue-zone"><CheckCircle2 size={20} /><div><strong>Documentos da receita · Storage ativo</strong><span>Anexe alvará, acordo, comprovantes e documentos do processo. O envio começa ao selecionar.</span></div><label className="storage-upload-button"><Upload size={16} /> Selecionar arquivos{uploads.length > 0 && <b className="upload-count-badge">{uploads.length}</b>}<input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" onChange={(e) => selectFiles(e.target.files)} /></label></div>
     {uploads.length > 0 && <div className="expense-attachment-list">{uploads.map((item) => <div key={item.id} className={`upload-item upload-${item.status}`}><Paperclip size={15} /><div className="upload-item-main"><strong>{item.name}</strong>{item.status === 'uploading' ? <><div className="upload-progress"><i style={{ width: `${item.progress}%` }} /></div><small>{item.progress}% enviado · {formatBytes(item.size)}</small></> : item.status === 'success' ? <small><CheckCircle2 size={13} /> Enviado — {formatBytes(item.size)}</small> : <small>{item.error || 'Falha no envio'}</small>}</div>{item.meta?.url && <a href={item.meta.url} target="_blank" rel="noreferrer" title="Abrir arquivo"><ExternalLink size={14} /></a>}<button type="button" className="icon-button" onClick={() => void removeUpload(item)}><X size={14} /></button></div>)}</div>}
 
-    <div className="modal-actions"><button className="secondary-button" onClick={() => void closeAndClean()}>Cancelar</button><button className="outline-revenue-button" disabled={busy || uploading} onClick={() => void save('rascunho')}>Salvar rascunho</button><button className="revenue-button" disabled={busy || uploading} onClick={() => void save('enviado_tesouraria')}><Send size={17} /> {uploading ? 'Enviando documentos...' : 'Enviar à Tesouraria'}</button></div>
+    <div className="modal-actions"><button className="secondary-button" onClick={() => void closeAndClean()}>Cancelar</button>{editMode === 'returned' ? <button className="outline-revenue-button" disabled={busy || uploading} onClick={() => void save('devolvido')}>Salvar correção</button> : <button className="outline-revenue-button" disabled={busy || uploading} onClick={() => void save('rascunho')}>{editMode === 'draft' ? 'Salvar alterações' : 'Salvar rascunho'}</button>}<button className="revenue-button" disabled={busy || uploading} onClick={() => void save('enviado_tesouraria')}><Send size={17} /> {uploading ? 'Enviando documentos...' : editMode === 'returned' ? 'Reenviar à Tesouraria' : 'Enviar à Tesouraria'}</button></div>
   </section></div>
 }
 
@@ -398,6 +432,8 @@ export function ReceivablesPageStorageV2() {
   const [open, setOpen] = useState(params.get('novo') === '1')
   const [search, setSearch] = useState('')
   const [attachmentsTarget, setAttachmentsTarget] = useState<AnyRecord | null>(null)
+  const [editTarget, setEditTarget] = useState<AnyRecord | null>(null)
+  const { profile } = useAuth()
   const { records, loading } = useReceivables()
   useEffect(() => { if (params.get('novo') === '1') setOpen(true) }, [params])
   const filtered = records.filter((item) => `${item.processo ?? ''} ${item.reclamante ?? ''} ${item.reclamada ?? ''} ${item.agentName ?? ''} ${item.receivingBankAccount?.bank ?? ''} ${item.receivingBankAccount?.account ?? ''}`.toLowerCase().includes(search.toLowerCase()))
@@ -405,8 +441,9 @@ export function ReceivablesPageStorageV2() {
 
   return <>
     <div className="page-heading"><div><span className="eyebrow">Origem do recebimento</span><h1>Recebimento de Alvarás</h1><p>O departamento de origem preenche o demonstrativo, informa a conta em que o valor foi recebido e anexa os documentos que seguirão para a Tesouraria.</p></div><div className="quick-actions"><button className="outline-revenue-button" type="button" onClick={() => printRevenueExtract(records)}><FileText size={18} /> Extrato de Receitas</button><button className="revenue-button" type="button" onClick={() => setOpen(true)}><Plus size={18} /> Nova Receita</button></div></div>
-    <section className="page-card module-card revenue-module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por processo, partes, agente, banco ou conta de recebimento" /></div></div>{loading ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando receitas</strong></div> : filtered.length === 0 ? <div className="module-empty"><BadgeDollarSign size={34} /><strong>Nenhuma receita cadastrada</strong></div> : <div className="data-table receivable-integrated-table"><div className="data-row data-head"><span>Processo</span><span>Partes</span><span>Conta de Recebimento</span><span>Status</span><span className="numeric">Valor</span></div>{filtered.map((item) => { const attachments = attachmentsOf(item); const bank = item.receivingBankAccount; return <div className="data-row" key={item.id}><span><strong>{item.processo || '—'}</strong><small>{item.natureza || ''}</small></span><span><strong>{item.reclamante || '—'}</strong><small>{item.reclamada || ''}{item.agentName ? ` · Agente: ${item.agentName}` : ''}</small></span><span><strong>{bank?.bank || '—'}</strong><small>{bank ? `Ag. ${bank.agency} · C/C ${bank.account}` : 'Conta ainda não informada'}</small></span><span><WorkflowStatusBadge status={item.status} label={statusLabels[item.status] || item.status || '—'} /></span><span className="numeric revenue-text"><strong>{money.format(toNumber(item.valorAlvara))}</strong>{attachments.length > 0 && <button className="attachment-count-link" type="button" onClick={() => setAttachmentsTarget(item)}><Paperclip size={14} /> {attachments.length}</button>}</span></div> })}</div>}</section>
+    <section className="page-card module-card revenue-module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por processo, partes, agente, banco ou conta de recebimento" /></div></div>{loading ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando receitas</strong></div> : filtered.length === 0 ? <div className="module-empty"><BadgeDollarSign size={34} /><strong>Nenhuma receita cadastrada</strong></div> : <div className="data-table receivable-integrated-table"><div className="data-row data-head"><span>Processo</span><span>Partes</span><span>Conta de Recebimento</span><span>Status</span><span className="numeric">Valor</span></div>{filtered.map((item) => { const attachments = attachmentsOf(item); const bank = item.receivingBankAccount; return <div className="data-row" key={item.id}><span><strong>{item.processo || '—'}</strong><small>{item.natureza || ''}</small></span><span><strong>{item.reclamante || '—'}</strong><small>{item.reclamada || ''}{item.agentName ? ` · Agente: ${item.agentName}` : ''}</small></span><span><strong>{bank?.bank || '—'}</strong><small>{bank ? `Ag. ${bank.agency} · C/C ${bank.account}` : 'Conta ainda não informada'}</small></span><span><WorkflowStatusBadge status={item.status} label={statusLabels[item.status] || item.status || '—'} />{canEditReceivable(item, profile?.role) && <button className="small-neutral-button receivable-edit-button" type="button" onClick={() => setEditTarget(item)}><PencilLine size={14} /> {item.status === 'devolvido' ? 'Corrigir e reenviar' : 'Editar rascunho'}</button>}</span><span className="numeric revenue-text"><strong>{money.format(toNumber(item.valorAlvara))}</strong>{attachments.length > 0 && <button className="attachment-count-link" type="button" onClick={() => setAttachmentsTarget(item)}><Paperclip size={14} /> {attachments.length}</button>}</span></div> })}</div>}</section>
     {open && <ReceivableModal key="nova-receita-storage-v2" onClose={close} />}
+    {editTarget && <ReceivableModal key={`editar-receita-${editTarget.id}`} existing={editTarget} onClose={() => setEditTarget(null)} />}
     {attachmentsTarget && <div className="modal-backdrop"><section className="decision-modal" role="dialog" aria-modal="true"><div className="modal-toolbar"><div><span className="eyebrow">Documentos da receita</span><h2>{attachmentsTarget.processo || attachmentsTarget.reclamante || 'Recebimento'}</h2></div><button className="icon-button" onClick={() => setAttachmentsTarget(null)}><X size={20} /></button></div><div className="storage-dossier-files">{attachmentsOf(attachmentsTarget).map((file) => <a key={file.path} href={file.url} target="_blank" rel="noreferrer"><Paperclip size={14} /><span>{file.name}</span><ExternalLink size={13} /></a>)}</div></section></div>}
   </>
 }
