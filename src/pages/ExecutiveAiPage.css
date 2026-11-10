@@ -17,3 +17,9 @@
 .executive-ai-form button{display:flex;align-items:center;gap:7px}.executive-ai-error{color:#eb7481;padding:10px;border:1px solid #c95466;border-radius:9px}
 .executive-ai-loading{display:flex;gap:8px;align-items:center}
 @media(max-width:600px){.executive-ai{padding:12px}.executive-ai-head h1{font-size:23px}.executive-ai-messages{padding:11px;max-height:48vh}.executive-ai-bubble{max-width:100%}}
+.executive-ai-proposal{margin-top:10px;border:1px solid rgba(88,189,245,.45);border-radius:11px;padding:11px;background:rgba(88,189,245,.06);white-space:normal}
+.executive-ai-proposal.aplicada{border-color:rgba(46,160,90,.6)}.executive-ai-proposal.cancelada,.executive-ai-proposal.desfeita{opacity:.75}
+.executive-ai-proposal-head{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;margin-bottom:8px;flex-wrap:wrap}
+.executive-ai-proposal table{width:100%;border-collapse:collapse;font-size:13px}.executive-ai-proposal th,.executive-ai-proposal td{text-align:left;padding:5px 7px;border-bottom:1px solid rgba(120,143,155,.25);overflow-wrap:anywhere}
+.executive-ai-proposal-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}.executive-ai-proposal-actions button{display:flex;align-items:center;gap:5px}
+.executive-ai-note{display:block;margin-top:7px}
