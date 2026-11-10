@@ -28,3 +28,26 @@
 .executive-ai-group>span{display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#58bdf5;margin-bottom:6px}
 .executive-ai-group .executive-ai-prompts{justify-content:flex-start;margin-top:0}
 .executive-ai-group:first-child .executive-ai-prompts button{border-color:#15803d}
+.executive-ai-bubble.assistant{white-space:normal}
+.executive-ai-md{font-size:14px;line-height:1.55}
+.executive-ai-md h3{font-size:16px;margin:12px 0 6px}.executive-ai-md h4{font-size:14.5px;margin:10px 0 4px}
+.executive-ai-md p{margin:6px 0;white-space:normal}
+.executive-ai-md ul,.executive-ai-md ol{margin:4px 0 8px;padding-left:20px}.executive-ai-md li{margin:3px 0}
+.executive-ai-md hr{border:0;border-top:1px solid rgba(120,143,155,.3);margin:10px 0}
+.executive-ai-md code{font-size:12px;padding:1px 5px;border-radius:5px;background:rgba(120,143,155,.18)}
+.executive-ai-md a{color:#1678c8;text-decoration:underline}
+/* Cores vivas: resposta da IA em azul com letra branca; sua pergunta em verde */
+.executive-ai-bubble.user,html[data-theme] .executive-ai-bubble.user{background:#15803d !important;color:#fff !important;box-shadow:0 2px 8px rgba(21,128,61,.3)}
+.executive-ai-bubble.user strong,.executive-ai-bubble.user p{color:#fff !important}
+.executive-ai-bubble.assistant,html[data-theme] .executive-ai-bubble.assistant{background:#0b5ea8 !important;color:#fff !important;border:0;box-shadow:0 3px 12px rgba(11,94,168,.3)}
+.executive-ai-bubble.assistant>strong{color:#b9f6ca !important}
+.executive-ai-bubble.assistant .executive-ai-md,.executive-ai-bubble.assistant .executive-ai-md p,.executive-ai-bubble.assistant .executive-ai-md li,.executive-ai-bubble.assistant .executive-ai-md strong,.executive-ai-bubble.assistant .executive-ai-md em{color:#fff !important}
+.executive-ai-bubble.assistant .executive-ai-md h3,.executive-ai-bubble.assistant .executive-ai-md h4{color:#ffe08a !important}
+.executive-ai-bubble.assistant .executive-ai-md code{background:rgba(255,255,255,.18);color:#fff}
+.executive-ai-bubble.assistant .executive-ai-md a,.executive-ai-bubble.assistant .executive-ai-sources a{color:#bfe6ff !important}
+.executive-ai-bubble.assistant .executive-ai-md hr{border-top-color:rgba(255,255,255,.35)}
+.executive-ai-bubble.assistant .executive-ai-sources{border-top-color:rgba(255,255,255,.3)}
+.executive-ai-bubble.assistant .executive-ai-sources,.executive-ai-bubble.assistant .executive-ai-sources small{color:#e6f2ff !important}
+.executive-ai-bubble.assistant .executive-ai-proposal{background:#ffffff !important;color:#0f172a !important;border-color:#bfe6ff}
+.executive-ai-bubble.assistant .executive-ai-proposal *{color:#0f172a}
+.executive-ai-bubble.assistant .executive-ai-proposal .small-success-button,.executive-ai-bubble.assistant .executive-ai-proposal .small-success-button *{color:#fff}

@@ -3,6 +3,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions'
 import { Sparkles, Send, ShieldCheck, LoaderCircle, ExternalLink, CheckCircle2, XCircle, Undo2, PencilLine } from 'lucide-react'
 import { firebaseApp } from '../lib/firebase'
 import './ExecutiveAiPage.css'
+import { AiMarkdown } from './ExecutiveAiMarkdown'
 
 type DiffRow = { field: string; before: unknown; after: unknown }
 type Proposal = { id: string; modulo: string; collection: string; docId: string; summary: string; diff: DiffRow[]; expiresAtMs: number }
@@ -89,7 +90,7 @@ export function ExecutiveAiPage() {
     <div className="executive-ai-messages" aria-live="polite">
       {messages.length === 0 && <div className="executive-ai-welcome"><Sparkles size={32} /><strong>O que deseja consultar ou ajustar?</strong><p>Pesquise informações, processos, valores, status, regras e pendências nos módulos do sistema.</p><div className="executive-ai-groups">{promptGroups.map(g => <div key={g.title} className="executive-ai-group"><span>{g.title}</span><div className="executive-ai-prompts">{g.items.map(p => <button key={p} type="button" disabled={busy} onClick={() => setQuestion(p)}>{p}</button>)}</div></div>)}</div></div>}
       {messages.map((msg, i) => <article key={i} className={`executive-ai-bubble ${msg.role}`}>
-        <strong>{msg.role === 'assistant' ? 'IA' : 'Você'}</strong><p>{msg.text}</p>
+        <strong>{msg.role === 'assistant' ? 'IA' : 'Você'}</strong>{msg.role === 'assistant' ? <AiMarkdown text={msg.text} /> : <p>{msg.text}</p>}
         {msg.response?.proposal && <div className={`executive-ai-proposal ${msg.proposalState}`}>
           <div className="executive-ai-proposal-head"><PencilLine size={16} /> Alteração proposta · {msg.response.proposal.modulo} · <code>{msg.response.proposal.docId}</code></div>
           <table><thead><tr><th>Campo</th><th>Antes</th><th>Depois</th></tr></thead><tbody>{msg.response.proposal.diff.map(d => <tr key={d.field}><td>{d.field}</td><td>{fmt(d.before)}</td><td><b>{fmt(d.after)}</b></td></tr>)}</tbody></table>
