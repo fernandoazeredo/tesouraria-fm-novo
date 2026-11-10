@@ -86,31 +86,54 @@ export function selectedCollections(q) {
 }
 
 // ===== Fila de Aprovações (mesma regra da tela /aprovacoes) =====
+export const APPROVAL_DECIDED = ['aprovado','pago','paga','devolvido','rejeitado'];
 export const APPROVAL_SOURCES = Object.freeze([
   { collection:'expenses', type:'Despesa', statuses:['enviado_aprovacao','em_analise'], value:['valorTotal'], title:['fornecedor','favorecido','nomeFornecedor','nomeFavorecido','nome'] },
   { collection:'agentCommissions', type:'Comissão de Agente', statuses:['aguardando_aprovacao'], value:['netAmountDue','amountDue'], title:['beneficiary'] },
   { collection:'alvaraTransfers', type:'Repasse de Alvará', statuses:['aguardando_aprovacao'], value:['amountDue'], title:['beneficiary'] },
-  { collection:'societaryTransfers', type:'Repasse Societário', statuses:['aguardando_aprovacao'], value:['transferValue'], title:['beneficiary'] },
+  { collection:'societaryTransfers', type:'Repasse Societário', statuses:['aguardando_aprovacao'], value:['approvedValue','transferValue'], title:['beneficiary'] },
 ]);
+const DECISION_LABEL={aprovado:'Aprovado',pago:'Aprovado e pago',paga:'Aprovado e pago',devolvido:'Devolvido para correção',rejeitado:'Rejeitado'};
 function firstOf(data, keys) { for (const k of keys) { const v=data?.[k]; if (v!==undefined && v!==null && v!=='') return v; } return null; }
 function toNum(v) { if (typeof v==='number') return v; const n=Number(String(v ?? '').replace(/\./g,'').replace(',','.')); return Number.isFinite(n)?n:0; }
+function toIso(v) { if (!v) return null; if (typeof v.toDate==='function') return v.toDate().toISOString(); if (typeof v==='string') return v; if (typeof v.seconds==='number') return new Date(v.seconds*1000).toISOString(); return null; }
+export function dateSP(iso) { return iso ? new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo'}).format(new Date(iso)) : null; }
 export function approvalQueueItem(source, id, data) {
+  const status=String(data?.status||'');
+  const pending=source.statuses.includes(status);
+  const decidedAt=pending?null:toIso(firstOf(data,['approvedAt','decisionAt','paidAt','updatedAt']));
   return {
-    id, colecao:source.collection, tipo:source.type, status:String(data?.status||''),
+    id, colecao:source.collection, tipo:source.type,
+    situacao: pending ? 'Aguardando aprovação' : (DECISION_LABEL[status]||status),
     titulo:redactSensitive(String(firstOf(data, source.title) || source.type).slice(0,160)),
     processo:data?.processo ? redactSensitive(String(data.processo).slice(0,80)) : undefined,
     competencia:data?.competencia || undefined,
     valor:toNum(firstOf(data, source.value)),
+    dataDecisao: decidedAt ? dateSP(decidedAt) : undefined,
   };
 }
 export function buildApprovalQueue(bySource) {
   const rows=[];
   for (const source of APPROVAL_SOURCES) {
     for (const {id,data} of (bySource[source.collection] || [])) {
-      if (source.statuses.includes(String(data?.status||''))) rows.push(approvalQueueItem(source,id,data));
+      const st=String(data?.status||'');
+      if (source.statuses.includes(st) || APPROVAL_DECIDED.includes(st)) rows.push(approvalQueueItem(source,id,data));
     }
   }
   return rows;
+}
+export function approvalTotals(rows, todaySP) {
+  const sum=f=>rows.filter(f).reduce((a,r)=>a+(Number(r.valor)||0),0);
+  const pend=r=>r.situacao==='Aguardando aprovação';
+  return {
+    hoje: todaySP,
+    pendentes_quantidade: rows.filter(pend).length,
+    pendentes_valor: sum(pend),
+    aprovados_hoje_quantidade: rows.filter(r=>/^Aprovado/.test(r.situacao)&&r.dataDecisao===todaySP).length,
+    aprovados_hoje_valor: sum(r=>/^Aprovado/.test(r.situacao)&&r.dataDecisao===todaySP),
+    aprovados_mes_valor: sum(r=>/^Aprovado/.test(r.situacao)&&r.dataDecisao&&r.dataDecisao.slice(0,7)===todaySP.slice(0,7)),
+    devolvidos_ou_rejeitados_hoje: rows.filter(r=>/Devolvido|Rejeitado/.test(r.situacao)&&r.dataDecisao===todaySP).length,
+  };
 }
 
 // ===== Alterações assistidas (somente Master, com confirmação expressa) =====

@@ -2,7 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { isMasterClaim, isAppQuestion, safeRecord, selectedCollections, SCOPES, APPROVAL_SOURCES, buildApprovalQueue, isChangeRequest, validateProposal, buildDiff, sameValues, redactSensitive, WRITABLE_COLLECTIONS } from './ai-core.js';
+import { isMasterClaim, isAppQuestion, safeRecord, selectedCollections, SCOPES, APPROVAL_SOURCES, APPROVAL_DECIDED, buildApprovalQueue, approvalTotals, dateSP, isChangeRequest, validateProposal, buildDiff, sameValues, redactSensitive, WRITABLE_COLLECTIONS } from './ai-core.js';
 import { SYSTEM_KNOWLEDGE } from './knowledge.js';
 
 initializeApp();
@@ -44,11 +44,12 @@ export const executiveAiAsk=onCall({
     if(source.virtual) {
       const bySource={};
       for(const src of APPROVAL_SOURCES) {
-        const qs=await db.collection(src.collection).where('status','in',src.statuses).limit(MAX_DOCS+1).get();
+        const qs=await db.collection(src.collection).where('status','in',[...src.statuses,...APPROVAL_DECIDED]).limit(200).get();
         bySource[src.collection]=qs.docs.map(d=>({id:d.id,data:d.data()}));
       }
       const queue=buildApprovalQueue(bySource);
-      retrieved.push({modulo:source.title, caminho:source.path, colecao:'fila calculada: expenses, agentCommissions, alvaraTransfers, societaryTransfers', parcial:queue.length>MAX_DOCS, registros:queue.slice(0,MAX_DOCS)});
+      const parcial=Object.values(bySource).some(list=>list.length>=200);
+      retrieved.push({modulo:source.title, caminho:source.path, colecao:'fila calculada: expenses, agentCommissions, alvaraTransfers, societaryTransfers', parcial, totais_calculados:approvalTotals(queue,dateSP(new Date().toISOString())), registros:queue.slice(0,MAX_DOCS)});
       continue;
     }
     const snap=await db.collection(source.collection).limit(MAX_DOCS+1).get();
@@ -73,6 +74,7 @@ export const executiveAiAsk=onCall({
     'Traduza status para português claro: rascunho → Rascunho; enviado_aprovacao/aguardando_aprovacao → Aguardando aprovação; em_analise → Em análise; aprovado → Aprovado; enviado_tesouraria → Aguardando confirmação da Tesouraria; confirmado/recebido → Recebido; pago/paga → Pago; devolvido → Devolvido para correção; rejeitado → Rejeitado; arquivado → Arquivado. Para outros códigos, escreva por extenso sem sublinhado.',
     'Use títulos curtos, listas e negrito com moderação; evite linhas separadoras excessivas.',
     'Não apresente o resultado de classificação provável como confirmação de conciliação bancária.',
+    'Em Aprovações use os totais_calculados (pendentes, aprovados hoje, aprovados no mês, devolvidos/rejeitados hoje) — são exatos, calculados pelo sistema. "Quanto falta aprovar" = pendentes_valor. Liste os itens pendentes com título, tipo e valor.',
     'A fila de Aprovações é calculada a partir dos status dos lançamentos (despesas enviado_aprovacao/em_analise; comissões, repasses de alvará e repasses societários aguardando_aprovacao), igual à tela /aprovacoes.',
     'Recebimentos de alvarás confirmados pela Tesouraria não passam pela fila geral de Aprovações.',
     'Comissões são vinculadas aos recebimentos confirmados e seguem programação, aprovação e pagamento.',
@@ -91,7 +93,7 @@ export const executiveAiAsk=onCall({
     body:JSON.stringify({
       systemInstruction:{parts:[{text:instructions}]},
       contents:[{role:'user',parts:[{text:`Data de hoje (America/Sao_Paulo): ${todayBR()}.\nPergunta: ${question}\n\nDados obtidos agora (máx. ${MAX_DOCS} registros por coleção; pode ser parcial):\n${evidence}`}]}],
-      generationConfig:{temperature:0.1,maxOutputTokens:1300},
+      generationConfig:{temperature:0.1,maxOutputTokens:8192},
     }),
     signal:AbortSignal.timeout(45000)
   });
@@ -103,7 +105,7 @@ export const executiveAiAsk=onCall({
   const answer=(json.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('\n').trim();
   if(!answer) throw new HttpsError('unavailable','IA não retornou uma resposta utilizável.');
   return {
-    answer:answer.slice(0,8000),
+    answer:answer.slice(0,12000),
     sources:retrieved.map(({modulo,caminho,parcial,registros})=>({modulo,caminho,parcial,registros:registros.length})),
     consultedAt:new Date().toISOString(),
     disclaimer:'Consulta somente leitura. Resultados podem ser parciais; confira valores nos módulos de origem.',
@@ -149,7 +151,7 @@ const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/mod
 method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},
 body:JSON.stringify({systemInstruction:{parts:[{text:changeRules}]},
 contents:[{role:'user',parts:[{text:`Data de hoje (America/Sao_Paulo): ${todayBR()}.\nPedido: ${question}\n\nEvidências (registros atuais):\n${evidence}`}]}],
-generationConfig:{temperature:0,maxOutputTokens:1500,responseMimeType:'application/json',responseSchema:schema}}),
+generationConfig:{temperature:0,maxOutputTokens:4096,responseMimeType:'application/json',responseSchema:schema}}),
 signal:AbortSignal.timeout(45000)});
 if(!response.ok){console.error('IA provider HTTP',response.status);throw new HttpsError('unavailable','Não foi possível consultar o serviço de IA neste momento.');}
 const json=await response.json();
