@@ -23,7 +23,7 @@ async function rateLimit(uid) {
 }
 export const executiveAiAsk=onCall({
   region:'southamerica-east1', memory:'512MiB', timeoutSeconds:60, maxInstances:3,
-  enforceAppCheck:true, secrets:[geminiKey],
+  enforceAppCheck:false, secrets:[geminiKey],
 },async request=>{
   const token=request.auth?.token;
   if(!request.auth) throw new HttpsError('unauthenticated','Entre na sua conta para consultar.');
