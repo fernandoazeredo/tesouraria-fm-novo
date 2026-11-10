@@ -7,3 +7,4 @@ test('nega outros usuários',()=>assert.equal(isMasterClaim({email:'outro@exampl
 test('restringe perguntas externas',()=>assert.equal(isAppQuestion('Qual é a temperatura amanhã?'),false));
 test('reconhece comissões',()=>assert.ok(inScope('Quais comissões foram pagas?').includes('comissoes')));
 test('não expõe CPF ou dados bancários',()=>assert.deepEqual(safeRecord('abc',{cpf:'123',bankAccountNumber:'789',status:'pago',valorTotal:200}),{id:'abc',status:'pago',valorTotal:200}));
+test('oculta CPF, CNPJ e e-mail em campos de observação',()=>{ const row=safeRecord('a',{detail:'CPF 123.456.789-00 e contato teste@example.com',descricao:'CNPJ 12.345.678/0001-99'}); assert.ok(!JSON.stringify(row).includes('123.456')); assert.ok(!JSON.stringify(row).includes('teste@example.com')); assert.ok(!JSON.stringify(row).includes('12.345.678')); });
