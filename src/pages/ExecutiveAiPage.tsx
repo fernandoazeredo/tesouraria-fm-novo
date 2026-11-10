@@ -74,17 +74,20 @@ export function ExecutiveAiPage() {
     } finally { setBusy(false) }
   }
 
-  const prompts = [
-    'Quais comissões estão pendentes?',
-    'Quais receitas estão aguardando recebimento?',
-    'Quais despesas estão aguardando aprovação?',
-    'Como funciona a Conciliação Bancária?',
+  const promptGroups: Array<{ title: string; items: string[] }> = [
+    { title: 'Resumo e situação financeira', items: ['Faça um resumo geral do escritório', 'Qual a situação financeira de hoje?', 'Qual a situação financeira desta semana?', 'Qual a situação financeira deste mês?', 'O que está pendente de decisão hoje?'] },
+    { title: 'Despesas', items: ['Quais despesas estão aguardando aprovação?', 'Quais despesas foram pagas este mês?', 'Quais despesas foram devolvidas ou rejeitadas?'] },
+    { title: 'Receitas e Tesouraria', items: ['Quais receitas estão aguardando a Tesouraria?', 'Quais receitas foram confirmadas este mês?', 'Quais receitas foram devolvidas para correção?'] },
+    { title: 'Aprovações', items: ['O que está na fila de Aprovações?', 'Qual o valor total aguardando aprovação?'] },
+    { title: 'Repasses e Comissões', items: ['Quais comissões estão pendentes?', 'Quais repasses de alvará estão a pagar?', 'Como está o Repasse Societário do mês?'] },
+    { title: 'Nota Fiscal, Contabilidade e DRE', items: ['Quais notas fiscais estão pendentes?', 'Quais envios à Contabilidade foram feitos?', 'Como funciona a DRE Gerencial?'] },
+    { title: 'Banco e Auditoria', items: ['Há movimentos bancários não conciliados?', 'Como funciona a Conciliação Bancária?', 'Quais foram as últimas ações na Auditoria?'] },
   ]
   return <section className="page-card executive-ai">
     <header className="executive-ai-head"><Sparkles size={27} /><div><span className="eyebrow">Exclusivo do Master principal</span><h1>IA — Assistente Executivo</h1><p>Consulte os módulos e os lançamentos do Tesouraria FM Novo. Para alterar um lançamento, peça expressamente (ex.: “altere o valor da despesa X para 200”) e confirme.</p></div></header>
     <div className="executive-ai-security"><ShieldCheck size={17} /> Uso privado. Nenhuma alteração é gravada sem a sua confirmação; tudo vai para a Auditoria e pode ser desfeito. A IA não exclui lançamentos nem altera usuários, permissões, CPF/CNPJ ou dados bancários.</div>
     <div className="executive-ai-messages" aria-live="polite">
-      {messages.length === 0 && <div className="executive-ai-welcome"><Sparkles size={32} /><strong>O que deseja consultar ou ajustar?</strong><p>Pesquise informações, processos, valores, status, regras e pendências nos módulos do sistema.</p><div className="executive-ai-prompts">{prompts.map(p => <button key={p} type="button" disabled={busy} onClick={() => setQuestion(p)}>{p}</button>)}</div></div>}
+      {messages.length === 0 && <div className="executive-ai-welcome"><Sparkles size={32} /><strong>O que deseja consultar ou ajustar?</strong><p>Pesquise informações, processos, valores, status, regras e pendências nos módulos do sistema.</p><div className="executive-ai-groups">{promptGroups.map(g => <div key={g.title} className="executive-ai-group"><span>{g.title}</span><div className="executive-ai-prompts">{g.items.map(p => <button key={p} type="button" disabled={busy} onClick={() => setQuestion(p)}>{p}</button>)}</div></div>)}</div></div>}
       {messages.map((msg, i) => <article key={i} className={`executive-ai-bubble ${msg.role}`}>
         <strong>{msg.role === 'assistant' ? 'IA' : 'Você'}</strong><p>{msg.text}</p>
         {msg.response?.proposal && <div className={`executive-ai-proposal ${msg.proposalState}`}>
