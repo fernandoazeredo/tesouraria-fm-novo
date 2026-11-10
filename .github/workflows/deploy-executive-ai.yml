@@ -50,6 +50,6 @@ jobs:
       - name: Instalar Firebase CLI
         run: npm install -g firebase-tools
       - name: Publicar APENAS Cloud Function da IA
-        run: firebase deploy --only functions:executive-ai --project tesouraria-fm-novo --non-interactive
+        run: firebase deploy --only functions:executive-ai --project tesouraria-fm-novo --non-interactive --force
       - name: Publicar APENAS Hosting
         run: firebase deploy --only hosting --project tesouraria-fm-novo --non-interactive
