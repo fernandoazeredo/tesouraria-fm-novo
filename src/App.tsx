@@ -107,7 +107,7 @@ const menu: MenuItem[] = [
   { to: '/auditoria', label: 'Auditoria', icon: ShieldCheck, roles: ['master'] },
   { to: '/utilitarios', label: 'Utilitários', icon: Wrench, roles: ['master'] },
   { to: '/configuracoes', label: 'Configurações', icon: Settings, roles: ['master'] },
-  { to: '/ia', label: 'IA', icon: Sparkles, roles: ['master'] },
+  { to: '/ia', label: 'IA Executiva Privada', icon: Sparkles, roles: ['master'] },
 ]
 
 function accessRoleFromUserRole(role: UserRole | undefined): AccessRole {

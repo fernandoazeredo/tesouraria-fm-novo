@@ -475,3 +475,14 @@ html[data-theme='dark'] .approval-banner strong { color: #fff1c7 !important; }
   .theme-toggle { top:10px; right:11px; min-width:40px; width:40px; height:40px; padding:0; justify-content:center; }
   .theme-toggle span { display:none; }
 }
+
+/* Destaques de cor no menu lateral: Despesas (vermelho), Receitas (azul), IA Executiva Privada (verde) */
+html[data-theme] { --ai-nav: #15803d; --ai-nav-soft: rgba(22, 163, 74, .13); }
+html[data-theme='dark'] { --ai-nav: #4ade80; --ai-nav-soft: rgba(74, 222, 128, .16); }
+html[data-theme] .nav-link[href="/despesas"] { color: var(--expense) !important; font-weight: 700; }
+html[data-theme] .nav-link[href="/despesas"].active { background: var(--expense-soft) !important; }
+html[data-theme] .nav-link[href="/alvaras"] { color: var(--revenue) !important; font-weight: 700; }
+html[data-theme] .nav-link[href="/alvaras"].active { background: var(--revenue-soft) !important; }
+html[data-theme] .nav-link[href="/ia"] { color: var(--ai-nav) !important; font-weight: 700; }
+html[data-theme] .nav-link[href="/ia"].active,
+html[data-theme] .nav-link[href="/ia"]:hover { background: var(--ai-nav-soft) !important; }
