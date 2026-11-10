@@ -10,6 +10,7 @@ const db=getFirestore();
 const geminiKey=defineSecret('GOOGLE_GENAI_API_KEY');
 const MAX_DOCS=80;
 const MAX_PER_DAY=60;
+const todayBR=()=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'}).format(new Date());
 const MODEL='gemini-3.8-flash';
 
 async function rateLimit(uid) {
@@ -74,6 +75,7 @@ export const executiveAiAsk=onCall({
     'Comissões são vinculadas aos recebimentos confirmados e seguem programação, aprovação e pagamento.',
     'Repasse societário: impostos 11,33% sobre honorários; divisão líquida 60% Flávio, 40% Ana.',
     SYSTEM_KNOWLEDGE,
+    'Para resumos e situação financeira (hoje, semana, mês): use a data de hoje informada; separe Entradas (receitas confirmadas/recebidas), Saídas (despesas pagas), Pendências (aguardando Tesouraria, aprovação ou pagamento) e Alertas; mostre valores por status e cite os IDs relevantes. Não confunda previsto com realizado; se faltar data em um registro, diga isso. Se a amostra for parcial, avise e não totalize.',
     'Responda em português brasileiro, de modo conciso e objetivo.',
     'Se a pergunta for sobre um dos 20 módulos, mas a consulta não possui registros, indique o caminho do módulo sem inventar dados.',
   ].join('\n');
@@ -85,7 +87,7 @@ export const executiveAiAsk=onCall({
     headers:{'Content-Type':'application/json','x-goog-api-key':key},
     body:JSON.stringify({
       systemInstruction:{parts:[{text:instructions}]},
-      contents:[{role:'user',parts:[{text:`Pergunta: ${question}\n\nDados obtidos agora (máx. ${MAX_DOCS} registros por coleção; pode ser parcial):\n${evidence}`}]}],
+      contents:[{role:'user',parts:[{text:`Data de hoje (America/Sao_Paulo): ${todayBR()}.\nPergunta: ${question}\n\nDados obtidos agora (máx. ${MAX_DOCS} registros por coleção; pode ser parcial):\n${evidence}`}]}],
       generationConfig:{temperature:0.1,maxOutputTokens:1300},
     }),
     signal:AbortSignal.timeout(45000)
@@ -143,7 +145,7 @@ const changeRules=[instructions,
 const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,{
 method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},
 body:JSON.stringify({systemInstruction:{parts:[{text:changeRules}]},
-contents:[{role:'user',parts:[{text:`Pedido: ${question}\n\nEvidências (registros atuais):\n${evidence}`}]}],
+contents:[{role:'user',parts:[{text:`Data de hoje (America/Sao_Paulo): ${todayBR()}.\nPedido: ${question}\n\nEvidências (registros atuais):\n${evidence}`}]}],
 generationConfig:{temperature:0,maxOutputTokens:1500,responseMimeType:'application/json',responseSchema:schema}}),
 signal:AbortSignal.timeout(45000)});
 if(!response.ok){console.error('IA provider HTTP',response.status);throw new HttpsError('unavailable','Não foi possível consultar o serviço de IA neste momento.');}
