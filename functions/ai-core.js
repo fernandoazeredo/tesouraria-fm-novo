@@ -7,7 +7,7 @@ export const SCOPES = Object.freeze({
   repasses: { title:'Repasse de Alvarás', collection:'alvaraTransfers', path:'/repasse-alvaras', words:['repasse de alvara','repasse de alvará','parcela do cliente'] },
   societario: { title:'Repasse Societário', collection:'societaryTransfers', path:'/repasse-societario', words:['societario','societário','sociedade','ana','flavio','flávio'] },
   notas: { title:'Nota Fiscal', collection:'fiscalNotes', path:'/nota-fiscal', words:['nota fiscal','nfse','nfs-e'] },
-  comissoes: { title:'Comissões de Agentes', collection:'agentCommissions', path:'/comissoes-agentes', words:['comissao','comissão','agente'] },
+  comissoes: { title:'Comissões de Agentes', collection:'agentCommissions', path:'/comissoes-agentes', words:['comissao','comissão','comissoes','comissões','agente'] },
   aprovacoes: { title:'Aprovações', collection:'approvals', path:'/aprovacoes', words:['aprovacao','aprovação','pendencia','pendência','rejeitado'] },
   dre: { title:'Classificações DRE', collection:'managerialClassifications', path:'/dre-gerencial', words:['dre','classificacao','classificação'] },
   contas: { title:'Plano de Contas', collection:'chartOfAccounts', path:'/plano-contas', words:['plano de contas','conta contábil','codigo contábil','código contábil'] },
