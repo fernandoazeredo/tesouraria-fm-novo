@@ -53,3 +53,5 @@
 .executive-ai-bubble.assistant .executive-ai-proposal .small-success-button,.executive-ai-bubble.assistant .executive-ai-proposal .small-success-button *{color:#fff}
 html[data-theme] .executive-ai .executive-ai-bubble.user p,html[data-theme] .executive-ai .executive-ai-bubble.user strong{color:#fff !important}
 html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-md p,html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-md li{color:#fff !important}
+.executive-ai-form-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.executive-ai-clear{display:flex;align-items:center;gap:6px}

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { getFunctions, httpsCallable } from 'firebase/functions'
-import { Sparkles, Send, ShieldCheck, LoaderCircle, ExternalLink, CheckCircle2, XCircle, Undo2, PencilLine } from 'lucide-react'
+import { Sparkles, Send, ShieldCheck, LoaderCircle, ExternalLink, CheckCircle2, XCircle, Undo2, PencilLine, Eraser } from 'lucide-react'
 import { firebaseApp } from '../lib/firebase'
 import './ExecutiveAiPage.css'
 import { AiMarkdown } from './ExecutiveAiMarkdown'
@@ -93,7 +93,7 @@ export function ExecutiveAiPage() {
     { title: 'Resumo e situação financeira', items: ['Faça um resumo geral do escritório', 'Qual a situação financeira de hoje?', 'Qual a situação financeira desta semana?', 'Qual a situação financeira deste mês?', 'O que está pendente de decisão hoje?'] },
     { title: 'Despesas', items: ['Quais despesas estão aguardando aprovação?', 'Quais despesas foram pagas este mês?', 'Quais despesas foram devolvidas ou rejeitadas?'] },
     { title: 'Receitas e Tesouraria', items: ['Quais receitas estão aguardando a Tesouraria?', 'Quais receitas foram confirmadas este mês?', 'Quais receitas foram devolvidas para correção?'] },
-    { title: 'Aprovações', items: ['O que está na fila de Aprovações?', 'Qual o valor total aguardando aprovação?'] },
+    { title: 'Aprovações', items: ['O que está na fila de Aprovações?', 'Qual o valor total aguardando aprovação?', 'Qual foi o valor aprovado hoje?', 'Quanto falta aprovar hoje?', 'Qual o valor aprovado este mês?', 'O que foi devolvido ou rejeitado hoje?'] },
     { title: 'Repasses e Comissões', items: ['Quais comissões estão pendentes?', 'Quais repasses de alvará estão a pagar?', 'Como está o Repasse Societário do mês?'] },
     { title: 'Nota Fiscal, Contabilidade e DRE', items: ['Quais notas fiscais estão pendentes?', 'Quais envios à Contabilidade foram feitos?', 'Como funciona a DRE Gerencial?'] },
     { title: 'Banco e Auditoria', items: ['Há movimentos bancários não conciliados?', 'Como funciona a Conciliação Bancária?', 'Quais foram as últimas ações na Auditoria?'] },
@@ -118,6 +118,6 @@ export function ExecutiveAiPage() {
       {busy && <div className="executive-ai-loading"><LoaderCircle className="spin" size={18} /> Processando…</div>}
     </div>
     {error && <div role="alert" className="executive-ai-error">{error}</div>}
-    <form onSubmit={submit} className="executive-ai-form"><label htmlFor="executive-ai-question">Sua pergunta ou solicitação</label><textarea id="executive-ai-question" value={question} onChange={e => setQuestion(e.target.value)} maxLength={500} rows={3} placeholder="Ex.: Quais comissões estão pendentes? · Altere o valor da despesa TESTE IA para 200" disabled={busy} /><div><small>{question.length}/500 caracteres</small><button className="revenue-button" type="submit" disabled={busy || question.trim().length < 5}><Send size={16} /> Enviar</button></div></form>
+    <form onSubmit={submit} className="executive-ai-form"><label htmlFor="executive-ai-question">Sua pergunta ou solicitação</label><textarea id="executive-ai-question" value={question} onChange={e => setQuestion(e.target.value)} maxLength={500} rows={3} placeholder="Ex.: Quais comissões estão pendentes? · Altere o valor da despesa TESTE IA para 200" disabled={busy} /><div><small>{question.length}/500 caracteres</small><span className="executive-ai-form-actions">{messages.length > 0 && <button className="secondary-button executive-ai-clear" type="button" disabled={busy} onClick={() => { setMessages([]); setError(''); setQuestion('') }}><Eraser size={16} /> Limpar conversa</button>}<button className="revenue-button" type="submit" disabled={busy || question.trim().length < 5}><Send size={16} /> Enviar</button></span></div></form>
   </section>
 }
