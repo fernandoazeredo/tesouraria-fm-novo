@@ -26,6 +26,10 @@ export const executiveAiAsk=onCall({
   region:'southamerica-east1', memory:'512MiB', timeoutSeconds:60, maxInstances:3,
   enforceAppCheck:false, secrets:[geminiKey],
 },async request=>{
+  const action=String(request.data?.action||'ask');
+  if(action==='apply') return applyHandler(request);
+  if(action==='undo') return undoHandler(request);
+  if(action==='cancel') return cancelHandler(request);
   const token=request.auth?.token;
   if(!request.auth) throw new HttpsError('unauthenticated','Entre na sua conta para consultar.');
   const userSnap=await db.collection('users').doc(request.auth.uid).get();
@@ -160,10 +164,9 @@ return {...base,answer:String(parsed.answer||v.summary).slice(0,4000),
 proposal:{id:prop.id,modulo:titleOf(v.collection),collection:v.collection,docId:v.docId,summary:v.summary,diff:d.diff.map(x=>({field:x.field,before:show(x.before),after:show(x.after)})),expiresAtMs:Date.now()+PROPOSAL_TTL_MS}};
 }
 
-const opts={region:'southamerica-east1',memory:'256MiB',timeoutSeconds:30,maxInstances:3,enforceAppCheck:false};
 const idOf=r=>{const id=String(r.data?.proposalId||'');if(!/^[A-Za-z0-9]{10,40}$/.test(id))throw new HttpsError('invalid-argument','Proposta inválida.');return id;};
 
-export const executiveAiApply=onCall(opts,async request=>{
+async function applyHandler(request){
 const profile=await requireMaster(request);
 const id=idOf(request);
 const result=await db.runTransaction(async tx=>{
@@ -182,9 +185,9 @@ return p;
 const detail=`${titleOf(result.collection)} ${result.docId}: ${Object.entries(result.changes).map(([k,v])=>`${k}: ${JSON.stringify(result.before[k]??null)} → ${JSON.stringify(v)}`).join('; ')} · Pedido: ${result.question}`;
 await audit(profile,request.auth.uid,'IA Executiva: alteração aplicada',detail,result.docId,titleOf(result.collection));
 return {ok:true,message:'Alteração gravada e registrada na Auditoria.'};
-});
+}
 
-export const executiveAiUndo=onCall(opts,async request=>{
+async function undoHandler(request){
 const profile=await requireMaster(request);
 const id=idOf(request);
 const result=await db.runTransaction(async tx=>{
@@ -200,12 +203,12 @@ return p;
 });
 await audit(profile,request.auth.uid,'IA Executiva: alteração desfeita',`${titleOf(result.collection)} ${result.docId}: valores anteriores restaurados (${Object.keys(result.changes).join(', ')})`,result.docId,titleOf(result.collection));
 return {ok:true,message:'Alteração desfeita e registrada na Auditoria.'};
-});
+}
 
-export const executiveAiCancel=onCall(opts,async request=>{
+async function cancelHandler(request){
 await requireMaster(request);
 const id=idOf(request);
 const pRef=proposals().doc(id);const p=(await pRef.get()).data();
 if(p&&p.uid===request.auth.uid&&p.status==='pendente') await pRef.update({status:'cancelada'});
-return {ok:true};
-});
+return {ok:true,message:'Proposta cancelada. Nada foi alterado.'};
+}
