@@ -51,13 +51,18 @@ export function isAppQuestion(q) {
   const outside=/\b(clima|temperatura|futebol|receita culinaria|politica partidaria|horoscopo|poema|traduza ingles|cotacao bitcoin)\b/i;
   return !outside.test(n) && (inScope(q).length>0 || /tesouraria|aplicativo|sistema|modulo|regra|financeiro|caixa|calendario/.test(n));
 }
+export function redactSensitive(value) {
+  return String(value).replace(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g,'[CPF oculto]')
+    .replace(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g,'[CNPJ oculto]')
+    .replace(/[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}/g,'[e-mail oculto]');
+}
 export function safeRecord(id, data) {
   const filtered={id};
   for (const key of FINANCIAL_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(data,key)) continue;
     let value=data[key];
     if(value&&typeof value.toDate==='function') value=value.toDate().toISOString();
-    if(typeof value==='string') value=value.slice(0,160);
+    if(typeof value==='string') value=redactSensitive(value.slice(0,160));
     if(typeof value==='number' && !Number.isFinite(value)) continue;
     if(typeof value==='string'||typeof value==='number'||typeof value==='boolean') filtered[key]=value;
   }
