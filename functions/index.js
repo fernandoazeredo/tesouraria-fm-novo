@@ -2,7 +2,8 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { isMasterClaim, isAppQuestion, safeRecord, selectedCollections, SCOPES } from './ai-core.js';
+import { isMasterClaim, isAppQuestion, safeRecord, selectedCollections } from './ai-core.js';
+import { SYSTEM_KNOWLEDGE } from './knowledge.js';
 
 initializeApp();
 const db=getFirestore();
@@ -57,6 +58,7 @@ export const executiveAiAsk=onCall({
     'Recebimentos de alvarás confirmados pela Tesouraria não passam pela fila geral de Aprovações.',
     'Comissões são vinculadas aos recebimentos confirmados e seguem programação, aprovação e pagamento.',
     'Repasse societário: impostos 11,33% sobre honorários; divisão líquida 60% Flávio, 40% Ana.',
+    SYSTEM_KNOWLEDGE,
     'Responda em português brasileiro, de modo conciso e objetivo.',
     'Se a pergunta for sobre um dos 20 módulos, mas a consulta não possui registros, indique o caminho do módulo sem inventar dados.',
   ].join('\n');
