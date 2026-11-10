@@ -18,9 +18,11 @@ type Message = { role: 'user' | 'assistant'; text: string; response?: AiResponse
 
 const fns = getFunctions(firebaseApp, 'southamerica-east1')
 const queryAi = httpsCallable<{ question: string }, AiResponse>(fns, 'executiveAiAsk')
-const applyAi = httpsCallable<{ proposalId: string }, { ok: boolean; message: string }>(fns, 'executiveAiApply')
-const undoAi = httpsCallable<{ proposalId: string }, { ok: boolean; message: string }>(fns, 'executiveAiUndo')
-const cancelAi = httpsCallable<{ proposalId: string }, { ok: boolean }>(fns, 'executiveAiCancel')
+// Confirmar/Cancelar/Desfazer usam a mesma função pública e autenticada (ação explícita).
+const actionAi = httpsCallable<{ action: 'apply' | 'undo' | 'cancel'; proposalId: string }, { ok: boolean; message: string }>(fns, 'executiveAiAsk')
+const applyAi = (d: { proposalId: string }) => actionAi({ action: 'apply', ...d })
+const undoAi = (d: { proposalId: string }) => actionAi({ action: 'undo', ...d })
+const cancelAi = (d: { proposalId: string }) => actionAi({ action: 'cancel', ...d })
 
 function fmt(v: unknown) {
   if (v === null || v === undefined || v === '') return '—'
