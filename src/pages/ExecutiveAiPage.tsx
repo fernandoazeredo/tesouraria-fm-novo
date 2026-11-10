@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react'
 import { getFunctions, httpsCallable } from 'firebase/functions'
-import { Sparkles, Send, ShieldCheck, LoaderCircle, ExternalLink, CheckCircle2, XCircle, Undo2, PencilLine, Eraser } from 'lucide-react'
+import { Sparkles, Send, ShieldCheck, LoaderCircle, ExternalLink, CheckCircle2, XCircle, Undo2, PencilLine, Eraser, Copy, Check, ClipboardPaste } from 'lucide-react'
 import { firebaseApp } from '../lib/firebase'
 import './ExecutiveAiPage.css'
 import { AiMarkdown } from './ExecutiveAiMarkdown'
@@ -57,6 +57,25 @@ export function ExecutiveAiPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
+  const [copied, setCopied] = useState<number | null>(null)
+  async function copyBubble(index: number, event: MouseEvent<HTMLButtonElement>) {
+    const src = event.currentTarget.closest('article')?.querySelector('.executive-ai-copy-src') as HTMLElement | null
+    const text = (src?.innerText || messages[index]?.text || '').trim()
+    try { await navigator.clipboard.writeText(text) } catch {
+      const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove()
+    }
+    setCopied(index); window.setTimeout(() => setCopied(c => c === index ? null : c), 1600)
+  }
+  async function pasteQuestion() {
+    try { const t = await navigator.clipboard.readText(); if (t) setQuestion(prev => (prev ? prev + ' ' : '') + t.slice(0, 500 - prev.length)) } catch { setError('Use Ctrl+V para colar (o navegador bloqueou o acesso à área de transferência).') }
+  }
+  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+      event.preventDefault()
+      event.currentTarget.form?.requestSubmit()
+    }
+  }
+
   function patch(index: number, data: Partial<Message>) {
     setMessages(prev => prev.map((m, i) => i === index ? { ...m, ...data } : m))
   }
@@ -104,7 +123,7 @@ export function ExecutiveAiPage() {
     <div className="executive-ai-messages" aria-live="polite">
       {messages.length === 0 && <div className="executive-ai-welcome"><Sparkles size={32} /><strong>O que deseja consultar ou ajustar?</strong><p>Pesquise informações, processos, valores, status, regras e pendências nos módulos do sistema.</p><div className="executive-ai-groups">{promptGroups.map(g => <div key={g.title} className="executive-ai-group"><span>{g.title}</span><div className="executive-ai-prompts">{g.items.map(p => <button key={p} type="button" disabled={busy} onClick={() => setQuestion(p)}>{p}</button>)}</div></div>)}</div></div>}
       {messages.map((msg, i) => <article key={i} className={`executive-ai-bubble ${msg.role}`}>
-        <strong>{msg.role === 'assistant' ? 'IA' : 'Você'}</strong>{msg.role === 'assistant' ? <AiMarkdown text={msg.text} /> : <p>{msg.text}</p>}
+        <div className="executive-ai-bubble-head"><strong>{msg.role === 'assistant' ? 'IA' : 'Você'}</strong><button type="button" className="executive-ai-copy" title={copied === i ? 'Copiado!' : 'Copiar'} aria-label="Copiar texto" onClick={e => void copyBubble(i, e)}>{copied === i ? <Check size={15} /> : <Copy size={15} />}</button></div><div className="executive-ai-copy-src">{msg.role === 'assistant' ? <AiMarkdown text={msg.text} /> : <p>{msg.text}</p>}</div>
         {msg.response?.proposal && <div className={`executive-ai-proposal ${msg.proposalState}`}>
           <div className="executive-ai-proposal-head"><PencilLine size={16} /> Alteração proposta · {msg.response.proposal.modulo}</div>
           <table><thead><tr><th>Campo</th><th>Antes</th><th>Depois</th></tr></thead><tbody>{msg.response.proposal.diff.map(d => <tr key={d.field}><td>{fieldLabel(d.field)}</td><td>{fmt(d.before)}</td><td><b>{fmt(d.after)}</b></td></tr>)}</tbody></table>
@@ -118,6 +137,6 @@ export function ExecutiveAiPage() {
       {busy && <div className="executive-ai-loading"><LoaderCircle className="spin" size={18} /> Processando…</div>}
     </div>
     {error && <div role="alert" className="executive-ai-error">{error}</div>}
-    <form onSubmit={submit} className="executive-ai-form"><label htmlFor="executive-ai-question">Sua pergunta ou solicitação</label><textarea id="executive-ai-question" value={question} onChange={e => setQuestion(e.target.value)} maxLength={500} rows={3} placeholder="Ex.: Quais comissões estão pendentes? · Altere o valor da despesa TESTE IA para 200" disabled={busy} /><div><small>{question.length}/500 caracteres</small><span className="executive-ai-form-actions">{messages.length > 0 && <button className="secondary-button executive-ai-clear" type="button" disabled={busy} onClick={() => { setMessages([]); setError(''); setQuestion('') }}><Eraser size={16} /> Limpar conversa</button>}<button className="revenue-button" type="submit" disabled={busy || question.trim().length < 5}><Send size={16} /> Enviar</button></span></div></form>
+    <form onSubmit={submit} className="executive-ai-form"><label htmlFor="executive-ai-question">Sua pergunta ou solicitação</label><textarea id="executive-ai-question" value={question} onChange={e => setQuestion(e.target.value)} onKeyDown={onKeyDown} maxLength={500} rows={3} placeholder="Ex.: Quais comissões estão pendentes? · Altere o valor da despesa TESTE IA para 200" disabled={busy} /><div><small>{question.length}/500 caracteres · Enter envia, Shift+Enter quebra linha</small><span className="executive-ai-form-actions"><button className="secondary-button executive-ai-clear" type="button" disabled={busy} title="Colar" onClick={() => void pasteQuestion()}><ClipboardPaste size={16} /> Colar</button>{messages.length > 0 && <button className="secondary-button executive-ai-clear" type="button" disabled={busy} onClick={() => { setMessages([]); setError(''); setQuestion('') }}><Eraser size={16} /> Limpar conversa</button>}<button className="revenue-button" type="submit" disabled={busy || question.trim().length < 5}><Send size={16} /> Enviar</button></span></div></form>
   </section>
 }

@@ -55,3 +55,7 @@ html[data-theme] .executive-ai .executive-ai-bubble.user p,html[data-theme] .exe
 html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-md p,html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-md li{color:#fff !important}
 .executive-ai-form-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .executive-ai-clear{display:flex;align-items:center;gap:6px}
+.executive-ai-bubble-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.executive-ai-copy{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:7px;border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.14);color:#fff;cursor:pointer;flex-shrink:0}
+.executive-ai-copy:hover{background:rgba(255,255,255,.28)}
+.executive-ai-copy svg{color:#fff}
