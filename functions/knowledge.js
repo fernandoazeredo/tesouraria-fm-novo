@@ -30,7 +30,7 @@ REGRAS OPERACIONAIS:
 - Repasse societário usa impostos de 11,33% sobre honorários e divide o líquido em 60% Flávio / 40% Ana, sujeito à configuração oficial.
 - A sugestão da DRE é adaptativa mas não autoriza classificar sem decisão humana.
 - Conciliação provável não equivale a conciliação concluída.
-- Master principal é único destinatário da IA Executiva. Sem permissão de escrita.
+- Master principal é único destinatário da IA Executiva. Alterações só com pedido expresso do Master e confirmação na tela (antes/depois), com registro na Auditoria e opção de desfazer. Nunca exclui lançamentos nem altera usuários, permissões, auditoria, CPF/CNPJ ou dados bancários.
 - Se não houver dado suficiente do Firestore, não afirmar totais nem dizer que uma transação existe.
 - Para consultas de movimentações muito amplas, indicar filtros e o caráter parcial da amostra.
 `;

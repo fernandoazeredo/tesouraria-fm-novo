@@ -8,7 +8,7 @@ export const SCOPES = Object.freeze({
   societario: { title:'Repasse Societário', collection:'societaryTransfers', path:'/repasse-societario', words:['societario','societário','sociedade','ana','flavio','flávio'] },
   notas: { title:'Nota Fiscal', collection:'fiscalNotes', path:'/nota-fiscal', words:['nota fiscal','nfse','nfs-e'] },
   comissoes: { title:'Comissões de Agentes', collection:'agentCommissions', path:'/comissoes-agentes', words:['comissao','comissão','comissoes','comissões','agente'] },
-  aprovacoes: { title:'Aprovações', collection:'approvals', path:'/aprovacoes', words:['aprovacao','aprovação','pendencia','pendência','rejeitado'] },
+  aprovacoes: { title:'Aprovações', collection:'approvals', path:'/aprovacoes', virtual:true, words:['aprovacao','aprovação','aprovar','pendencia','pendência','rejeitado','devolvido'] },
   dre: { title:'Classificações DRE', collection:'managerialClassifications', path:'/dre-gerencial', words:['dre','classificacao','classificação'] },
   contas: { title:'Plano de Contas', collection:'chartOfAccounts', path:'/plano-contas', words:['plano de contas','conta contábil','codigo contábil','código contábil'] },
   contabilidade: { title:'Envios à Contabilidade', collection:'accountingDispatches', path:'/contabilidade', words:['contabilidade','pacote contabil','pacote contábil'] },
@@ -49,7 +49,7 @@ export function isAppQuestion(q) {
   const n=normalizeText(q);
   if (n.length<5 || n.length>500) return false;
   const outside=/\b(clima|temperatura|futebol|receita culinaria|politica partidaria|horoscopo|poema|traduza ingles|cotacao bitcoin)\b/i;
-  return !outside.test(n) && (inScope(q).length>0 || /tesouraria|aplicativo|sistema|modulo|regra|financeiro|caixa|calendario/.test(n));
+  return !outside.test(n) && (inScope(q).length>0 || isChangeRequest(q) || /tesouraria|aplicativo|sistema|modulo|regra|financeiro|caixa|calendario|lancamento/.test(n));
 }
 export function redactSensitive(value) {
   return String(value).replace(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g,'[CPF oculto]')
@@ -75,5 +75,96 @@ export function isMasterClaim(token, profile) {
     profile.role==='master' && profile.status==='active';
 }
 export function selectedCollections(q) {
-  return inScope(q).map(k=>({key:k,...SCOPES[k]}));
+  let keys=inScope(q);
+  if (isChangeRequest(q)) {
+    // Para alterar é preciso ler o documento real (nomes de campo exatos), não só a fila calculada.
+    if (keys.length===0 || keys.includes('aprovacoes')) keys=[...new Set([...keys.filter(k=>k!=='aprovacoes'),'despesas','receitas','comissoes','repasses','societario'])];
+    keys=keys.slice(0,5);
+  }
+  return keys.map(k=>({key:k,...SCOPES[k]}));
+}
+
+// ===== Fila de Aprovações (mesma regra da tela /aprovacoes) =====
+export const APPROVAL_SOURCES = Object.freeze([
+  { collection:'expenses', type:'Despesa', statuses:['enviado_aprovacao','em_analise'], value:['valorTotal'], title:['fornecedor','favorecido','nomeFornecedor','nomeFavorecido','nome'] },
+  { collection:'agentCommissions', type:'Comissão de Agente', statuses:['aguardando_aprovacao'], value:['netAmountDue','amountDue'], title:['beneficiary'] },
+  { collection:'alvaraTransfers', type:'Repasse de Alvará', statuses:['aguardando_aprovacao'], value:['amountDue'], title:['beneficiary'] },
+  { collection:'societaryTransfers', type:'Repasse Societário', statuses:['aguardando_aprovacao'], value:['transferValue'], title:['beneficiary'] },
+]);
+function firstOf(data, keys) { for (const k of keys) { const v=data?.[k]; if (v!==undefined && v!==null && v!=='') return v; } return null; }
+function toNum(v) { if (typeof v==='number') return v; const n=Number(String(v ?? '').replace(/\./g,'').replace(',','.')); return Number.isFinite(n)?n:0; }
+export function approvalQueueItem(source, id, data) {
+  return {
+    id, colecao:source.collection, tipo:source.type, status:String(data?.status||''),
+    titulo:redactSensitive(String(firstOf(data, source.title) || source.type).slice(0,160)),
+    processo:data?.processo ? redactSensitive(String(data.processo).slice(0,80)) : undefined,
+    competencia:data?.competencia || undefined,
+    valor:toNum(firstOf(data, source.value)),
+  };
+}
+export function buildApprovalQueue(bySource) {
+  const rows=[];
+  for (const source of APPROVAL_SOURCES) {
+    for (const {id,data} of (bySource[source.collection] || [])) {
+      if (source.statuses.includes(String(data?.status||''))) rows.push(approvalQueueItem(source,id,data));
+    }
+  }
+  return rows;
+}
+
+// ===== Alterações assistidas (somente Master, com confirmação expressa) =====
+export const WRITABLE_COLLECTIONS = Object.freeze(
+  Object.values(SCOPES).filter(s=>!s.virtual && !['users','auditLogs'].includes(s.collection)).map(s=>s.collection)
+);
+export const PROTECTED_FIELDS = new Set([
+  'id','uid','userId','userEmail','userName','email','role','createdAt','createdBy','createdByName','createdByEmail',
+  'updatedAt','approvedBy','approvedByName','approvedByEmail','decisionBy','decisionByName','decisionByEmail',
+  'closedBy','closedByName','lastAiChangeAt','lastAiChangeId',
+]);
+const SENSITIVE_FIELD=/cpf|cnpj|agencia|agência|conta(?!b)|account(number|digit)|pix|senha|password|token/i;
+const CHANGE_VERBS=/\b(alter[ae]r?|alteracao|mud[ae]r?|corrij[ao]|corrigir|atualiz[ae]r?|troc[ae]r?|ajust[ae]r?|marqu[ae]|marcar|defin[ae]|definir|edit[ae]r?|substitu[ai]r?|coloqu[ae]|colocar|muda)\b/;
+export function isChangeRequest(q) { return CHANGE_VERBS.test(normalizeText(q)); }
+export function coerceValue(type, raw) {
+  if (type==='null') return null;
+  if (type==='boolean') { const t=normalizeText(raw); if (['true','sim','verdadeiro'].includes(t)) return true; if (['false','nao','falso'].includes(t)) return false; throw new Error('Valor booleano inválido.'); }
+  if (type==='number') { const n=toNum(raw); if (!Number.isFinite(n) || String(raw).trim()==='') throw new Error('Valor numérico inválido.'); return n; }
+  const s=String(raw ?? ''); if (s.length>500) throw new Error('Texto acima de 500 caracteres.'); return s;
+}
+export function validateProposal(p) {
+  if (!p || typeof p!=='object') throw new Error('Proposta ausente.');
+  const collection=String(p.collection||'');
+  if (!WRITABLE_COLLECTIONS.includes(collection)) throw new Error(`Coleção não permitida para alteração: ${collection || '(vazia)'}.`);
+  const docId=String(p.docId||'');
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(docId)) throw new Error('Identificador do lançamento inválido.');
+  const list=Array.isArray(p.changes)?p.changes:[];
+  if (list.length===0) throw new Error('Nenhum campo a alterar.');
+  if (list.length>15) throw new Error('Máximo de 15 campos por alteração.');
+  const changes={};
+  for (const c of list) {
+    const field=String(c?.field||'');
+    if (!/^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(field)) throw new Error(`Campo inválido: ${field}.`);
+    if (PROTECTED_FIELDS.has(field) || field.startsWith('executiveAi')) throw new Error(`Campo protegido: ${field}.`);
+    if (SENSITIVE_FIELD.test(field)) throw new Error(`Campo sensível não pode ser alterado pela IA: ${field}.`);
+    if (Object.prototype.hasOwnProperty.call(changes,field)) throw new Error(`Campo repetido: ${field}.`);
+    changes[field]=coerceValue(String(c?.type||'string'), c?.value);
+  }
+  return { collection, docId, changes, summary:String(p.summary||'').slice(0,400) };
+}
+export function isPrimitive(v) { return v===null || ['string','number','boolean'].includes(typeof v); }
+export function buildDiff(current, changes) {
+  const before={}, missing=[], diff=[];
+  for (const [field,after] of Object.entries(changes)) {
+    const has=current && Object.prototype.hasOwnProperty.call(current,field);
+    const value=has?current[field]:undefined;
+    if (has && !isPrimitive(value)) throw new Error(`O campo ${field} tem estrutura complexa e não pode ser alterado pela IA.`);
+    if (has) before[field]=value; else missing.push(field);
+    diff.push({ field, before: has?value:null, after });
+  }
+  if (diff.every(d=>d.before===d.after && !missing.includes(d.field))) throw new Error('Os valores pedidos já são os atuais. Nada a alterar.');
+  return { before, missing, diff };
+}
+export function sameValues(current, expected, missing=[]) {
+  for (const [k,v] of Object.entries(expected)) if (current?.[k]!==v) return false;
+  for (const k of missing) if (current && Object.prototype.hasOwnProperty.call(current,k)) return false;
+  return true;
 }
