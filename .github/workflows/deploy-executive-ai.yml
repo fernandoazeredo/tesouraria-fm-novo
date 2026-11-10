@@ -2,6 +2,7 @@ name: Publicar IA Executiva - Functions e Hosting
 
 # Ativação controlada. O Secret Manager deve conter GOOGLE_GENAI_API_KEY
 # e a conta de serviço do GitHub precisa ter permissão de deploy de Functions.
+# Papeis exigidos na conta do deploy: Usuario da conta de servico (compute SA), Administrador do Cloud Functions e Administrador do Cloud Run.
 on:
   push:
     branches:
