@@ -39,6 +39,8 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TESOURARIA_FM_NOVO }}
       - name: Instalar Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v2
+      - name: Identificar conta de serviço autenticada
+        run: gcloud auth list --filter='status:ACTIVE' --format='value(account)'
       - name: Verificar credencial de IA no Secret Manager
         run: gcloud secrets describe GOOGLE_GENAI_API_KEY --project tesouraria-fm-novo --format='value(name)'
       - name: Confirmar versão habilitada do segredo
