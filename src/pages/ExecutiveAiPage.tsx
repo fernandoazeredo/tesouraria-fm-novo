@@ -25,7 +25,21 @@ const applyAi = (d: { proposalId: string }) => actionAi({ action: 'apply', ...d 
 const undoAi = (d: { proposalId: string }) => actionAi({ action: 'undo', ...d })
 const cancelAi = (d: { proposalId: string }) => actionAi({ action: 'cancel', ...d })
 
+const FIELD_LABELS: Record<string, string> = {
+  valorTotal: 'Valor total', value: 'Valor', amount: 'Valor', amountDue: 'Valor devido', netAmountDue: 'Valor líquido', transferValue: 'Valor do repasse',
+  status: 'Status', competencia: 'Competência', fornecedor: 'Fornecedor', favorecido: 'Favorecido', descricao: 'Descrição', description: 'Descrição',
+  descricaoOrigem: 'Descrição', categoria: 'Categoria', unidade: 'Unidade', processo: 'Processo', paymentDate: 'Data de pagamento', dueDate: 'Vencimento',
+  receiptDate: 'Data de recebimento', data: 'Data', percent: 'Percentual', beneficiary: 'Beneficiário', accountCode: 'Conta gerencial', observacao: 'Observação', obs: 'Observação',
+}
+const STATUS_LABELS: Record<string, string> = {
+  rascunho: 'Rascunho', enviado_aprovacao: 'Aguardando aprovação', aguardando_aprovacao: 'Aguardando aprovação', em_analise: 'Em análise', aprovado: 'Aprovado',
+  enviado_tesouraria: 'Aguardando Tesouraria', confirmado: 'Recebido', recebido: 'Recebido', pago: 'Pago', paga: 'Pago', devolvido: 'Devolvido para correção', rejeitado: 'Rejeitado', arquivado: 'Arquivado',
+}
+function fieldLabel(f: string) {
+  return FIELD_LABELS[f] || f.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
+}
 function fmt(v: unknown) {
+  if (typeof v === 'string' && STATUS_LABELS[v]) return STATUS_LABELS[v]
   if (v === null || v === undefined || v === '') return '—'
   if (typeof v === 'number') return v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })
   if (typeof v === 'boolean') return v ? 'Sim' : 'Não'
@@ -92,8 +106,8 @@ export function ExecutiveAiPage() {
       {messages.map((msg, i) => <article key={i} className={`executive-ai-bubble ${msg.role}`}>
         <strong>{msg.role === 'assistant' ? 'IA' : 'Você'}</strong>{msg.role === 'assistant' ? <AiMarkdown text={msg.text} /> : <p>{msg.text}</p>}
         {msg.response?.proposal && <div className={`executive-ai-proposal ${msg.proposalState}`}>
-          <div className="executive-ai-proposal-head"><PencilLine size={16} /> Alteração proposta · {msg.response.proposal.modulo} · <code>{msg.response.proposal.docId}</code></div>
-          <table><thead><tr><th>Campo</th><th>Antes</th><th>Depois</th></tr></thead><tbody>{msg.response.proposal.diff.map(d => <tr key={d.field}><td>{d.field}</td><td>{fmt(d.before)}</td><td><b>{fmt(d.after)}</b></td></tr>)}</tbody></table>
+          <div className="executive-ai-proposal-head"><PencilLine size={16} /> Alteração proposta · {msg.response.proposal.modulo}</div>
+          <table><thead><tr><th>Campo</th><th>Antes</th><th>Depois</th></tr></thead><tbody>{msg.response.proposal.diff.map(d => <tr key={d.field}><td>{fieldLabel(d.field)}</td><td>{fmt(d.before)}</td><td><b>{fmt(d.after)}</b></td></tr>)}</tbody></table>
           {msg.proposalState === 'pendente' && <div className="executive-ai-proposal-actions"><button type="button" className="small-success-button" disabled={busy} onClick={() => void act(i, 'apply')}><CheckCircle2 size={15} /> Confirmar alteração</button><button type="button" className="small-neutral-button" disabled={busy} onClick={() => void act(i, 'cancel')}><XCircle size={15} /> Cancelar</button><small>Válida por 15 minutos.</small></div>}
           {msg.proposalState === 'aplicada' && <div className="executive-ai-proposal-actions"><span className="status-badge success">Aplicada</span><button type="button" className="small-neutral-button" disabled={busy} onClick={() => void act(i, 'undo')}><Undo2 size={15} /> Desfazer</button></div>}
           {(msg.proposalState === 'cancelada' || msg.proposalState === 'desfeita') && <div className="executive-ai-proposal-actions"><span className="status-badge neutral">{msg.proposalState === 'cancelada' ? 'Cancelada' : 'Desfeita'}</span></div>}
