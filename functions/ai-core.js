@@ -54,7 +54,7 @@ export function isAppQuestion(q) {
 export function redactSensitive(value) {
   return String(value).replace(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g,'[CPF oculto]')
     .replace(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g,'[CNPJ oculto]')
-    .replace(/[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}/g,'[e-mail oculto]');
+    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g,'[e-mail oculto]');
 }
 export function safeRecord(id, data) {
   const filtered={id};
