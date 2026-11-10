@@ -23,6 +23,7 @@ import {
   Scale,
   Settings,
   ShieldCheck,
+  Sparkles,
   UserRoundCheck,
   Users,
   Wrench,
@@ -45,6 +46,7 @@ import { DashboardPageEnhanced } from './pages/DashboardPageEnhanced'
 import { ApprovalsPageEnhanced } from './pages/ApprovalsPageEnhanced'
 import { AccountingPageStorageV2 } from './pages/AccountingPageStorageV2'
 import { BankReconciliationPage } from './pages/BankReconciliationPage'
+import { ExecutiveAiPage } from './pages/ExecutiveAiPage'
 import { FinancialCalendarPage } from './pages/FinancialCalendarPage'
 import { CashFlowMonthlyPage } from './pages/CashFlowMonthlyPage'
 import { DreGerencialPageV2 } from './pages/DreGerencialPageV2'
@@ -105,6 +107,7 @@ const menu: MenuItem[] = [
   { to: '/auditoria', label: 'Auditoria', icon: ShieldCheck, roles: ['master'] },
   { to: '/utilitarios', label: 'Utilitários', icon: Wrench, roles: ['master'] },
   { to: '/configuracoes', label: 'Configurações', icon: Settings, roles: ['master'] },
+  { to: '/ia', label: 'IA', icon: Sparkles, roles: ['master'] },
 ]
 
 function accessRoleFromUserRole(role: UserRole | undefined): AccessRole {
@@ -368,6 +371,7 @@ function AppShell() {
   const pathToId = new Map<string, ModuleId>(Object.entries(modulePaths).map(([id, path]) => [path, id as ModuleId]))
   const canOpen = (path: string) => {
     if (!permissionsLoaded || !profile) return false
+    if (path === '/ia') return profile.role === 'master' && profile.email.trim().toLowerCase() === PRIMARY_ADMIN_EMAIL
     const id = pathToId.get(path)
     if (!id) return true
     return effectiveView(id, accessRole, profile.email || '', permissionDoc, PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL)
@@ -435,6 +439,7 @@ function AppShell() {
           <Route path="/auditoria" element={guarded('/auditoria', canViewAudit ? <AuditPageEnhancedV2 /> : <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>A Auditoria é exclusiva do Administrador Master.</p></section>)} />
           <Route path="/utilitarios" element={guarded('/utilitarios', <UtilitiesPage />)} />
           <Route path="/configuracoes" element={guarded('/configuracoes', <Configuracoes />)} />
+          <Route path="/ia" element={guarded('/ia', <ExecutiveAiPage />)} />
           <Route path="/dicas" element={<TipsPageEnhanced />} />
           <Route path="/como-usar" element={<HowToPageEnhanced />} />
         </Routes>
