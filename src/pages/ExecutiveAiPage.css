@@ -73,3 +73,23 @@ html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-md p
 .executive-ai-financial td:last-child { white-space: nowrap; }
 .executive-ai-financial-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px; }
 .executive-ai-financial-pages button { padding: 4px 8px; }
+
+/* Tabela de lançamentos dentro da resposta azul: tudo em letra branca, sem fundo claro */
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial summary,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial table,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial thead,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial tbody,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial tr,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial th,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial td,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial-pages,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial-pages * {
+  color: #fff !important;
+  background: transparent !important;
+}
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial th { background: rgba(255,255,255,.14) !important; font-weight: 700; }
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial th,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial td { border-bottom: 1px solid rgba(255,255,255,.3) !important; }
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial tr:hover td { background: rgba(255,255,255,.08) !important; }
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial-pages button { border: 1px solid rgba(255,255,255,.5) !important; border-radius: 6px; }
