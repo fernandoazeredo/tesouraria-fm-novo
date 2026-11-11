@@ -8,12 +8,14 @@ import { AiMarkdown } from './ExecutiveAiMarkdown'
 type DiffRow = { field: string; before: unknown; after: unknown }
 type ClassItem = { tipo: string; titulo: string; descricao?: string; competencia?: string | null; unidade?: string; valor: number; antes: string }
 type Proposal = { id: string; kind?: 'campos' | 'classificacao'; modulo: string; collection?: string; docId?: string; summary: string; diff?: DiffRow[]; conta?: string; grupo?: string; itens?: ClassItem[]; total?: number; expiresAtMs: number }
+type FinancialDetail = { date: string; title: string; unit: string; category: string; value: number }
 type AiResponse = {
   answer: string
   sources: Array<{ modulo: string; caminho: string; parcial: boolean; registros: number }>
   consultedAt: string
   disclaimer: string
   proposal?: Proposal
+  details?: FinancialDetail[]
 }
 type ProposalState = 'pendente' | 'aplicada' | 'cancelada' | 'desfeita'
 type Message = { role: 'user' | 'assistant'; text: string; response?: AiResponse; proposalState?: ProposalState; note?: string }
@@ -51,6 +53,28 @@ function errorText(err: unknown, fallback: string) {
   const code = (err as { code?: string })?.code || ''
   const description = (err as Error)?.message || fallback
   return /not-found|unavailable|internal/.test(code) && !/Proposta|Lançamento|Alteração/.test(description) ? 'O serviço seguro de IA ainda não está disponível. Nenhum lançamento foi alterado.' : description
+}
+
+function FinancialDetails({ rows }: { rows: FinancialDetail[] }) {
+  const [page, setPage] = useState(0)
+  const pageSize = 25
+  const pages = Math.ceil(rows.length / pageSize)
+  const first = page * pageSize
+  return <details className="executive-ai-financial">
+    <summary>Ver {rows.length.toLocaleString('pt-BR')} lançamento(s)</summary>
+    <div className="executive-ai-proposal-scroll">
+      <table><thead><tr><th>Data</th><th>Lançamento</th><th>Unidade</th><th>Categoria</th><th>Valor</th></tr></thead>
+        <tbody>{rows.slice(first, first + pageSize).map((row, i) => <tr key={first + i}>
+          <td>{row.date}</td><td>{row.title}</td><td>{row.unit}</td><td>{row.category}</td><td>{money.format(row.value)}</td>
+        </tr>)}</tbody>
+      </table>
+    </div>
+    {pages > 1 && <div className="executive-ai-financial-pages">
+      <button type="button" disabled={page === 0} onClick={() => setPage(page - 1)}>Anterior</button>
+      <span aria-live="polite">{first + 1}–{Math.min(first + pageSize, rows.length)} de {rows.length}</span>
+      <button type="button" disabled={page + 1 >= pages} onClick={() => setPage(page + 1)}>Próxima</button>
+    </div>}
+  </details>
 }
 
 export function ExecutiveAiPage() {
@@ -113,7 +137,7 @@ export function ExecutiveAiPage() {
   const promptGroups: Array<{ title: string; items: string[] }> = [
     { title: 'Resumo e situação financeira', items: ['Faça um resumo geral do escritório', 'Qual a situação financeira de hoje?', 'Qual a situação financeira desta semana?', 'Qual a situação financeira deste mês?', 'O que está pendente de decisão hoje?'] },
     { title: 'Gastos e resultado por conta (Plano de Contas / DRE)', items: ['Quanto gastamos com telefone em 2026?', 'Quanto gastamos com energia elétrica em 2026 e 2025?', 'Quais foram as maiores despesas por conta este ano?', 'Quanto gastamos por mês este ano?', 'Quanto gastamos em Despesas Administrativas este ano?', 'Qual o resultado da DRE este ano?', 'Quantos lançamentos estão sem classificação na DRE este ano?'] },
-    { title: 'Receitas por tipo e período', items: ['Quanto recebemos de alvarás trabalhistas em 2026?', 'Quanto recebemos de acordos trabalhistas em 2026?', 'Quanto recebemos por mês este ano?', 'Quanto recebemos de honorários este ano?', 'Quanto recebemos ano passado?'] },
+    { title: 'Receitas por tipo e período', items: ['Quanto recebemos de acordos e alvarás trabalhistas em 2026?', 'Quanto recebemos de alvarás trabalhistas em 2026?', 'Quanto recebemos de acordos trabalhistas em 2026?', 'Quanto recebemos por mês este ano?', 'Quanto recebemos de honorários este ano?', 'Quanto recebemos ano passado?'] },
     { title: 'Por dia e por semana', items: ['O que foi pago hoje?', 'O que foi lançado ontem?', 'O que foi recebido esta semana?', 'O que foi pago na semana passada?'] },
     { title: 'Pedidos de alteração e classificação (com sua confirmação)', items: ['Classifique as despesas de conta de luz deste mês como Energia Elétrica', 'Classifique as despesas de telefone celular de 2026 como Telefonia Móvel', 'Altere o valor da despesa do fornecedor X para 200'] },
     { title: 'Despesas', items: ['Quais despesas estão aguardando aprovação?', 'Quais despesas foram pagas este mês?', 'Quais despesas foram devolvidas ou rejeitadas?'] },
@@ -125,11 +149,12 @@ export function ExecutiveAiPage() {
   ]
   return <section className="page-card executive-ai">
     <header className="executive-ai-head"><Sparkles size={27} /><div><span className="eyebrow">Exclusivo do Master principal</span><h1>IA — Assistente Executivo</h1><p>Consulte os módulos e os lançamentos do Tesouraria FM Novo. Para alterar ou classificar lançamentos, peça expressamente (ex.: “classifique as despesas de luz de outubro como Energia Elétrica”) e confirme.</p></div></header>
-    <div className="executive-ai-security"><ShieldCheck size={17} /> Uso privado. Nenhuma alteração é gravada sem a sua confirmação; tudo vai para a Auditoria e pode ser desfeito. A IA lê todos os lançamentos, linhas de histórico e classificações; os totais são calculados pelo sistema. Ela não exclui lançamentos nem altera usuários, permissões, CPF/CNPJ ou dados bancários.</div>
+    <div className="executive-ai-security"><ShieldCheck size={17} /> Uso privado. Nenhuma alteração é gravada sem a sua confirmação; tudo vai para a Auditoria e pode ser desfeito. Os totais de despesas na DRE e de receitas por recebimento consideram todos os registros que atendem ao pedido. Ela não exclui lançamentos nem altera usuários, permissões, CPF/CNPJ ou dados bancários.</div>
     <div className="executive-ai-messages" aria-live="polite">
       {messages.length === 0 && <div className="executive-ai-welcome"><Sparkles size={32} /><strong>O que deseja consultar ou ajustar?</strong><p>Pesquise informações, processos, valores, status, regras e pendências nos módulos do sistema.</p><div className="executive-ai-groups">{promptGroups.map(g => <div key={g.title} className="executive-ai-group"><span>{g.title}</span><div className="executive-ai-prompts">{g.items.map(p => <button key={p} type="button" disabled={busy} onClick={() => setQuestion(p)}>{p}</button>)}</div></div>)}</div></div>}
       {messages.map((msg, i) => <article key={i} className={`executive-ai-bubble ${msg.role}`}>
         <div className="executive-ai-bubble-head"><strong>{msg.role === 'assistant' ? 'IA' : 'Você'}</strong><button type="button" className="executive-ai-copy" title={copied === i ? 'Copiado!' : 'Copiar'} aria-label="Copiar texto" onClick={e => void copyBubble(i, e)}>{copied === i ? <Check size={15} /> : <Copy size={15} />}</button></div><div className="executive-ai-copy-src">{msg.role === 'assistant' ? <AiMarkdown text={msg.text} /> : <p>{msg.text}</p>}</div>
+        {!!msg.response?.details?.length && <FinancialDetails rows={msg.response.details} />}
         {msg.response?.proposal && <div className={`executive-ai-proposal ${msg.proposalState}`}>
           {msg.response.proposal.kind === 'classificacao' ? <>
             <div className="executive-ai-proposal-head"><PencilLine size={16} /> Classificação proposta · {msg.response.proposal.itens?.length ?? 0} lançamento(s) · {money.format(msg.response.proposal.total ?? 0)}</div>
