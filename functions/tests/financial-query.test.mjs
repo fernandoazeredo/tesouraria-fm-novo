@@ -117,3 +117,18 @@ test('outras receitas citadas junto com alvarás e acordos entram no total', asy
   const labor = financialRequest('Quanto recebemos em 2026 de alvarás e acordos trabalhistas?', '2026-11-11');
   assert.equal(revenueRows(other, labor).length, 0);
 });
+
+test('sem recebimento no período: mostra pendentes da Tesouraria e o último recebido', async () => {
+  const { financialRequest, revenueRows, revenueContext, filterPeriod } = await import('../financial-query.js');
+  const intent = financialRequest('Qual valor das receitas hoje', '2026-11-11');
+  const records = [
+    { status: 'encerrado', tipoRecebimento: 'outras_receitas', origem: 'Outras Receitas', descricaoOrigem: 'Aporte', receiptDate: '2026-11-10', valorAlvara: 500, unidade: 'RJ' },
+    { status: 'enviado_tesouraria', origem: 'Alvará', natureza: 'Trabalhista', processo: '9', reclamante: 'x', data: '2026-11-11', valorAlvara: 800, unidade: 'RJ' },
+  ];
+  const all = records.flatMap(r => revenueRows(r, intent));
+  assert.equal(filterPeriod(all, intent.periods).length, 0);
+  const ctx = revenueContext(records, intent, all);
+  assert.match(ctx, /Aguardando confirmação da Tesouraria: 1 lançamento\(s\), R\$\s?800,00/);
+  assert.match(ctx, /Último recebimento confirmado: \*\*10\/11\/2026\*\*/);
+  assert.match(ctx, /R\$\s?500,00/);
+});
