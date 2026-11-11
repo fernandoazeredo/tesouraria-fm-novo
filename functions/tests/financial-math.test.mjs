@@ -37,3 +37,10 @@ test('soma e diferença exatas, com sinal e maior item', () => {
   const d = renderArithmetic({ operacao: 'diferenca', itens: plan.itens }, [0.1 + 0.2, 0.3]);
   assert.equal(d.diferenca, 0);
 });
+
+test('subtração sem "e" ligando as partes também é cálculo', () => {
+  assert.ok(isArithmeticQuestion('Quanto recebemos este mês menos o que gastamos em despesas administrativas?'));
+  assert.ok(isArithmeticQuestion('Receitas de 2026 descontando as despesas de 2026'));
+  assert.ok(!isArithmeticQuestion('Qual o total de despesas este mês?'));
+  assert.ok(!isArithmeticQuestion('Quais as despesas mais altas do mês?'));
+});
