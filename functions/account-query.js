@@ -70,7 +70,15 @@ export function selectAccounts(question, chart, category = '', { partial = true 
   }).filter(match => match.hits && (match.hits === terms.length || match.coverage === 1));
   candidates.sort((a, b) => b.hits - a.hits || b.coverage - a.coverage);
   const top = candidates[0];
-  const best = top ? candidates.filter(match => match.hits === top.hits && match.coverage === top.coverage).map(match => match.account) : [];
+  let best = top ? candidates.filter(match => match.hits === top.hits && match.coverage === top.coverage).map(match => match.account) : [];
+  if (best.length > 1) {
+    // Desempate: conta cujo nome tem mais palavras citadas na pergunta, inclusive palavras genéricas
+    // (ex.: "material de escritório" → Materiais de Escritório, e não Materiais para Revenda).
+    const asked = new Set(words(question).split(' ').filter(word => word.length >= 4).map(token));
+    const score = account => words(account.name).split(' ').filter(word => word.length >= 4).map(token).filter(word => asked.has(word)).length;
+    const max = Math.max(...best.map(score));
+    best = best.filter(account => score(account) === max);
+  }
   return { entries: best, unknown: [], ambiguous: best.length > 1 };
 }
 
