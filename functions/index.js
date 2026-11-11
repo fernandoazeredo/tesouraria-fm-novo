@@ -46,7 +46,7 @@ export const executiveAiAsk=onCall({
   const intent=financialRequest(question,undefined,chart);
   if(!intent && !isAppQuestion(question)) throw invalidQuestion();
   if(intent?.kind==='classification') return proposeClassification(db,{question,intent,chart,uid:request.auth.uid,expiresAtMs:Date.now()+PROPOSAL_TTL_MS});
-  if(intent && !isChangeRequest(question)) {
+  if(intent && (intent.kind==='plan' || !isChangeRequest(question))) {
     const resolved=intent.kind==='mixed' ? {...intent,queries:await Promise.all(intent.queries.map(query=>
       query.suggest ? suggestAccountIntent(query.question,query) : query
     ))} : intent.suggest ? await suggestAccountIntent(question,intent) : intent;

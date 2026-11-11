@@ -45,7 +45,7 @@ function reply(answer, source, rows) {
 export async function runFinancial(db, intent) {
   if (intent.kind === 'plan') {
     const { selection, chart } = intent;
-    const answer = planAnswer(chart, selection.entries, { ...selection, listing: intent.listing });
+    const answer = planAnswer(chart, selection.entries, { ...selection, listing: intent.listing, countOnly: intent.countOnly });
     return {
       answer: intent.noLedger ? answer + '\n\nO aplicativo disponibiliza a descrição dessas contas. Os totais desta consulta vêm dos módulos de Receitas e Despesas.' : answer,
       sources: [{ modulo: 'Plano de Contas', caminho: planPath, parcial: false, registros: chart.length }],

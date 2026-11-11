@@ -87,3 +87,13 @@ test('valida a sugestão do modelo contra o catálogo sem aceitar códigos inven
   assert.equal(modelAccountSelection({ codes: ['4.07.05'], certain: false }, chart, 'Despesa').ambiguous, true);
   assert.equal(modelAccountSelection({ codes: ['4.07.05'], certain: true }, chart, 'Despesa').entries[0].name, 'Energia Elétrica');
 });
+
+
+test('orienta a classificação e informa os totais do cadastro por natureza', async () => {
+  const ask = q => runFinancial(dbFor({}), financialRequest(q, today, chart));
+  const guidance = await ask('Qual conta uso para classificar um gasto com conta de luz?');
+  assert.match(guidance.answer, /4\.07\.05 — Energia Elétrica.*Despesas Administrativas/);
+  const count = await ask('Quantas contas tem o Plano de Contas?');
+  assert.match(count.answer, /202 códigos.*19 grupos e 183 contas finais/);
+  assert.match(count.answer, /Receita: 22.*Despesa: 137.*Patrimonial \/ Dívida: 24/);
+});

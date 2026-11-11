@@ -115,15 +115,21 @@ export function financialIntent(question, today, chart = officialChartOfAccounts
   const wantsAmount = /\b(?:quanto|quantia|total|valor|saldo|movimentos?|lancamentos?|gastos?|gastamos|gastei|recebemos|comparar|compare)\b/.test(q);
   const lookupByName = /\b(?:o que e|qual e|explique)\b/.test(q)
     && selectAccounts(question, chart, category, { partial: false }).entries.length > 0;
-  const catalogLookup = !wantsAmount && (lookupByName || /\bcomo classific\w*\b/.test(q) || hasPlan || chartCodes(question, chart).length
-    || /\b(?:qual|quais|qual e|o que e|quantas) (?:a |as )?(?:conta|contas|classificacao|grupo)\b/.test(q));
+  const classificationHelp = /\b(?:como classific\w*|qual conta (?:uso|utilizo|escolho)|em qual conta classific\w*)\b/.test(q);
+  const catalogLookup = classificationHelp || (!wantsAmount && (lookupByName || hasPlan || chartCodes(question, chart).length
+    || /\b(?:qual|quais|qual e|o que e|quantas) (?:a |as )?(?:conta|contas|classificacao|grupo)\b/.test(q)));
   if (catalogLookup) {
     const selection = selectAccounts(question, chart, category);
-    const listing = /\b(?:liste|lista|mostrar|mostre|todas|todos|quantas|quantos|quais contas)\b/.test(q);
-    if (!selection.entries.length && !selection.unknown.length && hasPlan && !/\b(?:de|para) (?:contabilizar|classificar)\b/.test(q)) {
-      selection.entries = chart.filter(account => !category || account.category === category);
+    if (!selection.entries.length && !selection.unknown.length && category !== 'Receita') {
+      const alias = aliases.find(item => item.words.test(q));
+      if (alias) selection.entries = chart.filter(account => alias.codes.includes(account.code));
     }
-    return { kind: 'plan', chart, selection, listing, suggest: !selection.entries.length && !selection.unknown.length ? { category } : null };
+    const listing = /\b(?:liste|lista|mostrar|mostre|todas|todos|quais contas)\b/.test(q);
+    if (!selection.entries.length && !selection.unknown.length && hasPlan && !/\b(?:de|para) (?:contabilizar|classificar)\b/.test(q)) {
+      if (listing) selection.entries = chart.filter(account => !category || account.category === category);
+    }
+    const countOnly = /\b(?:quantas|quantos)\b/.test(q);
+    return { kind: 'plan', chart, selection, listing, countOnly, suggest: !countOnly && !selection.entries.length && !selection.unknown.length ? { category } : null };
   }
   if (/\b(?:como|onde|qual o prazo)\b/.test(q) && !/\bquanto\b/.test(q)) return null;
   if (!/\b(?:quanto|quantos|quantas|qual|quais|liste|mostre|total|resumo|compare|recebido|gasto|saldo)\b/.test(q)) return null;

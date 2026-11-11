@@ -74,8 +74,13 @@ export function selectedLeaves(chart, entries) {
   }));
 }
 
-export function planAnswer(chart, entries, { unknown = [], ambiguous = false, listing = false } = {}) {
+export function planAnswer(chart, entries, { unknown = [], ambiguous = false, listing = false, countOnly = false } = {}) {
   if (unknown.length) return `Não encontrei no Plano de Contas vigente: **${unknown.join(', ')}**. Confira o código no [Plano de Contas](/plano-contas).`;
+  if (countOnly) {
+    const groups = chart.filter(row => row.kind === 'group').length;
+    const counts = Object.values(categories).map(category => `${category}: ${chart.filter(row => row.kind === 'account' && row.category === category).length}`);
+    return `**${chart.length} códigos** · ${groups} grupos e ${chart.length - groups} contas finais.\n\n${counts.join(' · ')}.\n\n[Abrir Plano de Contas](/plano-contas)`;
+  }
   if (!entries.length && !listing) return 'Informe um nome ou código para eu localizar a conta no [Plano de Contas](/plano-contas).';
   const title = ambiguous ? 'Encontrei mais de uma conta possível. Informe o código desejado.' : 'Plano de Contas vigente';
   const rows = listing ? entries.flatMap(entry => entry.kind === 'account'
