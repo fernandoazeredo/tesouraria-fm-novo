@@ -110,6 +110,7 @@ export function ExecutiveAiPage() {
 
   const promptGroups: Array<{ title: string; items: string[] }> = [
     { title: 'Resumo e situação financeira', items: ['Faça um resumo geral do escritório', 'Qual a situação financeira de hoje?', 'Qual a situação financeira desta semana?', 'Qual a situação financeira deste mês?', 'O que está pendente de decisão hoje?'] },
+    { title: 'Gastos por conta (Plano de Contas / DRE)', items: ['Quanto gastamos com telefone em 2026?', 'Quanto gastamos com energia elétrica em 2026?', 'Quais foram as maiores despesas por conta este ano?', 'Quanto gastamos por mês este ano?', 'Quanto gastamos em Despesas Administrativas este ano?', 'Quantas despesas estão sem classificação na DRE este ano?'] },
     { title: 'Despesas', items: ['Quais despesas estão aguardando aprovação?', 'Quais despesas foram pagas este mês?', 'Quais despesas foram devolvidas ou rejeitadas?'] },
     { title: 'Receitas e Tesouraria', items: ['Quais receitas estão aguardando a Tesouraria?', 'Quais receitas foram confirmadas este mês?', 'Quais receitas foram devolvidas para correção?'] },
     { title: 'Aprovações', items: ['O que está na fila de Aprovações?', 'Qual o valor total aguardando aprovação?', 'Qual foi o valor aprovado hoje?', 'Quanto falta aprovar hoje?', 'Qual o valor aprovado este mês?', 'O que foi devolvido ou rejeitado hoje?'] },
