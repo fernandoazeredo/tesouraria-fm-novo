@@ -108,7 +108,8 @@ export function financialIntent(question, today, chart = officialChartOfAccounts
   const type = others ? 'todos'
     : /\bacordos?\b/.test(q) && /\balvaras?\b/.test(q) ? 'ambos'
     : /\bacordos?\b/.test(q) ? 'acordo' : /\balvaras?\b/.test(q) ? 'alvara' : 'todos';
-  if (/^(?:(?:por favor|voce pode|pode) )?(?:classifique|classificar|reclassifique|reclassificar)\b/.test(q)) {
+  // Pedido de classificação em qualquer posição da frase ("por favor, classifique...", "quero classificar...", "1 - classifique...").
+  if (/\b(?:classifique|classificar|reclassifique|reclassificar|classifica)\b.*\b(?:como|na conta|para a conta|para conta|em conta|no plano)\b/.test(q)) {
     return { kind: 'classification', unit, periods };
   }
   const hasPlan = /\b(?:plano de contas|conta contabil|codigo contabil|classificacao contabil|contas do plano|todas as contas)\b/.test(q);
