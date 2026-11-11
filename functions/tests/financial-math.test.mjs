@@ -44,3 +44,9 @@ test('subtração sem "e" ligando as partes também é cálculo', () => {
   assert.ok(!isArithmeticQuestion('Qual o total de despesas este mês?'));
   assert.ok(!isArithmeticQuestion('Quais as despesas mais altas do mês?'));
 });
+
+test('"mais" ligando dois assuntos dispara soma', () => {
+  assert.ok(isArithmeticQuestion('Quanto gastamos com material de escritório mais telefone em 2026?'));
+  assert.ok(!isArithmeticQuestion('Quais as despesas mais altas do mês?'));
+  assert.ok(!isArithmeticQuestion('Qual a despesa mais recente?'));
+});
