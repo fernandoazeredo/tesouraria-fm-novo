@@ -104,3 +104,10 @@ test('reconhece conta no singular quando o plano está no plural', async () => {
   assert.equal(classificationTarget('Classifique a despesa do fornecedor X como Material de Escritório', officialChartOfAccounts)?.code, '4.05.20');
   assert.equal(classificationTarget('Classifique a despesa da Light como Energia Elétrica', officialChartOfAccounts)?.code, '4.07.05');
 });
+
+test('desempate por palavras do nome: material de escritório não vira materiais para revenda', async () => {
+  const { financialRequest } = await import('../financial-query.js');
+  const i = financialRequest('Quanto gastamos com material de escritório em 2026?', '2026-11-11');
+  assert.equal(i.kind, 'expense');
+  assert.deepEqual(i.leaves.map(a => a.code), ['4.05.20']);
+});
