@@ -40,14 +40,14 @@ export function renderArithmetic(plan, values) {
   const result = {};
   if (plan.operacao === 'soma' || plan.operacao === 'soma_e_diferenca') {
     result.soma = round(values.reduce((sum, value) => sum + value, 0));
-    lines.push(`**Soma:** ${plan.itens.map(item => item.rotulo).join(' + ')} = **${brl(result.soma)}**`);
+    lines.push(`- **Soma:** ${plan.itens.map(item => item.rotulo).join(' + ')} = **${brl(result.soma)}**`);
   }
   if (plan.operacao === 'diferenca' || plan.operacao === 'soma_e_diferenca') {
     result.diferenca = round(values[0] - values[1]);
-    lines.push(`**Diferença:** ${plan.itens[0].rotulo} − ${plan.itens[1].rotulo} = **${brl(result.diferenca)}**`);
+    lines.push(`- **Diferença:** ${plan.itens[0].rotulo} − ${plan.itens[1].rotulo} = **${brl(result.diferenca)}**`);
     if (result.diferenca !== 0) {
       const maior = result.diferenca > 0 ? plan.itens[0].rotulo : plan.itens[1].rotulo;
-      lines.push(`${maior} foi maior em ${brl(Math.abs(result.diferenca))}.`);
+      lines.push('', `${maior} foi maior em ${brl(Math.abs(result.diferenca))}.`);
     }
   }
   return { answer: lines.join('\n'), ...result };
