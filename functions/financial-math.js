@@ -4,13 +4,15 @@ import { normalizeText } from './ai-core.js';
 
 // Operações explícitas: bastam para disparar o cálculo.
 const STRONG = /\b(?:somad[oa]s?|somar|somando|some|soma|juntos|juntas|diferenca|menos|subtrai\w*|subtrac\w*|descontad[oa]s?|descontando|a mais (?:que|do que)|a menos (?:que|do que)|compar\w*|versus)\b/;
+// "mais" ligando dois assuntos (ex.: "material de escritório mais telefone"), mas não "despesas mais altas".
+const PLUS = /\b(?:com|de|do|da|em)\b.+\bmais\b(?! (?:alt|car|recent|antig|import|baix|grand|frequent|pago|gast))\s+\w{3,}/;
 // Indícios fracos: só valem quando a pergunta liga dois assuntos ("e" ou vírgula).
 const WEAK = /\b(?:ao todo|no total|total de|adicionad[oa]s?|mais|x)\b/;
 
 /** Pergunta que pede um cálculo entre dois ou mais valores (soma, diferença ou comparação). */
 export function isArithmeticQuestion(question) {
   const q = normalizeText(question);
-  if (STRONG.test(q)) return true;
+  if (STRONG.test(q) || PLUS.test(q)) return true;
   return WEAK.test(q) && /\be\b|,/.test(q);
 }
 

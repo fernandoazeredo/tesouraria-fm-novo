@@ -303,7 +303,7 @@ export function renderFinancial(intent, rows, pending = [], undated = 0) {
     : revenue ? (intent.basis === 'dre' ? 'Receitas na DRE por competência' : intent.feesOnly ? 'Honorários recebidos' : 'Recebimentos confirmados')
       : intent.pendingOnly ? 'Despesas sem classificação' : 'Despesas na DRE por competência';
   const scope = intent.periods?.map(range => `${shownDate(range.from)} a ${shownDate(range.to)}`).join(' e ') || 'Todo o período registrado';
-  const filter = intent.selection?.entries.map(entry => text(entry.name)).join(' · ') || intent.label || intent.codes?.join(', ') || (intent.alias ? expenseAccounts.filter(account => intent.alias.codes.includes(account.code)).map(account => account.name).join(' e ') : '');
+  const filter = [...new Set(intent.selection?.entries.map(entry => text(entry.name)) ?? [])].join(' · ') || intent.label || intent.codes?.join(', ') || (intent.alias ? expenseAccounts.filter(account => intent.alias.codes.includes(account.code)).map(account => account.name).join(' e ') : '');
   const lines = [`## ${title}`, '', [scope, intent.unit, filter].filter(Boolean).join(' · '), ''];
   if (revenue && !intent.feesOnly && intent.basis !== 'dre') lines.push('Valores brutos efetivamente recebidos. Os honorários do escritório aparecem à parte.', '');
   lines.push(rows.length ? `**Total: ${money(total(rows))}** · ${rows.length} ${revenue ? 'recebimento(s)' : 'lançamento(s)'}` : 'Nenhum lançamento encontrado para esses critérios.', '');
@@ -368,11 +368,17 @@ export function classificationMatches(rows, question, intent) {
   const ignored = new Set(['classifique','classificar','reclassifique','reclassificar','despesas','despesa','referente','referentes','fornecedor','historico','lancamento','lancamentos','escritorio','unidade','passado','passada','mes','ano','hoje','ontem','semana','janeiro','fevereiro','marco','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro','conta','administrativa','administrativas','eletrica','energia','luz','light','eletricidade','telefone','telefonia','fixo','fixa','movel','celular','nextel','internet','todas','todos','deste','desse','este','neste','atual']);
   const terms = source.split(' ').filter(word => word.length >= 4 && !ignored.has(word) && !/^\d+$/.test(word));
   if (!alias && !terms.length) return [];
-  return rows.filter(row => {
+  const matched = rows.filter(row => {
     if (!expenseEligible(row) || !inUnit(row, intent.unit) || (intent.periods && !inPeriod(row.date, intent.periods))) return false;
     const history = clean(row.description);
     return (!alias || alias.history.test(history)) && terms.every(term => contains(history, term));
   });
+  if (matched.length < 2) return matched;
+  // Quando o pedido cita o nome completo do fornecedor, fica só com ele (o nome mais específico citado).
+  const named = matched.map(row => ({ row, name: clean(row.title) })).filter(item => item.name.length >= 4 && contains(source, item.name));
+  if (!named.length) return matched;
+  const longest = Math.max(...named.map(item => item.name.length));
+  return named.filter(item => item.name.length === longest).map(item => item.row);
 }
 
 export const sumFinancial = total;
