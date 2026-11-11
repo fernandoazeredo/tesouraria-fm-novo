@@ -2,7 +2,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import {
   classificationMatches, classificationTarget, expenseRow, expenseSummary, filterPeriod, financialDetails,
-  readAll, renderFinancial, revenueRows, sumFinancial, validClassification,
+  readAll, renderFinancial, revenueContext, revenueRows, sumFinancial, validClassification,
 } from './financial-query.js';
 import { normalizeText, redactSensitive } from './ai-core.js';
 import { activeChart, planAnswer } from './account-query.js';
@@ -82,7 +82,12 @@ export async function runFinancial(db, intent) {
       return entries.map(row => ({ ...row, label: account.name }));
     });
     const rows = filterPeriod(all, intent.periods).map(row => intent.feesOnly && intent.basis !== 'dre' ? { ...row, amount: row.fees } : row);
-    return reply(renderFinancial(intent, rows, [], all.filter(row => !row.date).length), revenuePath, rows);
+    let answer = renderFinancial(intent, rows, [], all.filter(row => !row.date).length);
+    if (!rows.length && !selection) {
+      const context = revenueContext(docs.map(doc => doc.data()), intent, all);
+      if (context) answer = answer.replace('Nenhum lançamento encontrado para esses critérios.', `Nenhum recebimento confirmado com data de recebimento neste período.\n\n${context}`);
+    }
+    return reply(answer, revenuePath, rows);
   }
 
   const [expenses, classes, receivables] = await Promise.all([

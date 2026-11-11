@@ -377,3 +377,32 @@ export function classificationMatches(rows, question, intent) {
 
 export const sumFinancial = total;
 export const filterPeriod = (rows, periods) => rows.filter(row => inPeriod(row.date, periods));
+
+
+const revenueStatusLabels = { rascunho: 'Rascunho', enviado_tesouraria: 'Aguardando confirmação da Tesouraria', devolvido: 'Devolvido para correção' };
+/**
+ * Contexto quando a consulta de receitas não encontra recebimentos no período:
+ * receitas do período que ainda não foram confirmadas e o último recebimento confirmado.
+ */
+export function revenueContext(records, intent, receivedRows = []) {
+  const lines = [];
+  const waiting = new Map();
+  for (const record of records) {
+    const current = status(record.status);
+    if (receivedStatuses.has(current)) continue;
+    const rows = revenueRows({ ...record, status: 'recebido_tesouraria' }, intent).filter(row => inPeriod(row.date, intent.periods));
+    if (!rows.length) continue;
+    const label = revenueStatusLabels[current] || (current ? current.replace(/_/g, ' ') : 'Sem situação');
+    const item = waiting.get(label) ?? { count: 0, amount: 0 };
+    item.count += rows.length; item.amount += rows.reduce((sum, row) => sum + row.amount, 0);
+    waiting.set(label, item);
+  }
+  if (waiting.size) {
+    lines.push('**Receitas do período ainda não confirmadas como recebidas:**');
+    for (const [label, item] of waiting) lines.push(`- ${label}: ${item.count} lançamento(s), ${money(item.amount)}`);
+    lines.push('');
+  }
+  const latest = [...receivedRows].filter(row => row.date).sort((a, b) => b.date.localeCompare(a.date))[0];
+  if (latest) lines.push(`Último recebimento confirmado: **${shownDate(latest.date)}** · ${text(latest.label)} · ${text(latest.title)} · ${money(latest.amount)}.`);
+  return lines.join('\n');
+}
