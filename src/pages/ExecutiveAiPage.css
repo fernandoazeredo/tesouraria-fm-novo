@@ -60,3 +60,6 @@ html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-md p
 .executive-ai-copy:hover{background:rgba(255,255,255,.28)}
 .executive-ai-copy svg{color:#fff}
 /* copiar/colar e Enter para enviar */
+.executive-ai-proposal-account{margin:2px 0 8px;font-size:13.5px}
+.executive-ai-proposal-scroll{max-height:300px;overflow:auto;border-radius:8px}
+.executive-ai-proposal-desc{display:block;font-weight:400;opacity:.8;font-size:12px}

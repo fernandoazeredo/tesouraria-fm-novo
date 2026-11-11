@@ -6,7 +6,8 @@ import './ExecutiveAiPage.css'
 import { AiMarkdown } from './ExecutiveAiMarkdown'
 
 type DiffRow = { field: string; before: unknown; after: unknown }
-type Proposal = { id: string; modulo: string; collection: string; docId: string; summary: string; diff: DiffRow[]; expiresAtMs: number }
+type ClassItem = { tipo: string; titulo: string; descricao?: string; competencia?: string | null; unidade?: string; valor: number; antes: string }
+type Proposal = { id: string; kind?: 'campos' | 'classificacao'; modulo: string; collection?: string; docId?: string; summary: string; diff?: DiffRow[]; conta?: string; grupo?: string; itens?: ClassItem[]; total?: number; expiresAtMs: number }
 type AiResponse = {
   answer: string
   sources: Array<{ modulo: string; caminho: string; parcial: boolean; registros: number }>
@@ -18,9 +19,9 @@ type ProposalState = 'pendente' | 'aplicada' | 'cancelada' | 'desfeita'
 type Message = { role: 'user' | 'assistant'; text: string; response?: AiResponse; proposalState?: ProposalState; note?: string }
 
 const fns = getFunctions(firebaseApp, 'southamerica-east1')
-const queryAi = httpsCallable<{ question: string }, AiResponse>(fns, 'executiveAiAsk')
+const queryAi = httpsCallable<{ question: string }, AiResponse>(fns, 'executiveAiAsk', { timeout: 180000 })
 // Confirmar/Cancelar/Desfazer usam a mesma função pública e autenticada (ação explícita).
-const actionAi = httpsCallable<{ action: 'apply' | 'undo' | 'cancel'; proposalId: string }, { ok: boolean; message: string }>(fns, 'executiveAiAsk')
+const actionAi = httpsCallable<{ action: 'apply' | 'undo' | 'cancel'; proposalId: string }, { ok: boolean; message: string }>(fns, 'executiveAiAsk', { timeout: 120000 })
 const applyAi = (d: { proposalId: string }) => actionAi({ action: 'apply', ...d })
 const undoAi = (d: { proposalId: string }) => actionAi({ action: 'undo', ...d })
 const cancelAi = (d: { proposalId: string }) => actionAi({ action: 'cancel', ...d })
@@ -35,6 +36,7 @@ const STATUS_LABELS: Record<string, string> = {
   rascunho: 'Rascunho', enviado_aprovacao: 'Aguardando aprovação', aguardando_aprovacao: 'Aguardando aprovação', em_analise: 'Em análise', aprovado: 'Aprovado',
   enviado_tesouraria: 'Aguardando Tesouraria', confirmado: 'Recebido', recebido: 'Recebido', pago: 'Pago', paga: 'Pago', devolvido: 'Devolvido para correção', rejeitado: 'Rejeitado', arquivado: 'Arquivado',
 }
+const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 function fieldLabel(f: string) {
   return FIELD_LABELS[f] || f.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
 }
@@ -97,7 +99,7 @@ export function ExecutiveAiPage() {
   async function act(index: number, kind: 'apply' | 'cancel' | 'undo') {
     const proposal = messages[index]?.response?.proposal
     if (!proposal || busy) return
-    if (kind === 'apply' && !window.confirm(`Confirmar a alteração em ${proposal.modulo} (${proposal.docId})?`)) return
+    if (kind === 'apply' && !window.confirm(proposal.kind === 'classificacao' ? `Confirmar a classificação de ${proposal.itens?.length ?? 0} lançamento(s) em ${proposal.conta}?` : `Confirmar a alteração em ${proposal.modulo}?`)) return
     setBusy(true); setError('')
     try {
       if (kind === 'apply') { const r = await applyAi({ proposalId: proposal.id }); patch(index, { proposalState: 'aplicada', note: r.data.message }) }
@@ -110,7 +112,10 @@ export function ExecutiveAiPage() {
 
   const promptGroups: Array<{ title: string; items: string[] }> = [
     { title: 'Resumo e situação financeira', items: ['Faça um resumo geral do escritório', 'Qual a situação financeira de hoje?', 'Qual a situação financeira desta semana?', 'Qual a situação financeira deste mês?', 'O que está pendente de decisão hoje?'] },
-    { title: 'Gastos por conta (Plano de Contas / DRE)', items: ['Quanto gastamos com telefone em 2026?', 'Quanto gastamos com energia elétrica em 2026?', 'Quais foram as maiores despesas por conta este ano?', 'Quanto gastamos por mês este ano?', 'Quanto gastamos em Despesas Administrativas este ano?', 'Quantas despesas estão sem classificação na DRE este ano?'] },
+    { title: 'Gastos e resultado por conta (Plano de Contas / DRE)', items: ['Quanto gastamos com telefone em 2026?', 'Quanto gastamos com energia elétrica em 2026 e 2025?', 'Quais foram as maiores despesas por conta este ano?', 'Quanto gastamos por mês este ano?', 'Quanto gastamos em Despesas Administrativas este ano?', 'Qual o resultado da DRE este ano?', 'Quantos lançamentos estão sem classificação na DRE este ano?'] },
+    { title: 'Receitas por tipo e período', items: ['Quanto recebemos de alvarás trabalhistas em 2026?', 'Quanto recebemos de acordos trabalhistas em 2026?', 'Quanto recebemos por mês este ano?', 'Quanto recebemos de honorários este ano?', 'Quanto recebemos ano passado?'] },
+    { title: 'Por dia e por semana', items: ['O que foi pago hoje?', 'O que foi lançado ontem?', 'O que foi recebido esta semana?', 'O que foi pago na semana passada?'] },
+    { title: 'Pedidos de alteração e classificação (com sua confirmação)', items: ['Classifique as despesas de conta de luz deste mês como Energia Elétrica', 'Classifique as despesas de telefone celular de 2026 como Telefonia Móvel', 'Altere o valor da despesa do fornecedor X para 200'] },
     { title: 'Despesas', items: ['Quais despesas estão aguardando aprovação?', 'Quais despesas foram pagas este mês?', 'Quais despesas foram devolvidas ou rejeitadas?'] },
     { title: 'Receitas e Tesouraria', items: ['Quais receitas estão aguardando a Tesouraria?', 'Quais receitas foram confirmadas este mês?', 'Quais receitas foram devolvidas para correção?'] },
     { title: 'Aprovações', items: ['O que está na fila de Aprovações?', 'Qual o valor total aguardando aprovação?', 'Qual foi o valor aprovado hoje?', 'Quanto falta aprovar hoje?', 'Qual o valor aprovado este mês?', 'O que foi devolvido ou rejeitado hoje?'] },
@@ -119,23 +124,29 @@ export function ExecutiveAiPage() {
     { title: 'Banco e Auditoria', items: ['Há movimentos bancários não conciliados?', 'Como funciona a Conciliação Bancária?', 'Quais foram as últimas ações na Auditoria?'] },
   ]
   return <section className="page-card executive-ai">
-    <header className="executive-ai-head"><Sparkles size={27} /><div><span className="eyebrow">Exclusivo do Master principal</span><h1>IA — Assistente Executivo</h1><p>Consulte os módulos e os lançamentos do Tesouraria FM Novo. Para alterar um lançamento, peça expressamente (ex.: “altere o valor da despesa X para 200”) e confirme.</p></div></header>
-    <div className="executive-ai-security"><ShieldCheck size={17} /> Uso privado. Nenhuma alteração é gravada sem a sua confirmação; tudo vai para a Auditoria e pode ser desfeito. A IA não exclui lançamentos nem altera usuários, permissões, CPF/CNPJ ou dados bancários.</div>
+    <header className="executive-ai-head"><Sparkles size={27} /><div><span className="eyebrow">Exclusivo do Master principal</span><h1>IA — Assistente Executivo</h1><p>Consulte os módulos e os lançamentos do Tesouraria FM Novo. Para alterar ou classificar lançamentos, peça expressamente (ex.: “classifique as despesas de luz de outubro como Energia Elétrica”) e confirme.</p></div></header>
+    <div className="executive-ai-security"><ShieldCheck size={17} /> Uso privado. Nenhuma alteração é gravada sem a sua confirmação; tudo vai para a Auditoria e pode ser desfeito. A IA lê todos os lançamentos, linhas de histórico e classificações; os totais são calculados pelo sistema. Ela não exclui lançamentos nem altera usuários, permissões, CPF/CNPJ ou dados bancários.</div>
     <div className="executive-ai-messages" aria-live="polite">
       {messages.length === 0 && <div className="executive-ai-welcome"><Sparkles size={32} /><strong>O que deseja consultar ou ajustar?</strong><p>Pesquise informações, processos, valores, status, regras e pendências nos módulos do sistema.</p><div className="executive-ai-groups">{promptGroups.map(g => <div key={g.title} className="executive-ai-group"><span>{g.title}</span><div className="executive-ai-prompts">{g.items.map(p => <button key={p} type="button" disabled={busy} onClick={() => setQuestion(p)}>{p}</button>)}</div></div>)}</div></div>}
       {messages.map((msg, i) => <article key={i} className={`executive-ai-bubble ${msg.role}`}>
         <div className="executive-ai-bubble-head"><strong>{msg.role === 'assistant' ? 'IA' : 'Você'}</strong><button type="button" className="executive-ai-copy" title={copied === i ? 'Copiado!' : 'Copiar'} aria-label="Copiar texto" onClick={e => void copyBubble(i, e)}>{copied === i ? <Check size={15} /> : <Copy size={15} />}</button></div><div className="executive-ai-copy-src">{msg.role === 'assistant' ? <AiMarkdown text={msg.text} /> : <p>{msg.text}</p>}</div>
         {msg.response?.proposal && <div className={`executive-ai-proposal ${msg.proposalState}`}>
-          <div className="executive-ai-proposal-head"><PencilLine size={16} /> Alteração proposta · {msg.response.proposal.modulo}</div>
-          <table><thead><tr><th>Campo</th><th>Antes</th><th>Depois</th></tr></thead><tbody>{msg.response.proposal.diff.map(d => <tr key={d.field}><td>{fieldLabel(d.field)}</td><td>{fmt(d.before)}</td><td><b>{fmt(d.after)}</b></td></tr>)}</tbody></table>
-          {msg.proposalState === 'pendente' && <div className="executive-ai-proposal-actions"><button type="button" className="small-success-button" disabled={busy} onClick={() => void act(i, 'apply')}><CheckCircle2 size={15} /> Confirmar alteração</button><button type="button" className="small-neutral-button" disabled={busy} onClick={() => void act(i, 'cancel')}><XCircle size={15} /> Cancelar</button><small>Válida por 15 minutos.</small></div>}
+          {msg.response.proposal.kind === 'classificacao' ? <>
+            <div className="executive-ai-proposal-head"><PencilLine size={16} /> Classificação proposta · {msg.response.proposal.itens?.length ?? 0} lançamento(s) · {money.format(msg.response.proposal.total ?? 0)}</div>
+            <p className="executive-ai-proposal-account">Nova conta: <b>{msg.response.proposal.conta}</b>{msg.response.proposal.grupo ? <> · Grupo da DRE: <b>{msg.response.proposal.grupo}</b></> : null}</p>
+            <div className="executive-ai-proposal-scroll"><table><thead><tr><th>Tipo</th><th>Lançamento</th><th>Competência</th><th>Unid.</th><th>Valor</th><th>Classificação atual</th></tr></thead><tbody>{(msg.response.proposal.itens ?? []).map((it, k) => <tr key={k}><td>{it.tipo}</td><td><b>{it.titulo}</b>{it.descricao ? <small className="executive-ai-proposal-desc">{it.descricao}</small> : null}</td><td>{it.competencia || '—'}</td><td>{it.unidade || '—'}</td><td>{money.format(it.valor || 0)}</td><td>{it.antes}</td></tr>)}</tbody></table></div>
+          </> : <>
+            <div className="executive-ai-proposal-head"><PencilLine size={16} /> Alteração proposta · {msg.response.proposal.modulo}</div>
+            <table><thead><tr><th>Campo</th><th>Antes</th><th>Depois</th></tr></thead><tbody>{(msg.response.proposal.diff ?? []).map(d => <tr key={d.field}><td>{fieldLabel(d.field)}</td><td>{fmt(d.before)}</td><td><b>{fmt(d.after)}</b></td></tr>)}</tbody></table>
+          </>}
+          {msg.proposalState === 'pendente' && <div className="executive-ai-proposal-actions"><button type="button" className="small-success-button" disabled={busy} onClick={() => void act(i, 'apply')}><CheckCircle2 size={15} /> {msg.response.proposal.kind === 'classificacao' ? 'Confirmar classificação' : 'Confirmar alteração'}</button><button type="button" className="small-neutral-button" disabled={busy} onClick={() => void act(i, 'cancel')}><XCircle size={15} /> Cancelar</button><small>Válida por 15 minutos.</small></div>}
           {msg.proposalState === 'aplicada' && <div className="executive-ai-proposal-actions"><span className="status-badge success">Aplicada</span><button type="button" className="small-neutral-button" disabled={busy} onClick={() => void act(i, 'undo')}><Undo2 size={15} /> Desfazer</button></div>}
           {(msg.proposalState === 'cancelada' || msg.proposalState === 'desfeita') && <div className="executive-ai-proposal-actions"><span className="status-badge neutral">{msg.proposalState === 'cancelada' ? 'Cancelada' : 'Desfeita'}</span></div>}
           {msg.note && <small className="executive-ai-note">{msg.note}</small>}
         </div>}
         {msg.response && msg.response.sources.length > 0 && <div className="executive-ai-sources"><small>Consulta: {new Date(msg.response.consultedAt).toLocaleString('pt-BR')}</small>{msg.response.sources.map(s => <a href={s.caminho} key={s.modulo}><ExternalLink size={12} />{s.modulo} ({s.registros}{s.parcial ? '+' : ''} registros){s.parcial ? ' · amostra' : ''}</a>)}<small>{msg.response.disclaimer}</small></div>}
       </article>)}
-      {busy && <div className="executive-ai-loading"><LoaderCircle className="spin" size={18} /> Processando…</div>}
+      {busy && <div className="executive-ai-loading"><LoaderCircle className="spin" size={18} /> Lendo os lançamentos e calculando… pode levar alguns segundos.</div>}
     </div>
     {error && <div role="alert" className="executive-ai-error">{error}</div>}
     <form onSubmit={submit} className="executive-ai-form"><label htmlFor="executive-ai-question">Sua pergunta ou solicitação</label><textarea id="executive-ai-question" value={question} onChange={e => setQuestion(e.target.value)} onKeyDown={onKeyDown} maxLength={500} rows={3} placeholder="Ex.: Quais comissões estão pendentes? · Altere o valor da despesa TESTE IA para 200" disabled={busy} /><div><small>{question.length}/500 caracteres · Enter envia, Shift+Enter quebra linha</small><span className="executive-ai-form-actions"><button className="secondary-button executive-ai-clear" type="button" disabled={busy} title="Colar" onClick={() => void pasteQuestion()}><ClipboardPaste size={16} /> Colar</button>{messages.length > 0 && <button className="secondary-button executive-ai-clear" type="button" disabled={busy} onClick={() => { setMessages([]); setError(''); setQuestion('') }}><Eraser size={16} /> Limpar conversa</button>}<button className="revenue-button" type="submit" disabled={busy || question.trim().length < 5}><Send size={16} /> Enviar</button></span></div></form>
