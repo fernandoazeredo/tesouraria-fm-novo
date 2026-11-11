@@ -132,3 +132,13 @@ test('sem recebimento no período: mostra pendentes da Tesouraria e o último re
   assert.match(ctx, /Último recebimento confirmado: \*\*10\/11\/2026\*\*/);
   assert.match(ctx, /R\$\s?500,00/);
 });
+
+test('classificação: nome completo do fornecedor desempata entre despesas parecidas', async () => {
+  const { expenseRow, classificationMatches, financialRequest } = await import('../financial-query.js');
+  const rows = [['b', 'TESTE IA - Light'], ['c', 'TESTE IA - Vivo'], ['d', 'TESTE IA - Fornecedor Teste']]
+    .map(([id, f]) => expenseRow(id, { fornecedor: f, status: 'aprovado', competencia: '2026-11', valorTotal: 150, items: [{ data: '2026-11-11', historico: 'TESTE IA' }] }));
+  const q = 'Classifique a despesa do fornecedor TESTE IA - Fornecedor Teste como Material de Escritório';
+  assert.deepEqual(classificationMatches(rows, q, financialRequest(q, '2026-11-11')).map(r => r.id), ['d']);
+  const all = 'Classifique as despesas TESTE IA como Material de Escritório';
+  assert.equal(classificationMatches(rows, all, financialRequest(all, '2026-11-11')).length, 3);
+});
