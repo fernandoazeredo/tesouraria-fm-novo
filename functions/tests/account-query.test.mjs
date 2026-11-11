@@ -75,6 +75,8 @@ test('calcula despesas e receitas pelos códigos cadastrados sem misturar a DRE 
   const ask = q => runFinancial(db, financialRequest(q, today, chart));
   assert.deepEqual((await ask('Quanto gastamos na conta 4.07.05 em 26?')).details.map(row => row.value), [100, 300]);
   assert.deepEqual((await ask('Qual o valor na DRE da conta 4.07.05 em 26?')).details.map(row => row.value), [300]);
+  assert.deepEqual((await ask('Quanto gastamos com energia elétrica em 26?')).details.map(row => row.value), [300]);
+  assert.equal(financialRequest('Quanto gastamos na conta ininteligível em 2026?', today, chart).suggest.category, 'Despesa');
   assert.deepEqual((await ask('Quanto recebemos de Receitas Financeiras em 2026?')).details.map(row => row.value), [700, 250]);
   assert.deepEqual((await ask('Quanto entrou na conta 3.02.02 em 2026?')).details.map(row => row.value), [250]);
 });

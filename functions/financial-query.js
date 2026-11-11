@@ -134,20 +134,27 @@ export function financialIntent(question, today, chart = officialChartOfAccounts
     if (selection.unknown.length || selection.ambiguous) return { kind: 'plan', chart, selection };
     if (selection.entries.length) {
       const leaves = selectedLeaves(chart, selection.entries);
-      const scope = { selection, leaves, periods, unit, basis: /\b(?:na|pela|da|do) dre\b/.test(q) ? 'dre' : 'account' };
-      const expenses = leaves.filter(account => account.category === 'Despesa');
-      const revenues = leaves.filter(account => account.category === 'Receita');
-      if (expenses.length && revenues.length) return { kind: 'mixed', queries: [
-        { ...scope, kind: 'expense', leaves: expenses, selection: { ...selection, entries: selection.entries.filter(entry => entry.category === 'Despesa') } },
-        { ...scope, kind: 'revenue', leaves: revenues, selection: { ...selection, entries: selection.entries.filter(entry => entry.category === 'Receita') }, feesOnly: /\bhonorarios\b/.test(q) },
-      ] };
-      if (expenses.length) return { ...scope, kind: 'expense' };
-      if (revenues.length) return { ...scope, kind: 'revenue', feesOnly: /\bhonorarios\b/.test(q) };
+      const requestedDre = /\b(?:na|pela|da|do) dre\b/.test(q);
+      const queries = [];
+      for (const [category, kind] of [['Despesa', 'expense'], ['Receita', 'revenue']]) {
+        const categoryLeaves = leaves.filter(account => account.category === category);
+        if (!categoryLeaves.length) continue;
+        const entries = selection.entries.filter(entry => entry.category === category);
+        const managerialExpense = kind === 'expense' && !explicitAccount && !chartCodes(question, chart).length
+          && categoryLeaves.every(account => account.dre && account.dre !== excludedGroup);
+        queries.push({
+          kind, periods, unit, selection: { ...selection, entries }, leaves: categoryLeaves,
+          basis: requestedDre || managerialExpense ? 'dre' : 'account',
+          feesOnly: kind === 'revenue' && /\bhonorarios\b/.test(q),
+        });
+      }
+      if (queries.length > 1) return { kind: 'mixed', queries };
+      if (queries.length) return queries[0];
       return { kind: 'plan', chart, selection, noLedger: true };
     }
     const colloquialExpense = hasExpense && /\b(?:gastamos|gastei|gastos?|pagamos)(?:.*)\bcom\b/.test(q) && !aliases.some(item => item.words.test(q));
     const colloquialRevenue = hasRevenue && type === 'todos' && /\b(?:recebemos|recebido)(?:.*)\bcom\b/.test(q);
-    if ((hasPlan && explicitAccount && !/\b(?:por conta|todas as contas)\b/.test(q)) || colloquialExpense || colloquialRevenue) {
+    if ((explicitAccount && !/\b(?:por conta|por categoria|todas as contas)\b/.test(q)) || colloquialExpense || colloquialRevenue) {
       return { kind: 'plan', chart, selection, suggest: { category, wantsAmount: true, periods, unit } };
     }
   }
@@ -207,7 +214,7 @@ export function expenseRow(id, record, classification) {
   const title = String(record.fornecedor ?? record.nome ?? 'Despesa');
   const history = items.map(item => String(item.historico ?? '').trim()).filter(Boolean);
   const description = [record.nome, record.fornecedor, record.categoria, record.subcategoria, record.descricao, record.observacoes, ...history].filter(Boolean).join(' · ');
-  return { id, date, title, description, amount: cents(record.valorTotal), unit: String(record.unidade ?? 'RJ'), status: status(record.status), classification, sourceAccountCode: String(record.expenseAccountCode ?? record.classificacaoContabil ?? '') };
+  return { id, date, title, description, amount: cents(record.valorTotal), unit: String(record.unidade ?? 'RJ'), status: status(record.status), classification, sourceAccountCode: String(record.expenseAccountCode || record.classificacaoContabil || '') };
 }
 
 export function validClassification(row) {
