@@ -1,14 +1,16 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { initializeApp } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue, FieldPath } from 'firebase-admin/firestore';
 import { isMasterClaim, isAppQuestion, safeRecord, selectedCollections, SCOPES, APPROVAL_SOURCES, APPROVAL_DECIDED, buildApprovalQueue, approvalTotals, dateSP, isChangeRequest, validateProposal, buildDiff, sameValues, redactSensitive, WRITABLE_COLLECTIONS } from './ai-core.js';
 import { SYSTEM_KNOWLEDGE } from './knowledge.js';
+import { financialIntent, readAll } from './financial-query.js';
+import { changeClassification, proposeClassification, runFinancial } from './financial-actions.js';
 
 initializeApp();
 const db=getFirestore();
 const geminiKey=defineSecret('GOOGLE_GENAI_API_KEY');
-const MAX_DOCS=80;
+const MAX_EVIDENCE_CHARS=300000;
 const MAX_PER_DAY=60;
 const todayBR=()=>new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'}).format(new Date());
 const MODEL='gemini-3.8-flash';
@@ -24,7 +26,7 @@ async function rateLimit(uid) {
   });
 }
 export const executiveAiAsk=onCall({
-  region:'southamerica-east1', memory:'512MiB', timeoutSeconds:60, maxInstances:3,
+  region:'southamerica-east1', memory:'512MiB', timeoutSeconds:150, maxInstances:3,
   enforceAppCheck:false, secrets:[geminiKey],
 },async request=>{
   const action=String(request.data?.action||'ask');
@@ -36,30 +38,47 @@ export const executiveAiAsk=onCall({
   const userSnap=await db.collection('users').doc(request.auth.uid).get();
   if(!isMasterClaim(token,userSnap.data())) throw new HttpsError('permission-denied','IA exclusiva do Administrador Master principal com e-mail verificado.');
   const question=String(request.data?.question||'').trim();
-  if(!isAppQuestion(question)) throw new HttpsError('invalid-argument','Pergunte apenas sobre os módulos, lançamentos e regras do Tesouraria FM Novo (5 a 500 caracteres).');
+  const intent=financialIntent(question);
+  if(question.length<5 || question.length>500 || (!intent && !isAppQuestion(question))) throw new HttpsError('invalid-argument','Pergunte apenas sobre os módulos, lançamentos e regras do Tesouraria FM Novo (5 a 500 caracteres).');
   await rateLimit(request.auth.uid);
+  if(intent?.kind==='classification') return proposeClassification(db,{question,intent,uid:request.auth.uid,expiresAtMs:Date.now()+PROPOSAL_TTL_MS});
+  if(intent && !isChangeRequest(question)) return runFinancial(db,intent);
   const sources=selectedCollections(question);
   const retrieved=[];
   for(const source of sources) {
     if(source.virtual) {
       const bySource={};
       for(const src of APPROVAL_SOURCES) {
-        const qs=await db.collection(src.collection).where('status','in',[...src.statuses,...APPROVAL_DECIDED]).limit(200).get();
-        bySource[src.collection]=qs.docs.map(d=>({id:d.id,data:d.data()}));
+        const docs=await readAll(db.collection(src.collection).where('status','in',[...src.statuses,...APPROVAL_DECIDED]).orderBy(FieldPath.documentId()));
+        bySource[src.collection]=docs.map(d=>({id:d.id,data:d.data()}));
       }
       const queue=buildApprovalQueue(bySource);
-      const parcial=Object.values(bySource).some(list=>list.length>=200);
-      retrieved.push({modulo:source.title, caminho:source.path, colecao:'fila calculada: expenses, agentCommissions, alvaraTransfers, societaryTransfers', parcial, totais_calculados:approvalTotals(queue,dateSP(new Date().toISOString())), registros:queue.slice(0,MAX_DOCS)});
+      retrieved.push({modulo:source.title, caminho:source.path, colecao:'fila calculada: expenses, agentCommissions, alvaraTransfers, societaryTransfers', parcial:false, totais_calculados:approvalTotals(queue,dateSP(new Date().toISOString())), registros:queue});
       continue;
     }
-    const snap=await db.collection(source.collection).limit(MAX_DOCS+1).get();
+    const docs=await readAll(db.collection(source.collection).orderBy(FieldPath.documentId()));
     retrieved.push({
       modulo:source.title, caminho:source.path, colecao:source.collection,
-      parcial:snap.docs.length>MAX_DOCS,
-      registros:snap.docs.slice(0,MAX_DOCS).map(d=>safeRecord(d.id,d.data())),
+      parcial:false,
+      registros:docs.map(d=>safeRecord(d.id,d.data())),
     });
   }
-  const evidence=JSON.stringify(retrieved).slice(0,58000);
+  const budget=Math.floor(MAX_EVIDENCE_CHARS/Math.max(1,retrieved.length));
+  for(const source of retrieved) {
+    let size=0;
+    const records=source.registros;
+    let count=0;
+    for(const record of records) {
+      size+=JSON.stringify(record).length+1;
+      if(size>budget) break;
+      count++;
+    }
+    if(count<records.length) {
+      source.parcial=true;
+      source.registros=records.slice(0,count);
+    }
+  }
+  const evidence=JSON.stringify(retrieved);
   const instructions=[
     'Você é a IA EXECUTIVA PRIVADA do TESOURARIA FM NOVO.',
     'Responda EXCLUSIVAMENTE sobre o aplicativo, seus módulos, regras e lançamentos.',
@@ -92,7 +111,7 @@ export const executiveAiAsk=onCall({
     headers:{'Content-Type':'application/json','x-goog-api-key':key},
     body:JSON.stringify({
       systemInstruction:{parts:[{text:instructions}]},
-      contents:[{role:'user',parts:[{text:`Data de hoje (America/Sao_Paulo): ${todayBR()}.\nPergunta: ${question}\n\nDados obtidos agora (máx. ${MAX_DOCS} registros por coleção; pode ser parcial):\n${evidence}`}]}],
+      contents:[{role:'user',parts:[{text:`Data de hoje (America/Sao_Paulo): ${todayBR()}.\nPergunta: ${question}\n\nDados obtidos agora (confira se a lista de detalhes é parcial):\n${evidence}`}]}],
       generationConfig:{temperature:0.1,maxOutputTokens:8192},
     }),
     signal:AbortSignal.timeout(45000)
@@ -177,10 +196,11 @@ async function applyHandler(request){
 const profile=await requireMaster(request);
 const id=idOf(request);
 const result=await db.runTransaction(async tx=>{
-const pRef=proposals().doc(id);const p=(await tx.get(pRef)).data();
+const pRef=proposals().doc(id);const pSnap=await tx.get(pRef);const p=pSnap.data();
 if(!p||p.uid!==request.auth.uid) throw new HttpsError('not-found','Proposta não encontrada.');
 if(p.status!=='pendente') throw new HttpsError('failed-precondition',`Proposta já ${p.status}.`);
 if(Date.now()>p.expiresAtMs) {tx.update(pRef,{status:'expirada'});throw new HttpsError('deadline-exceeded','Proposta expirada (15 min). Peça novamente.');}
+if(p.kind==='classificacao') {await changeClassification(db,tx,pSnap,p,profile,'apply');return null;}
 if(!WRITABLE_COLLECTIONS.includes(p.collection)) throw new HttpsError('permission-denied','Coleção não permitida.');
 const ref=db.collection(p.collection).doc(p.docId);const cur=await tx.get(ref);
 if(!cur.exists) throw new HttpsError('not-found','Lançamento não existe mais.');
@@ -189,6 +209,7 @@ tx.update(ref,{...p.changes,updatedAt:FieldValue.serverTimestamp(),lastAiChangeA
 tx.update(pRef,{status:'aplicada',appliedAt:FieldValue.serverTimestamp()});
 return p;
 });
+if(!result) return {ok:true,message:'Classificação gravada e registrada na Auditoria.'};
 const detail=`${titleOf(result.collection)} ${result.docId}: ${Object.entries(result.changes).map(([k,v])=>`${k}: ${JSON.stringify(result.before[k]??null)} → ${JSON.stringify(v)}`).join('; ')} · Pedido: ${result.question}`;
 await audit(profile,request.auth.uid,'IA Executiva: alteração aplicada',detail,result.docId,titleOf(result.collection));
 return {ok:true,message:'Alteração gravada e registrada na Auditoria.'};
@@ -198,9 +219,10 @@ async function undoHandler(request){
 const profile=await requireMaster(request);
 const id=idOf(request);
 const result=await db.runTransaction(async tx=>{
-const pRef=proposals().doc(id);const p=(await tx.get(pRef)).data();
+const pRef=proposals().doc(id);const pSnap=await tx.get(pRef);const p=pSnap.data();
 if(!p||p.uid!==request.auth.uid) throw new HttpsError('not-found','Alteração não encontrada.');
 if(p.status!=='aplicada') throw new HttpsError('failed-precondition','Só é possível desfazer alterações aplicadas.');
+if(p.kind==='classificacao') {await changeClassification(db,tx,pSnap,p,profile,'undo');return null;}
 const ref=db.collection(p.collection).doc(p.docId);const cur=await tx.get(ref);
 if(!cur.exists||!sameValues(cur.data(),p.changes)) throw new HttpsError('aborted','O lançamento mudou depois da alteração da IA. Desfaça manualmente no módulo.');
 const restore={...p.before};for(const f of p.missing||[]) restore[f]=FieldValue.delete();
@@ -208,6 +230,7 @@ tx.update(ref,{...restore,updatedAt:FieldValue.serverTimestamp()});
 tx.update(pRef,{status:'desfeita',undoneAt:FieldValue.serverTimestamp()});
 return p;
 });
+if(!result) return {ok:true,message:'Classificação desfeita e registrada na Auditoria.'};
 await audit(profile,request.auth.uid,'IA Executiva: alteração desfeita',`${titleOf(result.collection)} ${result.docId}: valores anteriores restaurados (${Object.keys(result.changes).join(', ')})`,result.docId,titleOf(result.collection));
 return {ok:true,message:'Alteração desfeita e registrada na Auditoria.'};
 }
@@ -215,7 +238,11 @@ return {ok:true,message:'Alteração desfeita e registrada na Auditoria.'};
 async function cancelHandler(request){
 await requireMaster(request);
 const id=idOf(request);
-const pRef=proposals().doc(id);const p=(await pRef.get()).data();
-if(p&&p.uid===request.auth.uid&&p.status==='pendente') await pRef.update({status:'cancelada'});
+await db.runTransaction(async tx=>{
+  const pRef=proposals().doc(id);const p=(await tx.get(pRef)).data();
+  if(!p||p.uid!==request.auth.uid) throw new HttpsError('not-found','Proposta não encontrada.');
+  if(p.status!=='pendente') throw new HttpsError('failed-precondition','A proposta não está mais pendente.');
+  tx.update(pRef,{status:'cancelada'});
+});
 return {ok:true,message:'Proposta cancelada. Nada foi alterado.'};
 }

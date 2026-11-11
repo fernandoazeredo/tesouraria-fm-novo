@@ -63,3 +63,13 @@ html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-md p
 .executive-ai-proposal-account{margin:2px 0 8px;font-size:13.5px}
 .executive-ai-proposal-scroll{max-height:300px;overflow:auto;border-radius:8px}
 .executive-ai-proposal-desc{display:block;font-weight:400;opacity:.8;font-size:12px}
+
+.executive-ai-financial { margin-top: 12px; }
+.executive-ai-financial summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }
+.executive-ai-financial table { width: 100%; border-collapse: collapse; }
+.executive-ai-financial th,
+.executive-ai-financial td { padding: 7px; text-align: left; border-bottom: 1px solid currentColor; }
+.executive-ai-financial td:first-child,
+.executive-ai-financial td:last-child { white-space: nowrap; }
+.executive-ai-financial-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px; }
+.executive-ai-financial-pages button { padding: 4px 8px; }
