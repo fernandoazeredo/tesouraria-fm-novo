@@ -108,3 +108,12 @@ test('preserva períodos distintos e a ordem dos pedidos de despesas e receitas'
   assert.equal(single.type, 'ambos');
   assert.equal(single.periods[0].from, '2026-01-01');
 });
+
+test('outras receitas citadas junto com alvarás e acordos entram no total', async () => {
+  const { financialRequest, revenueRows } = await import('../financial-query.js');
+  const other = { status: 'encerrado', tipoRecebimento: 'outras_receitas', origem: 'Outras Receitas', receiptDate: '2026-11-10', valorAlvara: 500, unidade: 'RJ' };
+  const all = financialRequest('Quanto recebemos em 2026? Separe por alvarás, acordos e outras receitas.', '2026-11-11');
+  assert.equal(revenueRows(other, all).length, 1);
+  const labor = financialRequest('Quanto recebemos em 2026 de alvarás e acordos trabalhistas?', '2026-11-11');
+  assert.equal(revenueRows(other, labor).length, 0);
+});
