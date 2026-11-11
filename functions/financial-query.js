@@ -1,9 +1,9 @@
 import { dateSP, normalizeText, redactSensitive } from './ai-core.js';
 import { officialChartOfAccounts } from './chart-of-accounts.js';
+import { chartCodes, excludedDreGroup as excludedGroup, selectAccounts, selectedLeaves } from './account-query.js';
 
 const expenseStatuses = new Set(['aprovado', 'pago', 'arquivado']);
 const receivedStatuses = new Set(['recebido_tesouraria', 'encerrado']);
-const excludedGroup = 'Não mostrar no DRE Gerencial';
 const months = 'janeiro fevereiro marco abril maio junho julho agosto setembro outubro novembro dezembro'.split(' ');
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const clean = value => normalizeText(value).replace(/[^a-z0-9]+/g, ' ').trim();
@@ -28,7 +28,7 @@ export async function readAll(query, pageSize = 250) {
 }
 
 export function periodOf(question, today = dateSP(new Date().toISOString())) {
-  const q = normalizeText(question);
+  const q = normalizeText(question).replace(/\b(ano(?:\s+de)?\s+|em\s+)(\d{2})\b(?![.,/\-]\d|\s+de\s+(?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b)/g, (_, prefix, abbreviatedYear) => prefix + '20' + abbreviatedYear);
   const [year, month] = today.split('-');
   const years = [...new Set(q.match(/\b(?:19|20)\d{2}\b/g) ?? [])];
   if (!years.length && /\bano (passado|anterior)\b/.test(q)) years.push(String(Number(year) - 1));
@@ -98,7 +98,7 @@ function unitOf(question) {
   return '';
 }
 
-export function financialIntent(question, today) {
+export function financialIntent(question, today, chart = officialChartOfAccounts) {
   const q = clean(question);
   if (/\b(?:quanto custa|passagem aerea|clima|previsao do tempo|receita culinaria)\b/.test(q)) return null;
   const unit = unitOf(question);
@@ -108,9 +108,63 @@ export function financialIntent(question, today) {
   if (/^(?:(?:por favor|voce pode|pode) )?(?:classifique|classificar|reclassifique|reclassificar)\b/.test(q)) {
     return { kind: 'classification', unit, periods };
   }
+  const hasPlan = /\b(?:plano de contas|conta contabil|codigo contabil|classificacao contabil|contas do plano|todas as contas)\b/.test(q);
+  const hasExpense = /\b(?:gastamos|gastei|gastos?|despesas?|pagamos)\b/.test(q);
+  const hasRevenue = /\b(?:recebemos|recebido|recebida|recebimentos?|receitas?|honorarios)\b/.test(q);
+  const category = hasExpense === hasRevenue ? '' : hasExpense ? 'Despesa' : 'Receita';
+  const wantsAmount = /\b(?:quanto|quantia|total|valor|saldo|movimentos?|lancamentos?|gastos?|gastamos|gastei|recebemos|comparar|compare)\b/.test(q);
+  const lookupByName = /\b(?:o que e|qual e|explique)\b/.test(q)
+    && selectAccounts(question, chart, category, { partial: false }).entries.length > 0;
+  const classificationHelp = /\b(?:como classific\w*|qual conta (?:uso|utilizo|escolho)|em qual conta classific\w*)\b/.test(q);
+  const catalogLookup = classificationHelp || (!wantsAmount && (lookupByName || hasPlan || chartCodes(question, chart).length
+    || /\b(?:qual|quais|qual e|o que e|quantas) (?:a |as )?(?:conta|contas|classificacao|grupo)\b/.test(q)));
+  if (catalogLookup) {
+    const selection = selectAccounts(question, chart, category);
+    if (!selection.entries.length && !selection.unknown.length && category !== 'Receita') {
+      const alias = aliases.find(item => item.words.test(q));
+      if (alias) selection.entries = chart.filter(account => alias.codes.includes(account.code));
+    }
+    const listing = /\b(?:liste|lista|mostrar|mostre|todas|todos|quais contas)\b/.test(q);
+    if (!selection.entries.length && !selection.unknown.length && hasPlan && !/\b(?:de|para) (?:contabilizar|classificar)\b/.test(q)) {
+      if (listing) selection.entries = chart.filter(account => !category || account.category === category);
+    }
+    const countOnly = /\b(?:quantas|quantos)\b/.test(q);
+    return { kind: 'plan', chart, selection, listing, countOnly, suggest: !countOnly && !selection.entries.length && !selection.unknown.length ? { category } : null };
+  }
   if (/\b(?:como|onde|qual o prazo)\b/.test(q) && !/\bquanto\b/.test(q)) return null;
-  if (!/\b(?:quanto|quantos|quantas|qual|quais|liste|mostre|total|resumo|compare|recebido)\b/.test(q)) return null;
-  if (/\b(?:repasse|repasses|comissao|comissoes|previsto|previstos|pendente|pendentes|aprovacao|confirmadas|devolvidas|rejeitadas|aguardando)\b/.test(q) && !/sem classificacao/.test(q)) return null;
+  if (!/\b(?:quanto|quantos|quantas|qual|quais|liste|mostre|total|resumo|compare|recebido|gasto|saldo)\b/.test(q)) return null;
+  const pendingOnly = /sem classificacao/.test(q);
+  if (wantsAmount && !pendingOnly && !/\b(?:repasse|repasses|previst[oa]s?|aguardando|rejeitad[oa]s?|devolvid[oa]s?|aprovacao)\b/.test(q)) {
+    const explicitAccount = hasPlan || /\b(?:na conta|da conta|nas contas|das contas|por conta|por codigo|por categoria)\b/.test(q);
+    const selection = selectAccounts(question, chart, category, { partial: (type === 'todos' || explicitAccount) && !aliases.some(item => item.words.test(q)) });
+    if (selection.unknown.length || selection.ambiguous) return { kind: 'plan', chart, selection };
+    if (selection.entries.length) {
+      const leaves = selectedLeaves(chart, selection.entries);
+      const requestedDre = /\b(?:na|pela|da|do) dre\b/.test(q);
+      const queries = [];
+      for (const [category, kind] of [['Despesa', 'expense'], ['Receita', 'revenue']]) {
+        const categoryLeaves = leaves.filter(account => account.category === category);
+        if (!categoryLeaves.length) continue;
+        const entries = selection.entries.filter(entry => entry.category === category);
+        const managerialExpense = kind === 'expense' && !explicitAccount && !chartCodes(question, chart).length
+          && categoryLeaves.every(account => account.dre && account.dre !== excludedGroup);
+        queries.push({
+          kind, periods, unit, selection: { ...selection, entries }, leaves: categoryLeaves,
+          basis: requestedDre || managerialExpense ? 'dre' : 'account',
+          feesOnly: kind === 'revenue' && /\bhonorarios\b/.test(q),
+        });
+      }
+      if (queries.length > 1) return { kind: 'mixed', queries };
+      if (queries.length) return queries[0];
+      return { kind: 'plan', chart, selection, noLedger: true };
+    }
+    const colloquialExpense = hasExpense && /\b(?:gastamos|gastei|gastos?|pagamos)(?:.*)\bcom\b/.test(q) && !aliases.some(item => item.words.test(q));
+    const colloquialRevenue = hasRevenue && type === 'todos' && /\b(?:recebemos|recebido)(?:.*)\bcom\b/.test(q);
+    if ((explicitAccount && !/\b(?:por conta|por categoria|todas as contas)\b/.test(q)) || colloquialExpense || colloquialRevenue) {
+      return { kind: 'plan', chart, selection, suggest: { category, wantsAmount: true, periods, unit } };
+    }
+  }
+  if (/\b(?:repasse|repasses|comissao|comissoes|previsto|previstos|pendente|pendentes|aprovacao|confirmadas|devolvidas|rejeitadas|aguardando)\b/.test(q) && !pendingOnly) return null;
   if (/\b(?:recebemos|recebido|recebida|recebimentos?|receitas?|honorarios)\b/.test(q) || (type !== 'todos' && /\btrabalhist\w*/.test(q))) {
     return { kind: 'revenue', type, periods, unit, feesOnly: /\bhonorarios\b/.test(q), laborOnly: /\btrabalhist\w*/.test(q) || type === 'ambos' };
   }
@@ -118,9 +172,46 @@ export function financialIntent(question, today) {
   const codes = accountCodes(question);
   const labelsInQuestion = labels.filter(label => contains(q, clean(label)));
   const alias = aliases.find(item => item.words.test(q));
-  const kind = codes.length || labelsInQuestion.length || alias || /\b(?:gastamos|despesas|despesa|dre|gastos|pago|pagamos)\b/.test(q);
+  const kind = codes.length || labelsInQuestion.length || alias || /\b(?:gastamos|gastei|gastos?|despesas?|dre|pago|pagamos)\b/.test(q);
   if (!kind || /\b(?:o que foi|quais despesas foram) pag/.test(q)) return null;
-  return { kind: 'expense', periods, unit, codes, label: labelsInQuestion[0], alias, pendingOnly: /sem classificacao/.test(q), ranking: /\b(?:maiores|ranking)\b/.test(q) };
+  return { kind: 'expense', periods, unit, codes, label: labelsInQuestion[0], alias, pendingOnly: /sem classificacao/.test(q), ranking: /\b(?:maiores|ranking|por conta|por categoria)\b/.test(q) || (alias?.codes.length ?? 0) > 1 };
+}
+
+export function financialRequest(question, today, chart = officialChartOfAccounts) {
+  const intent = financialIntent(question, today, chart);
+  if (intent?.kind === 'classification') return intent;
+
+  const normalized = normalizeText(question);
+  const separators = /[?;\n]+|\be\s+(?=(?:quanto|qual|quais|a mesma coisa|despesas|receitas|gastos)\b)|,\s*(?=(?:quanto|qual|quais|a mesma coisa)\b)/g;
+  const queryKind = query => query?.kind === 'plan' && query.suggest?.wantsAmount
+    ? ({ Despesa: 'expense', Receita: 'revenue' }[query.suggest.category])
+    : query?.kind;
+  let mixed = null;
+  for (const divider of normalized.matchAll(separators)) {
+    const firstText = question.slice(0, divider.index).trim();
+    const secondText = question.slice(divider.index + divider[0].length).trim();
+    if (!firstText || !secondText) continue;
+    const first = financialIntent(firstText, today, chart);
+    const firstKind = queryKind(first);
+    if (!['expense', 'revenue'].includes(firstKind)) continue;
+    const second = financialIntent(secondText, today, chart)
+      ?? (/^a mesma coisa\b/.test(clean(secondText)) ? financialIntent('Total ' + secondText, today, chart) : null);
+    const secondKind = queryKind(second);
+    if (!['expense', 'revenue'].includes(secondKind) || firstKind === secondKind) continue;
+    const firstPeriod = first.periods ?? first.suggest?.periods;
+    const secondPeriod = second.periods ?? second.suggest?.periods;
+    const candidate = {
+      kind: 'mixed',
+      queries: [
+        { ...first, periods: firstPeriod ?? secondPeriod, question: firstText },
+        { ...second, periods: secondPeriod ?? firstPeriod, question: secondText },
+      ],
+    };
+    const revenue = firstKind === 'revenue' ? first : second;
+    if (intent?.kind !== 'revenue' || revenue.type === intent.type) return candidate;
+    mixed ??= candidate;
+  }
+  return mixed ?? intent;
 }
 
 export function expenseRow(id, record, classification) {
@@ -129,7 +220,7 @@ export function expenseRow(id, record, classification) {
   const title = String(record.fornecedor ?? record.nome ?? 'Despesa');
   const history = items.map(item => String(item.historico ?? '').trim()).filter(Boolean);
   const description = [record.nome, record.fornecedor, record.categoria, record.subcategoria, record.descricao, record.observacoes, ...history].filter(Boolean).join(' · ');
-  return { id, date, title, description, amount: cents(record.valorTotal), unit: String(record.unidade ?? 'RJ'), status: status(record.status), classification };
+  return { id, date, title, description, amount: cents(record.valorTotal), unit: String(record.unidade ?? 'RJ'), status: status(record.status), classification, sourceAccountCode: String(record.expenseAccountCode || record.classificacaoContabil || '') };
 }
 
 export function validClassification(row) {
@@ -152,9 +243,15 @@ export function expenseSummary(rows, intent) {
       || expenseAccounts.some(account => account.name === intent.label && (c.accountCode === account.code || c.accountCode.startsWith(account.code + '.')));
     return !intent.alias || intent.alias.codes.includes(c.accountCode);
   };
+  const selected = intent.leaves && new Map(intent.leaves.map(account => [account.code, account]));
+  const matchedRows = selected ? inRange.flatMap(row => {
+    const confirmed = row.classification?.confirmed ? row.classification : null;
+    const account = selected.get(confirmed?.accountCode || row.sourceAccountCode);
+    if (!account || (intent.basis === 'dre' && !validClassification(row))) return [];
+    return [{ ...row, label: account.name }];
+  }) : inRange.filter(row => validClassification(row) && matches(row));
   return {
-    rows: intent.pendingOnly ? pending : inRange.filter(row => validClassification(row) && matches(row)),
-    pending,
+    rows: intent.pendingOnly ? pending : matchedRows, pending,
     undated: eligible.filter(row => !row.date).length,
   };
 }
@@ -198,18 +295,21 @@ const totalsBy = (rows, key) => {
 
 export function renderFinancial(intent, rows, pending = [], undated = 0) {
   const revenue = intent.kind === 'revenue';
-  const title = revenue ? (intent.feesOnly ? 'Honorários recebidos' : 'Recebimentos confirmados') : intent.pendingOnly ? 'Despesas sem classificação' : 'Despesas na DRE por competência';
+  const title = intent.leaves && intent.basis === 'account'
+    ? (revenue ? (intent.feesOnly ? 'Honorários recebidos por conta contábil' : 'Recebimentos por conta contábil') : 'Despesas por conta contábil')
+    : revenue ? (intent.basis === 'dre' ? 'Receitas na DRE por competência' : intent.feesOnly ? 'Honorários recebidos' : 'Recebimentos confirmados')
+      : intent.pendingOnly ? 'Despesas sem classificação' : 'Despesas na DRE por competência';
   const scope = intent.periods?.map(range => `${shownDate(range.from)} a ${shownDate(range.to)}`).join(' e ') || 'Todo o período registrado';
-  const filter = intent.label || intent.codes?.join(', ') || (intent.alias ? expenseAccounts.filter(account => intent.alias.codes.includes(account.code)).map(account => account.name).join(' e ') : '');
+  const filter = intent.selection?.entries.map(entry => text(entry.name)).join(' · ') || intent.label || intent.codes?.join(', ') || (intent.alias ? expenseAccounts.filter(account => intent.alias.codes.includes(account.code)).map(account => account.name).join(' e ') : '');
   const lines = [`## ${title}`, '', [scope, intent.unit, filter].filter(Boolean).join(' · '), ''];
-  if (revenue && !intent.feesOnly) lines.push('Valores brutos efetivamente recebidos. Os honorários do escritório aparecem à parte.', '');
+  if (revenue && !intent.feesOnly && intent.basis !== 'dre') lines.push('Valores brutos efetivamente recebidos. Os honorários do escritório aparecem à parte.', '');
   lines.push(rows.length ? `**Total: ${money(total(rows))}** · ${rows.length} ${revenue ? 'recebimento(s)' : 'lançamento(s)'}` : 'Nenhum lançamento encontrado para esses critérios.', '');
-  if (revenue && !intent.feesOnly && rows.length) lines.push(`**Honorários registrados: ${money(rows.reduce((sum, row) => sum + row.fees, 0))}**`, '');
-  if (revenue || intent.ranking) {
-    const group = row => revenue ? row.label : text(row.classification?.accountName || row.classification?.accountCode);
+  if (revenue && !intent.feesOnly && intent.basis !== 'dre' && rows.length) lines.push(`**Honorários registrados: ${money(rows.reduce((sum, row) => sum + row.fees, 0))}**`, '');
+  if (revenue || intent.ranking || intent.leaves) {
+    const group = row => row.label || text(row.classification?.accountName || row.classification?.accountCode);
     for (const [label, value] of [...totalsBy(rows, group)].sort((a, b) => b[1] - a[1])) lines.push(`- ${label}: ${money(value)}`);
   }
-  if (!revenue && !intent.pendingOnly) lines.push('', `**Sem classificação em todo o período consultado:** ${pending.length} despesa(s) elegível(is), ${money(total(pending))}.`);
+  if (!revenue && !intent.pendingOnly) lines.push('', `**Sem classificação gerencial confirmada em todo o período consultado:** ${pending.length} despesa(s) elegível(is), ${money(total(pending))}.`);
   if (undated) lines.push('', `${undated} registro(s) sem data válida ficaram fora do cálculo.`);
   if (rows.length) {
     const years = [...totalsBy(rows, row => row.date.slice(0, 4))].sort();
@@ -226,7 +326,7 @@ export function renderFinancial(intent, rows, pending = [], undated = 0) {
       lines.push(`- ${m}/${y}: ${money(value)}${byOrigin ? ' · ' + byOrigin : ''}`);
     }
   }
-  lines.push('', revenue ? '[Abrir Receitas](/alvaras)' : '[Abrir DRE Gerencial](/dre-gerencial) · [Abrir Despesas](/despesas)');
+  lines.push('', revenue && intent.basis === 'dre' ? '[Abrir DRE Gerencial](/dre-gerencial) · [Abrir Receitas](/alvaras)' : revenue ? '[Abrir Receitas](/alvaras)' : '[Abrir DRE Gerencial](/dre-gerencial) · [Abrir Despesas](/despesas)');
   return lines.join('\n');
 }
 
@@ -237,20 +337,21 @@ export function financialDetails(rows) {
   }));
 }
 
-export function classificationTarget(question) {
+export function classificationTarget(question, chart = officialChartOfAccounts) {
   const q = clean(question);
   const parts = normalizeText(question).split(/\b(?:como|para (?:a )?conta|na conta|em despesa de|em conta)\b/);
   const destination = parts.length > 1 ? parts.at(-1) : '';
-  const codes = accountCodes(question);
+  const codes = chartCodes(question, chart);
   if (codes.length > 1) return null;
-  const leaves = expenseAccounts.filter(account => account.kind === 'account' && account.dre && account.dre !== excludedGroup);
+  const expensePlan = chart.filter(account => account.category === 'Despesa');
+  const leaves = expensePlan.filter(account => account.kind === 'account' && account.dre && account.dre !== excludedGroup);
   const named = leaves.filter(account => contains(clean(destination), clean(account.name))).sort((a, b) => b.name.length - a.name.length);
   const alias = aliases.find(item => item.words.test(clean(destination)));
-  const indicated = named[0]?.code ?? (alias?.codes.length === 1 ? alias.codes[0] : '');
+  const resolved = destination && !codes.length ? selectAccounts(destination, leaves, 'Despesa') : null;
+  const indicated = named[0]?.code ?? (alias?.codes.length === 1 ? alias.codes[0] : resolved?.entries.length === 1 ? resolved.entries[0].code : '');
   if (codes[0] && indicated && codes[0] !== indicated) return null;
   const account = leaves.find(item => item.code === (codes[0] || indicated));
-  const group = labels.find(label => {
-    if (!expenseAccounts.some(item => item.dre === label)) return false;
+  const group = [...new Set(expensePlan.map(item => item.dre).filter(Boolean))].find(label => {
     const plural = clean(label);
     const singular = plural.split(' ').map(word => word.length > 4 ? word.replace(/s$/, '') : word).join(' ');
     return contains(q, plural) || contains(q, singular);

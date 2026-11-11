@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   classificationMatches, classificationTarget, expenseRow, expenseSummary, filterPeriod, financialDetails,
-  financialIntent, periodOf, readAll, renderFinancial, revenueRows, sumFinancial,
+  financialIntent, financialRequest, periodOf, readAll, renderFinancial, revenueRows, sumFinancial,
 } from '../financial-query.js';
 
 const today = '2026-11-11';
@@ -75,4 +75,36 @@ test('receitas trabalhistas usam data efetiva, tipo e parcela, sem somar valores
     { ...acordo, status: 'rascunho' }].flatMap(record => revenueRows(record, intent)), intent.periods);
   assert.equal(sumFinancial(rows), 210000);
   assert.deepEqual(rows.map(row => [row.label, row.fees]), [['Alvarás trabalhistas', 30000], ['Acordos trabalhistas', 36000]]);
+});
+
+
+test('entende o ano abreviado sem confundir dia ou código contábil com ano', () => {
+  const year = [{ from: '2026-01-01', to: '2026-12-31' }];
+  assert.deepEqual(periodOf('Qual foi nosso gasto com eletricidade no ano de 26?', today), year);
+  assert.deepEqual(periodOf('Quanto gastamos em 26 de eletricidade?', today), year);
+  assert.deepEqual(periodOf('Quanto gastamos em 26/10/2025?', today), [{ from: '2025-10-26', to: '2025-10-26' }]);
+  assert.equal(periodOf('Quanto gastamos na conta 4.05.26?', today), null);
+});
+
+test('separa recebimentos e despesas na mesma pergunta e herda o período omitido', () => {
+  const request = financialRequest('Qual foi o valor recebido no ano de 26 de acordos trabalhistas e qual foi o valor de alvarás? A mesma coisa na despesa, qual foi nosso gasto de eletricidade e conta de luz no RJ?', today);
+  assert.equal(request.kind, 'mixed');
+  const [revenue, expense] = request.queries;
+  assert.equal(revenue.kind, 'revenue');
+  assert.equal(revenue.type, 'ambos');
+  assert.equal(revenue.unit, '');
+  assert.equal(expense.kind, 'expense');
+  assert.equal(expense.unit, 'RJ');
+  assert.deepEqual(expense.alias.codes, ['4.07.05']);
+  assert.deepEqual(expense.periods, [{ from: '2026-01-01', to: '2026-12-31' }]);
+  assert.deepEqual(revenue.periods, expense.periods);
+});
+
+test('preserva períodos distintos e a ordem dos pedidos de despesas e receitas', () => {
+  const request = financialRequest('Qual foi o nosso gasto com conta de luz em 2025 e quanto recebemos de alvarás trabalhistas no ano 26?', today);
+  assert.deepEqual(request.queries.map(q => [q.kind, q.periods[0].from]), [['expense', '2025-01-01'], ['revenue', '2026-01-01']]);
+  const single = financialRequest('Qual foi o valor recebido no ano de 26 de acordos trabalhistas e qual foi o valor de alvarás?', today);
+  assert.equal(single.kind, 'revenue');
+  assert.equal(single.type, 'ambos');
+  assert.equal(single.periods[0].from, '2026-01-01');
 });
