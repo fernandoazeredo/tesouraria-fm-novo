@@ -33,7 +33,7 @@ test('soma e diferença exatas, com sinal e maior item', () => {
   assert.equal(r.diferenca, 140);
   assert.match(r.answer, /R\$\s?500,00/);
   assert.match(r.answer, /R\$\s?140,00/);
-  assert.match(r.answer, /Energia elétrica foi maior/);
+  assert.match(r.answer, /O valor de Energia elétrica ficou R\$\s?140,00 acima do valor de Telefone/);
   const d = renderArithmetic({ operacao: 'diferenca', itens: plan.itens }, [0.1 + 0.2, 0.3]);
   assert.equal(d.diferenca, 0);
 });
