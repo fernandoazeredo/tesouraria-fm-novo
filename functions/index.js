@@ -4,7 +4,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue, FieldPath } from 'firebase-admin/firestore';
 import { isMasterClaim, isAppQuestion, safeRecord, selectedCollections, SCOPES, APPROVAL_SOURCES, APPROVAL_DECIDED, buildApprovalQueue, approvalTotals, dateSP, isChangeRequest, validateProposal, buildDiff, sameValues, redactSensitive, WRITABLE_COLLECTIONS } from './ai-core.js';
 import { SYSTEM_KNOWLEDGE } from './knowledge.js';
-import { financialIntent, readAll } from './financial-query.js';
+import { financialRequest, readAll } from './financial-query.js';
 import { changeClassification, proposeClassification, runFinancial } from './financial-actions.js';
 
 initializeApp();
@@ -38,7 +38,7 @@ export const executiveAiAsk=onCall({
   const userSnap=await db.collection('users').doc(request.auth.uid).get();
   if(!isMasterClaim(token,userSnap.data())) throw new HttpsError('permission-denied','IA exclusiva do Administrador Master principal com e-mail verificado.');
   const question=String(request.data?.question||'').trim();
-  const intent=financialIntent(question);
+  const intent=financialRequest(question);
   if(question.length<5 || question.length>500 || (!intent && !isAppQuestion(question))) throw new HttpsError('invalid-argument','Pergunte apenas sobre os módulos, lançamentos e regras do Tesouraria FM Novo (5 a 500 caracteres).');
   await rateLimit(request.auth.uid);
   if(intent?.kind==='classification') return proposeClassification(db,{question,intent,uid:request.auth.uid,expiresAtMs:Date.now()+PROPOSAL_TTL_MS});

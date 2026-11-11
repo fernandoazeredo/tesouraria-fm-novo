@@ -25,6 +25,16 @@ function reply(answer, source, rows) {
 }
 
 export async function runFinancial(db, intent) {
+  if (intent.kind === 'mixed') {
+    const results = await Promise.all(intent.queries.map(query => runFinancial(db, query)));
+    return {
+      answer: results.map(result => result.answer).join('\n\n'),
+      consultedAt: new Date().toISOString(),
+      sources: results.flatMap(result => result.sources),
+      details: results.flatMap(result => result.details),
+      disclaimer: 'Receitas seguem a data efetiva do recebimento. Despesas seguem a competência da DRE.',
+    };
+  }
   if (intent.periods?.length === 0) return reply('Informe um período válido para a consulta.', null, []);
   if (intent.kind === 'revenue') {
     const docs = await readAll(ordered(db, 'receivables'));

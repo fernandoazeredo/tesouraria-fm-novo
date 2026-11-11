@@ -28,7 +28,7 @@ export async function readAll(query, pageSize = 250) {
 }
 
 export function periodOf(question, today = dateSP(new Date().toISOString())) {
-  const q = normalizeText(question);
+  const q = normalizeText(question).replace(/\b(ano(?:\s+de)?\s+|em\s+)(\d{2})\b(?![.,/\-]\d|\s+de\s+(?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b)/g, (_, prefix, abbreviatedYear) => prefix + '20' + abbreviatedYear);
   const [year, month] = today.split('-');
   const years = [...new Set(q.match(/\b(?:19|20)\d{2}\b/g) ?? [])];
   if (!years.length && /\bano (passado|anterior)\b/.test(q)) years.push(String(Number(year) - 1));
@@ -118,9 +118,39 @@ export function financialIntent(question, today) {
   const codes = accountCodes(question);
   const labelsInQuestion = labels.filter(label => contains(q, clean(label)));
   const alias = aliases.find(item => item.words.test(q));
-  const kind = codes.length || labelsInQuestion.length || alias || /\b(?:gastamos|despesas|despesa|dre|gastos|pago|pagamos)\b/.test(q);
+  const kind = codes.length || labelsInQuestion.length || alias || /\b(?:gastamos|gastei|gastos?|despesas?|dre|pago|pagamos)\b/.test(q);
   if (!kind || /\b(?:o que foi|quais despesas foram) pag/.test(q)) return null;
   return { kind: 'expense', periods, unit, codes, label: labelsInQuestion[0], alias, pendingOnly: /sem classificacao/.test(q), ranking: /\b(?:maiores|ranking)\b/.test(q) };
+}
+
+export function financialRequest(question, today) {
+  const intent = financialIntent(question, today);
+  if (intent?.kind === 'classification') return intent;
+
+  const normalized = normalizeText(question);
+  const separators = /[?;\n]+|\be\b|,\s*(?=(?:quanto|qual|quais|a mesma coisa)\b)/g;
+  let mixed = null;
+  for (const divider of normalized.matchAll(separators)) {
+    const firstText = question.slice(0, divider.index).trim();
+    const secondText = question.slice(divider.index + divider[0].length).trim();
+    if (!firstText || !secondText) continue;
+    const first = financialIntent(firstText, today);
+    if (!first || !['expense', 'revenue'].includes(first.kind)) continue;
+    const second = financialIntent(secondText, today)
+      ?? (/^a mesma coisa\b/.test(clean(secondText)) ? financialIntent('Total ' + secondText, today) : null);
+    if (!second || !['expense', 'revenue'].includes(second.kind) || first.kind === second.kind) continue;
+    const candidate = {
+      kind: 'mixed',
+      queries: [
+        { ...first, periods: first.periods ?? second.periods },
+        { ...second, periods: second.periods ?? first.periods },
+      ],
+    };
+    const revenue = first.kind === 'revenue' ? first : second;
+    if (intent?.kind !== 'revenue' || revenue.type === intent.type) return candidate;
+    mixed ??= candidate;
+  }
+  return mixed ?? intent;
 }
 
 export function expenseRow(id, record, classification) {
