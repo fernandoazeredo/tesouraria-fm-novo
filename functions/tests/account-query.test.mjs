@@ -97,3 +97,10 @@ test('orienta a classificação e informa os totais do cadastro por natureza', a
   assert.match(count.answer, /202 códigos.*19 grupos e 183 contas finais/);
   assert.match(count.answer, /Receita: 22.*Despesa: 137.*Patrimonial \/ Dívida: 24/);
 });
+
+test('reconhece conta no singular quando o plano está no plural', async () => {
+  const { classificationTarget } = await import('../financial-query.js');
+  const { officialChartOfAccounts } = await import('../chart-of-accounts.js');
+  assert.equal(classificationTarget('Classifique a despesa do fornecedor X como Material de Escritório', officialChartOfAccounts)?.code, '4.05.20');
+  assert.equal(classificationTarget('Classifique a despesa da Light como Energia Elétrica', officialChartOfAccounts)?.code, '4.07.05');
+});
