@@ -103,7 +103,10 @@ export function financialIntent(question, today, chart = officialChartOfAccounts
   if (/\b(?:quanto custa|passagem aerea|clima|previsao do tempo|receita culinaria)\b/.test(q)) return null;
   const unit = unitOf(question);
   const periods = periodOf(question, today);
-  const type = /\bacordos?\b/.test(q) && /\balvaras?\b/.test(q) ? 'ambos'
+  // "outras receitas" junto com alvarás/acordos = todas as origens (separadas por tipo na resposta).
+  const others = /\boutras? receitas?\b|\bdemais receitas\b|\btodas as receitas\b/.test(q);
+  const type = others ? 'todos'
+    : /\bacordos?\b/.test(q) && /\balvaras?\b/.test(q) ? 'ambos'
     : /\bacordos?\b/.test(q) ? 'acordo' : /\balvaras?\b/.test(q) ? 'alvara' : 'todos';
   if (/^(?:(?:por favor|voce pode|pode) )?(?:classifique|classificar|reclassifique|reclassificar)\b/.test(q)) {
     return { kind: 'classification', unit, periods };
