@@ -31,7 +31,15 @@ export function chartCodes(question, chart) {
 }
 
 const stop = new Set('a as o os ao aos um uma de da do das dos e com em para por na no nas nos s sobre quanto quantas qual quais que foi foram nosso nossas este ano mes total valor valores despesa despesas receitas receita recebimento recebimentos recebemos gasto gastos gastamos gastei pagamos conta contas codigo codigos grupo plano dre classificacao contabil gerencial lista liste mostre consulte unidade escritorio rj sp jan fev mar abr mai jun jul ago set out nov dez janeiro fevereiro marco abril maio junho julho agosto setembro outubro novembro dezembro trabalhista trabalhistas acordo acordos alvara alvaras'.split(' '));
-const token = word => word.length > 4 ? word.replace(/s$/, '') : word;
+// Singular aproximado do português: materiais→material, papéis→papel, serviços→serviço, emissões→emissão.
+const token = word => {
+  if (word.length <= 4) return word;
+  if (/ais$/.test(word)) return word.slice(0, -3) + 'al';
+  if (/eis$/.test(word)) return word.slice(0, -3) + 'el';
+  if (/(?:oes|aes)$/.test(word)) return word.slice(0, -3) + 'ao';
+  if (/ns$/.test(word)) return word.slice(0, -2) + 'm';
+  return word.replace(/s$/, '');
+};
 const contentWords = text => [...new Set(words(text).split(' ').filter(word => /^[a-z]{3,}$/.test(word) && !stop.has(word)).map(token))];
 
 export function selectAccounts(question, chart, category = '', { partial = true } = {}) {
