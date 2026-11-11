@@ -2,14 +2,16 @@
 // A IA só decompõe a pergunta em itens; os valores e as contas vêm do motor financeiro.
 import { normalizeText } from './ai-core.js';
 
-const ARITH = /\b(?:somad[oa]s?|somar|somando|some|soma|juntos|juntas|ao todo|no total|total de|adicionad[oa]s?|diferenca|menos|subtrai\w*|subtrac\w*|descontad[oa]s?|descontando|a mais (?:que|do que)|a menos (?:que|do que)|compar\w*|versus|x)\b/;
+// Operações explícitas: bastam para disparar o cálculo.
+const STRONG = /\b(?:somad[oa]s?|somar|somando|some|soma|juntos|juntas|diferenca|menos|subtrai\w*|subtrac\w*|descontad[oa]s?|descontando|a mais (?:que|do que)|a menos (?:que|do que)|compar\w*|versus)\b/;
+// Indícios fracos: só valem quando a pergunta liga dois assuntos ("e" ou vírgula).
+const WEAK = /\b(?:ao todo|no total|total de|adicionad[oa]s?|mais|x)\b/;
 
 /** Pergunta que pede um cálculo entre dois ou mais valores (soma, diferença ou comparação). */
 export function isArithmeticQuestion(question) {
   const q = normalizeText(question);
-  if (!ARITH.test(q)) return false;
-  // Precisa haver pelo menos dois assuntos ligados por "e", "mais", "menos", "com" ou vírgula.
-  return /\b(?:e|mais|menos|com|versus|x)\b|,/.test(q.replace(ARITH, ' '));
+  if (STRONG.test(q)) return true;
+  return WEAK.test(q) && /\be\b|,/.test(q);
 }
 
 const brl = value => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
