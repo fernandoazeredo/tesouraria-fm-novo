@@ -48,8 +48,8 @@ export function renderArithmetic(plan, values) {
     result.diferenca = round(values[0] - values[1]);
     lines.push(`- **Diferença:** ${plan.itens[0].rotulo} − ${plan.itens[1].rotulo} = **${brl(result.diferenca)}**`);
     if (result.diferenca !== 0) {
-      const maior = result.diferenca > 0 ? plan.itens[0].rotulo : plan.itens[1].rotulo;
-      lines.push('', `${maior} foi maior em ${brl(Math.abs(result.diferenca))}.`);
+      const [maior, menor] = result.diferenca > 0 ? [plan.itens[0].rotulo, plan.itens[1].rotulo] : [plan.itens[1].rotulo, plan.itens[0].rotulo];
+      lines.push('', `O valor de ${maior} ficou ${brl(Math.abs(result.diferenca))} acima do valor de ${menor}.`);
     }
   }
   return { answer: lines.join('\n'), ...result };
