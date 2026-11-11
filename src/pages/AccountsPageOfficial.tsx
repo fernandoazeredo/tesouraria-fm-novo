@@ -7,6 +7,8 @@ import {
   OFFICIAL_CHART_OF_ACCOUNTS_SOURCE,
   OFFICIAL_CHART_OF_ACCOUNTS_VERSION,
   officialChartOfAccounts,
+  categoryFromCode,
+  storedToChart,
   type ChartOfAccount,
 } from '../data/chartOfAccounts'
 
@@ -18,29 +20,6 @@ const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base'
 
 function normalized(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-}
-
-function categoryFromCode(code: string): ChartOfAccount['category'] {
-  if (code.startsWith('3.')) return 'Receita'
-  if (code.startsWith('4.')) return 'Despesa'
-  return 'Patrimonial / Dívida'
-}
-
-function storedToChart(item: StoredAccount): ChartOfAccount | null {
-  const code = String(item.code ?? '')
-  const name = String(item.name ?? '')
-  if (!code || !name) return null
-  return {
-    code,
-    name,
-    dre: item.dre ? String(item.dre) : null,
-    parentCode: item.parentCode ? String(item.parentCode) : null,
-    level: Number(item.level ?? code.split('.').length),
-    kind: item.kind === 'group' ? 'group' : 'account',
-    category: ['Receita', 'Despesa', 'Patrimonial / Dívida'].includes(String(item.category))
-      ? item.category as ChartOfAccount['category']
-      : categoryFromCode(code),
-  }
 }
 
 function parseTxt(text: string): ChartOfAccount[] {
