@@ -1,7 +1,8 @@
 /** Pure, read-only cash-flow classification logic. No Firebase calls. */
 export type RecordRow = { id: string } & Record<string, any>
 export type Movement = { id: string; origin: string; description: string; date: string; value: number; direction: 'entrada' | 'saida'; stage: 'realizado' | 'previsto'; bank: 'itau' | 'outro' | 'indefinido'; observation?: string; treasuryDate?: string; alternativeDate?: boolean }
-const bankOf = (raw: unknown): Movement['bank'] => raw === 'itau' || raw === 'itau-pj' ? 'itau' : raw === 'bb' || raw === 'bb-pf' || raw === 'cef' || raw === 'cef-pf' ? 'outro' : 'indefinido'
+// Itaú PJ = escopo do caixa; qualquer outra conta cadastrada em Configurações = outra conta; sem conta = indefinido.
+const bankOf = (raw: unknown): Movement['bank'] => raw === 'itau' || raw === 'itau-pj' ? 'itau' : typeof raw === 'string' && raw.trim() ? 'outro' : 'indefinido'
 const dateOf = (raw: unknown) => { const value = typeof raw === 'string' ? raw.slice(0, 10) : ''; return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '' }
 const timestampDate = (raw: unknown) => { if (!raw || typeof raw !== 'object') return ''; const v = raw as {toDate?: () => Date; seconds?: number}; const d = typeof v.toDate === 'function' ? v.toDate() : typeof v.seconds === 'number' ? new Date(v.seconds * 1000) : null; return d && !Number.isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : '' }
 const numberOf = (raw: unknown) => { const value = Number(raw); return Number.isFinite(value) && value > 0 ? value : 0 }
