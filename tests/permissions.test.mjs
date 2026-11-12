@@ -7,24 +7,28 @@ test('Master oficial não perde acesso mesmo se desmarcado',()=>{
   assert.equal(effectiveView('auditoria','master',admin,config('auditoria',false),admin,director),true)
   assert.equal(effectiveView('configuracoes','master',admin,config('configuracoes',false),admin,director),true)
 })
-test('Auditoria e administração não podem ser concedidas a outro perfil',()=>{
-  for(const id of ['auditoria','usuarios','utilitarios','configuracoes'])
-    assert.equal(effectiveView(id,'diretor',director,config(id,true),admin,director),false)
+test('Administração: padrão só do Fernando, mas ele pode liberar',()=>{
+  for(const id of ['auditoria','usuarios','utilitarios','configuracoes']){
+    assert.equal(effectiveView(id,'diretor',director,null,admin,director),false)
+    assert.equal(effectiveView(id,'diretor',director,config(id,true),admin,director),true)
+  }
 })
 test('Plano de Contas pode ser concedido como consulta a usuários ativos',()=>{
   assert.equal(firestoreViewSupported('plano_contas','operador'),true)
   assert.equal(effectiveView('plano_contas','operador','operador@example.test',config('plano_contas',true),admin,director),true)
   assert.equal(effectiveView('plano_contas','operador','operador@example.test',null,admin,director),false)
 })
-test('Módulos incompatíveis com Rules não são liberados para operador',()=>{
+test('Operador: módulos fora do padrão ficam trancados, mas o Fernando pode liberar',()=>{
   for(const id of ['repasse_alvaras','repasse_societario','comissoes','nota_fiscal','contabilidade','calendario','conciliacao']){
-    assert.equal(firestoreViewSupported(id,'operador'),false)
-    assert.equal(effectiveView(id,'operador','operador@example.test',config(id,true),admin,director),false)
+    assert.equal(firestoreViewSupported(id,'operador'),true)
+    assert.equal(effectiveView(id,'operador','operador@example.test',null,admin,director),false)
+    assert.equal(effectiveView(id,'operador','operador@example.test',config(id,true),admin,director),true)
   }
 })
-test('Fluxo de Caixa permanece restrito às duas contas oficiais',()=>{
+test('Fluxo de Caixa: padrão Fernando e Flávio, Fernando pode liberar',()=>{
   assert.equal(effectiveView('fluxo_caixa','diretor',director,null,admin,director),true)
-  assert.equal(effectiveView('fluxo_caixa','diretor','outro@example.test',config('fluxo_caixa',true),admin,director),false)
+  assert.equal(effectiveView('fluxo_caixa','gerente','reinaldo@marquesemuller.adv.br',null,admin,director),false)
+  assert.equal(effectiveView('fluxo_caixa','tesouraria','socorro@marquesemuller.adv.br',config('fluxo_caixa',true),admin,director),true,'Fernando decide')
 })
 test('Aprovações podem ser decididas apenas por Master e Diretor oficiais',()=>{
   assert.equal(canDecideApproval('master',admin,admin,director),true)
@@ -54,21 +58,27 @@ test('Reinaldo acessa somente Receitas, Repasse de Alvarás, Comissões e Aprova
 })
 test('Aprovações são consultáveis por todos; Socorro não decide',()=>{
   for(const [role,email] of [['tesouraria','socorro@marquesemuller.adv.br'],['gerente','reinaldo@marquesemuller.adv.br'],['operador','operador@example.test']]){
-    assert.equal(effectiveView('aprovacoes',role,email,config('aprovacoes',false),admin,director),true)
+    assert.equal(effectiveView('aprovacoes',role,email,null,admin,director),true)
+    assert.equal(effectiveView('aprovacoes',role,email,config('aprovacoes',false),admin,director),false,'Fernando pode trancar')
     assert.equal(canDecideApproval(role,email,admin,director),false)
   }
 })
 
 test('Flávio vê tudo, exceto DRE, Plano de Contas, Contabilidade, administração, Documentos e Conciliação',()=>{
-  const blocked=['dre','plano_contas','contabilidade','usuarios','auditoria','utilitarios','configuracoes','documentos','conciliacao']
+  const blocked=['ia','dre','plano_contas','contabilidade','usuarios','auditoria','utilitarios','configuracoes','documentos','conciliacao']
   for(const id of Object.keys(defaultRoles)){
     assert.equal(effectiveView(id,'diretor',director,null,admin,director),!blocked.includes(id),id)
   }
   assert.equal(effectiveView('dre','diretor',director,config('dre',true),admin,director),true,'Fernando pode liberar')
-  assert.equal(effectiveView('usuarios','diretor',director,config('usuarios',true),admin,director),false,'administração é só do Fernando')
 })
 
 test('Permissões pré-login são gravadas por e-mail',async()=>{
   const { pendingPermissionDocId } = await import('../src/lib/permissionCatalog.ts')
   assert.equal(pendingPermissionDocId(' Reinaldo@MarquesEMuller.adv.br '),'email:reinaldo@marquesemuller.adv.br')
+})
+
+test('IA Executiva só do Fernando por padrão; Fernando pode liberar para qualquer perfil',()=>{
+  assert.equal(effectiveView('ia','master',admin,null,admin,director),true)
+  assert.equal(effectiveView('ia','tesouraria','socorro@marquesemuller.adv.br',null,admin,director),false)
+  assert.equal(effectiveView('ia','tesouraria','socorro@marquesemuller.adv.br',config('ia',true),admin,director),true)
 })
