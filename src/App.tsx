@@ -32,7 +32,7 @@ import {
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { collection, doc, getDoc, onSnapshot, serverTimestamp, writeBatch } from 'firebase/firestore'
 import { db } from './lib/firebase'
-import { effectiveView, modulePaths, type ModuleId, type PermissionDocument } from './lib/permissionCatalog'
+import { effectiveView, modulePaths, pendingPermissionDocId, type ModuleId, type PermissionDocument } from './lib/permissionCatalog'
 import { PermissionsPanel } from './components/PermissionsPanel'
 import { isValidCNPJ } from './lib/cpfCnpjValidator'
 import { useAuth, PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL, type UserRole } from './auth/AuthContext'
@@ -363,11 +363,14 @@ function AppShell() {
   useEffect(() => {
     if (!profile?.uid) { setPermissionDoc(null); setPermissionsLoaded(false); return }
     setPermissionDoc(null); setPermissionsLoaded(false)
-    return onSnapshot(doc(db, 'userPermissions', profile.uid), snapshot => {
-      setPermissionDoc(snapshot.exists() ? snapshot.data() as PermissionDocument : null)
-      setPermissionsLoaded(true)
-    }, () => { setPermissionDoc(null); setPermissionsLoaded(true) })
-  }, [profile?.uid])
+    // Permissões por usuário (uid) têm prioridade; antes disso vale o que o Fernando configurou pelo e-mail.
+    let byUid: PermissionDocument | null | undefined
+    let byEmail: PermissionDocument | null | undefined = profile.email ? undefined : null
+    const sync = () => { if (byUid === undefined || byEmail === undefined) return; setPermissionDoc(byUid ?? byEmail ?? null); setPermissionsLoaded(true) }
+    const stopUid = onSnapshot(doc(db, 'userPermissions', profile.uid), snapshot => { byUid = snapshot.exists() ? snapshot.data() as PermissionDocument : null; sync() }, () => { byUid = null; sync() })
+    const stopEmail = profile.email ? onSnapshot(doc(db, 'userPermissions', pendingPermissionDocId(profile.email)), snapshot => { byEmail = snapshot.exists() ? snapshot.data() as PermissionDocument : null; sync() }, () => { byEmail = null; sync() }) : () => {}
+    return () => { stopUid(); stopEmail() }
+  }, [profile?.uid, profile?.email])
   const pathToId = new Map<string, ModuleId>(Object.entries(modulePaths).map(([id, path]) => [path, id as ModuleId]))
   const canOpen = (path: string) => {
     if (!permissionsLoaded || !profile) return false
