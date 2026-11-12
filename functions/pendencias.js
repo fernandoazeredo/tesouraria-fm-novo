@@ -1,5 +1,6 @@
 // Pendências do escritório com o responsável pela regra do fluxo e quem lançou (Auditoria/login).
-// Regras: aprovação = Master ou Diretor; Tesouraria = perfil Tesouraria; classificação na DRE = somente o Master;
+// Regras: aprovação = Master ou Diretor; Tesouraria (Socorro) = pagamentos e comprovantes;
+// Jurídico (Reinaldo) = receitas/alvarás, repasse de alvarás e comissões; classificação na DRE = somente o Master (Fernando);
 // rascunho/devolvido = quem lançou o item.
 import { normalizeText, redactSensitive } from './ai-core.js';
 
@@ -23,10 +24,12 @@ export function responsibleGroups(users) {
   const master = names(['master']);
   const approvers = names(['master', 'diretor', 'diretoria']);
   const treasury = names(['tesouraria']);
+  const legal = names(['gerente']);
   const label = (title, list) => list.length ? `${title} (${[...new Set(list)].join(', ')})` : title;
   return {
     aprovacao: { key: 'aprovacao', label: label('Aprovação — Master ou Diretor', approvers), names: approvers },
-    tesouraria: { key: 'tesouraria', label: label('Tesouraria', treasury), names: treasury },
+    tesouraria: { key: 'tesouraria', label: label('Tesouraria — pagamentos e comprovantes', treasury), names: treasury },
+    juridico: { key: 'juridico', label: label('Jurídico — receitas, repasses e comissões', legal), names: legal },
     master: { key: 'master', label: label('Master — classificação na DRE', master), names: master },
   };
 }
@@ -38,6 +41,8 @@ export function buildPendencias({ expenses = [], receivables = [], obligations =
   const days = data => { const since = sinceOf(data); return since ? Math.max(0, Math.floor((now - since) / DAY)) : null; };
   const author = data => safe(data?.createdByName || data?.userName || '', 40) || 'não registrado';
   const owner = data => ({ key: 'autor', label: `Quem lançou (${author(data)})`, names: [author(data)] });
+  const legalOwner = data => (author(data) === 'não registrado' ? groups.juridico : owner(data));
+  const hasProof = data => (Array.isArray(data?.attachments) && data.attachments.length > 0) || Number(data?.attachmentCount) > 0;
   const push = (responsavel, pendencia, item, valor, data, link) =>
     rows.push({ responsavel, pendencia, item: safe(item) || '—', valor: num(valor), lancadoPor: author(data), dias: days(data), link });
 
@@ -49,6 +54,7 @@ export function buildPendencias({ expenses = [], receivables = [], obligations =
     else if (st === 'devolvido') push(owner(data), 'Despesa devolvida — corrigir e reenviar', title, value, data, '/despesas');
     else if (['enviado_aprovacao', 'em_analise'].includes(st)) push(groups.aprovacao, 'Despesa aguardando aprovação', title, value, data, '/aprovacoes');
     else if (st === 'aprovado') push(groups.tesouraria, 'Despesa aprovada — efetuar o pagamento', title, value, data, '/despesas');
+    else if (['pago', 'arquivado'].includes(st) && !hasProof(data)) push(groups.tesouraria, 'Despesa paga sem comprovante anexado', title, value, data, '/despesas');
     if (['aprovado', 'pago', 'arquivado'].includes(st) && !validClass(classMap.get(`expense__${id}`))) {
       push(groups.master, 'Despesa sem classificação na DRE', title, value, data, '/dre-gerencial');
     }
@@ -57,15 +63,17 @@ export function buildPendencias({ expenses = [], receivables = [], obligations =
     const st = String(data?.status || '');
     const title = data?.processo ? `Processo ${data.processo}` : (data?.descricaoOrigem || data?.descricao || data?.origem || 'Receita');
     const value = data?.valorAlvara;
-    if (st === 'rascunho') push(owner(data), 'Receita em rascunho — enviar à Tesouraria', title, value, data, '/alvaras');
-    else if (st === 'devolvido') push(owner(data), 'Receita devolvida — corrigir e reenviar', title, value, data, '/alvaras');
+    if (st === 'rascunho') push(legalOwner(data), 'Receita em rascunho — enviar à Tesouraria', title, value, data, '/alvaras');
+    else if (st === 'devolvido') push(legalOwner(data), 'Receita devolvida — corrigir e reenviar', title, value, data, '/alvaras');
     else if (st === 'enviado_tesouraria') push(groups.tesouraria, 'Receita aguardando confirmação do recebimento', title, value, data, '/tesouraria');
   }
   for (const { type, path, data } of obligations) {
     const st = String(data?.status || '');
     const title = data?.beneficiary || data?.processo || type;
     const value = data?.netAmountDue ?? data?.amountDue ?? data?.approvedValue ?? data?.transferValue;
-    if (st === 'aguardando_aprovacao') push(groups.aprovacao, `${type} aguardando aprovação`, title, value, data, '/aprovacoes');
+    const legalFlow = path === '/comissoes-agentes' || path === '/repasse-alvaras';
+    if (['rascunho', 'devolvido', 'devolvida'].includes(st) && legalFlow) push(legalOwner(data), `${type} ${st === 'rascunho' ? 'em rascunho — enviar para aprovação' : 'devolvido — corrigir e reenviar'}`, title, value, data, path);
+    else if (st === 'aguardando_aprovacao') push(groups.aprovacao, `${type} aguardando aprovação`, title, value, data, '/aprovacoes');
     else if (['aprovado', 'aprovada'].includes(st)) push(groups.tesouraria, `${type} aprovado — efetuar o pagamento`, title, value, data, path);
   }
   return { rows, groups };
