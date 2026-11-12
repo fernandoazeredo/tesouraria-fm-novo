@@ -10,7 +10,7 @@ export const modulePaths = {
   fluxo_caixa: '/fluxo-caixa', conciliacao: '/conciliacao-bancaria',
   documentos: '/documentos', usuarios: '/usuarios',
   auditoria: '/auditoria', utilitarios: '/utilitarios',
-  configuracoes: '/configuracoes',
+  configuracoes: '/configuracoes', ia: '/ia',
 } as const
 export type ModuleId = keyof typeof modulePaths
 export type ViewGrant = { ver?: boolean; fazer?: Record<string, boolean> }
@@ -38,14 +38,22 @@ export const defaultRoles: Record<ModuleId, readonly string[]> = {
   conciliacao:['master','diretor','gerente','tesouraria'],
   documentos:['master','diretor','gerente','tesouraria','operador'],
   usuarios:['master'],auditoria:['master'],utilitarios:['master'],configuracoes:['master'],
+  ia:['master'],
 }
+const ALL_ROLES = ['master','diretor','gerente','tesouraria','operador'] as const
+/** Perfis aos quais o Fernando pode liberar o módulo (compatível com as Rules). Sem entrada = mesmo que o padrão. */
+const grantableRoles: Partial<Record<ModuleId, readonly string[]>> = {
+  plano_contas: ALL_ROLES, ia: ALL_ROLES,
+  fluxo_caixa: ['master','diretor','gerente','tesouraria'],
+}
+export const canGrant = (id: ModuleId, role: string) => (grantableRoles[id] ?? defaultRoles[id]).includes(role)
 const REINALDO = 'reinaldo@marquesemuller.adv.br'
 const SOCORRO = 'socorro@marquesemuller.adv.br'
 const FLAVIO = 'flavio.marques@marquesemuller.adv.br'
 /** Reinaldo (Jurídico): todas as receitas/alvarás, repasse de alvarás e comissões de agentes. */
 export const REINALDO_MODULES: readonly ModuleId[] = ['receitas', 'repasse_alvaras', 'comissoes', 'aprovacoes']
 /** Flávio (Diretor): tudo, exceto IA, DRE, Plano de Contas, Contabilidade, administração, Documentos e Conciliação. */
-export const FLAVIO_BLOCKED: readonly ModuleId[] = ['dre', 'plano_contas', 'contabilidade', 'usuarios', 'auditoria', 'utilitarios', 'configuracoes', 'documentos', 'conciliacao']
+export const FLAVIO_BLOCKED: readonly ModuleId[] = ['ia', 'dre', 'plano_contas', 'contabilidade', 'usuarios', 'auditoria', 'utilitarios', 'configuracoes', 'documentos', 'conciliacao']
 /** Padrão por pessoa (definido pelo Fernando). Só vale enquanto o Fernando não marcar/desmarcar o módulo em Configurações. */
 export function personDefaultBlocked(id: ModuleId, rawEmail: string) {
   const e = rawEmail.trim().toLowerCase()
@@ -61,8 +69,8 @@ export function effectiveView(id: ModuleId, role: string, email: string, config:
   // A fila de Aprovações é visível para todos os perfis ativos, nunca decisória por esse motivo.
   if (id === 'aprovacoes') return true
   if (['auditoria','usuarios','configuracoes','utilitarios'].includes(id)) return false
-  if (id === 'fluxo_caixa' && !(role === 'diretor' && e === directorEmail)) return false
-  if (!defaultRoles[id].includes(role) && id !== 'plano_contas') return false // Sem concessões incompatíveis com as Rules atuais.
+  void directorEmail
+  if (!canGrant(id, role)) return false // Sem concessões incompatíveis com as Rules atuais.
   const configured = config?.modules?.[id]?.ver
   if (typeof configured === 'boolean') return configured
   if (personDefaultBlocked(id, e)) return false
@@ -77,5 +85,5 @@ export function canDecideApproval(role: string, email: string, masterEmail: stri
 /** Documento de permissões salvo antes do primeiro acesso (por e-mail). */
 export const pendingPermissionDocId = (email: string) => 'email:' + email.trim().toLowerCase()
 export function firestoreViewSupported(id: ModuleId, role: string) {
-  return id === 'plano_contas' || defaultRoles[id].includes(role)
+  return canGrant(id, role)
 }
