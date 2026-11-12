@@ -241,7 +241,9 @@ service cloud.firestore {
     }
 
     match /userPermissions/{userId} {
-      allow read: if signedIn() && (request.auth.uid == userId || (isPrimaryAdminEmail() && hasRole(['master'])));
+      allow read: if signedIn() && (request.auth.uid == userId
+        || (request.auth.token.email != null && userId == 'email:' + request.auth.token.email.lower())
+        || (isPrimaryAdminEmail() && hasRole(['master'])));
       allow create, update: if masterRestoreMode() ||
         (isPrimaryAdminEmail() && hasRole(['master'])
           && request.resource.data.keys().hasOnly(['schemaVersion', 'modules', 'updatedBy', 'updatedAt'])
