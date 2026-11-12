@@ -5,7 +5,7 @@ import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage
 import { FileText, Plus, Send, Upload, X } from 'lucide-react'
 import { db, storage } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
-import { DEFAULT_BANK_ACCOUNT_ID, getBankAccount, type BankAccount } from '../data/bankAccounts'
+import { DEFAULT_BANK_ACCOUNT_ID, getBankAccount, useBankAccounts, type BankAccount } from '../data/bankAccounts'
 import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -103,6 +103,7 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
   const [outrasDeducoesDescricao, setOutrasDeducoesDescricao] = useState('')
   const [dataRepassePerito, setDataRepassePerito] = useState('')
   const [receivingBankAccountId, setReceivingBankAccountId] = useState<BankAccount['id']>(DEFAULT_BANK_ACCOUNT_ID)
+  const bankOptions = useBankAccounts()
   const [files, setFiles] = useState<File[]>([])
 
   useEffect(() => setParcelas((current) => buildParcelas(quantidadeParcelas, current)), [quantidadeParcelas])
@@ -274,7 +275,7 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
       <label className="span-2"><span>Forma de Recebimento</span><input value={formaRecebimento} onChange={(e) => setFormaRecebimento(e.target.value)} /></label>
       <label><span>Valor bruto do acordo</span><MoneyInput value={valorAcordoBruto} onChange={setValorAcordoBruto} ariaLabel="Valor bruto do acordo" validationKey="acordo-valor-bruto" /></label>
       <label><span>Número de parcelas</span><input type="number" min="1" max="60" value={quantidadeParcelas} onChange={(e) => setQuantidadeParcelas(Math.min(60, Math.max(1, Number(e.target.value) || 1)))} /></label>
-      <label className="span-2"><span>Conta de recebimento do escritório</span><select value={receivingBankAccountId} onChange={(e) => setReceivingBankAccountId(e.target.value as BankAccount['id'])}>{(['itau-pj','bb-pf','cef-pf'] as BankAccount['id'][]).map((id) => { const account = getBankAccount(id); return <option key={id} value={id}>{account.bank} · Ag. {account.agency} · C/C {account.account}</option> })}</select></label>
+      <label className="span-2"><span>Conta de recebimento do escritório</span><select value={getBankAccount(receivingBankAccountId).id} onChange={(e) => setReceivingBankAccountId(e.target.value as BankAccount['id'])}>{bankOptions.map(({ id }) => { const account = getBankAccount(id); return <option key={id} value={id}>{account.bank} · Ag. {account.agency} · C/C {account.account}</option> })}</select></label>
     </div>
 
     <h3 className="form-section-title">Parcelas e Datas de Recebimento</h3>

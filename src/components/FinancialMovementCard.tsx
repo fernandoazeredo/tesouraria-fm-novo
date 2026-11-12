@@ -1,5 +1,5 @@
 import { Landmark } from 'lucide-react'
-import { BANK_ACCOUNTS, getBankAccount, type BankAccount } from '../data/bankAccounts'
+import { bankAccountLabel, getBankAccount, useBankAccounts, type BankAccount } from '../data/bankAccounts'
 import { useInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import '../financial-movement.css'
 
@@ -27,8 +27,10 @@ export function FinancialMovementCard({
   onPaymentMethodChange,
 }: FinancialMovementCardProps) {
   const institutional = useInstitutionalSettings()
+  const active = useBankAccounts()
   const selected = getBankAccount(bankAccountId)
-  const holder = selected.holderType === 'PJ' ? institutional.razaoSocial : selected.holder
+  const options = active.some((account) => account.id === selected.id) ? active : [selected, ...active]
+  const holder = selected.holderType === 'PJ' && !selected.holder ? institutional.razaoSocial : selected.holder
   const isReceipt = mode === 'receipt'
 
   return <section className={`financial-movement-card ${isReceipt ? 'is-receipt' : 'is-payment'}`}>
@@ -43,8 +45,8 @@ export function FinancialMovementCard({
     <div className="financial-movement-grid">
       <label className="financial-bank-select">
         <span>{isReceipt ? 'Conta de recebimento' : 'Conta de pagamento'}</span>
-        <select value={bankAccountId} onChange={(event) => onBankAccountChange(event.target.value as BankAccount['id'])}>
-          {BANK_ACCOUNTS.map((account) => <option key={account.id} value={account.id}>{account.bank} — Ag. {account.agency} — C/C {account.account}</option>)}
+        <select value={selected.id} onChange={(event) => onBankAccountChange(event.target.value as BankAccount['id'])}>
+          {options.map((account) => <option key={account.id} value={account.id}>{bankAccountLabel(account)}</option>)}
         </select>
       </label>
 

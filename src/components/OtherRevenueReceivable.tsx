@@ -5,7 +5,7 @@ import { FilePlus2, Send, Upload, X } from 'lucide-react'
 import { db, storage } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
 import { useInstitutionalSettings } from '../hooks/useInstitutionalSettings'
-import { DEFAULT_BANK_ACCOUNT_ID, getBankAccount, type BankAccount } from '../data/bankAccounts'
+import { DEFAULT_BANK_ACCOUNT_ID, getBankAccount, useBankAccounts, type BankAccount } from '../data/bankAccounts'
 import { officialChartOfAccounts } from '../data/chartOfAccounts'
 import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 
@@ -69,6 +69,7 @@ function OtherRevenueModal({ onClose }: { onClose: () => void }) {
   const [valor, setValor] = useState(0)
   const [descricao, setDescricao] = useState('')
   const [receivingBankAccountId, setReceivingBankAccountId] = useState<BankAccount['id']>(DEFAULT_BANK_ACCOUNT_ID)
+  const bankOptions = useBankAccounts()
   const [accountCode, setAccountCode] = useState('')
   const [files, setFiles] = useState<File[]>([])
 
@@ -184,7 +185,7 @@ function OtherRevenueModal({ onClose }: { onClose: () => void }) {
         <label><span>Valor</span><MoneyInput value={valor} onChange={setValor} validationKey="other-value" /></label>
         <label className="span-3"><span>Descrição / Origem</span><input data-required-key="other-description" value={descricao} onChange={(event) => setDescricao(event.target.value)} placeholder="Ex.: Aporte de sócio, reembolso, rendimento de aplicação" /></label>
         <label className="span-3"><span>Conta Gerencial</span><select data-required-key="other-account" value={accountCode} onChange={(event) => setAccountCode(event.target.value)}><option value="">Selecione a conta gerencial</option>{OTHER_REVENUE_ACCOUNTS.map((account) => <option key={account.code} value={account.code}>{account.code} - {account.name}</option>)}</select></label>
-        <label className="span-3"><span>Conta de recebimento</span><select value={receivingBankAccountId} onChange={(event) => setReceivingBankAccountId(event.target.value as BankAccount['id'])}>{(['itau-pj', 'bb-pf', 'cef-pf'] as BankAccount['id'][]).map((id) => { const account = getBankAccount(id); return <option key={id} value={id}>{account.bank} · Ag. {account.agency} · C/C {account.account} · {account.holder}</option> })}</select></label>
+        <label className="span-3"><span>Conta de recebimento</span><select value={getBankAccount(receivingBankAccountId).id} onChange={(event) => setReceivingBankAccountId(event.target.value as BankAccount['id'])}>{bankOptions.map(({ id }) => { const account = getBankAccount(id); return <option key={id} value={id}>{account.bank} · Ag. {account.agency} · C/C {account.account} · {account.holder}</option> })}</select></label>
       </div>
 
       <div className="other-revenue-account-hint">
