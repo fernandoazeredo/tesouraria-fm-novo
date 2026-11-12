@@ -38,10 +38,10 @@ test('Sem configuração, módulo usa padrão do perfil',()=>{
   assert.equal(defaultRoles['receitas'].includes('operador'),true)
 })
 
-test('Socorro não recebe Plano de Contas nem por concessão explícita',()=>{
+test('Socorro sem Plano de Contas por padrão; Fernando pode liberar',()=>{
   const socorro='socorro@marquesemuller.adv.br'
   assert.equal(effectiveView('plano_contas','tesouraria',socorro,null,admin,director),false)
-  assert.equal(effectiveView('plano_contas','tesouraria',socorro,config('plano_contas',true),admin,director),false)
+  assert.equal(effectiveView('plano_contas','tesouraria',socorro,config('plano_contas',true),admin,director),true,'Fernando pode liberar')
 })
 
 test('Reinaldo acessa somente Receitas, Repasse de Alvarás, Comissões e Aprovações, sem poder decidir',()=>{
@@ -49,7 +49,7 @@ test('Reinaldo acessa somente Receitas, Repasse de Alvarás, Comissões e Aprova
   for(const id of Object.keys(defaultRoles)){
     assert.equal(effectiveView(id,'gerente',email,null,admin,director),['receitas','repasse_alvaras','comissoes','aprovacoes'].includes(id),id)
   }
-  assert.equal(effectiveView('despesas','gerente',email,config('despesas',true),admin,director),false)
+  assert.equal(effectiveView('despesas','gerente',email,config('despesas',true),admin,director),true,'Fernando pode liberar')
   assert.equal(canDecideApproval('gerente',email,admin,director),false)
 })
 test('Aprovações são consultáveis por todos; Socorro não decide',()=>{
@@ -62,6 +62,13 @@ test('Aprovações são consultáveis por todos; Socorro não decide',()=>{
 test('Flávio vê tudo, exceto DRE, Plano de Contas, Contabilidade, administração, Documentos e Conciliação',()=>{
   const blocked=['dre','plano_contas','contabilidade','usuarios','auditoria','utilitarios','configuracoes','documentos','conciliacao']
   for(const id of Object.keys(defaultRoles)){
-    assert.equal(effectiveView(id,'diretor',director,config(id,true),admin,director),!blocked.includes(id),id)
+    assert.equal(effectiveView(id,'diretor',director,null,admin,director),!blocked.includes(id),id)
   }
+  assert.equal(effectiveView('dre','diretor',director,config('dre',true),admin,director),true,'Fernando pode liberar')
+  assert.equal(effectiveView('usuarios','diretor',director,config('usuarios',true),admin,director),false,'administração é só do Fernando')
+})
+
+test('Permissões pré-login são gravadas por e-mail',async()=>{
+  const { pendingPermissionDocId } = await import('../src/lib/permissionCatalog.ts')
+  assert.equal(pendingPermissionDocId(' Reinaldo@MarquesEMuller.adv.br '),'email:reinaldo@marquesemuller.adv.br')
 })
