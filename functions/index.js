@@ -8,6 +8,7 @@ import { modelAccountSelection } from './account-query.js';
 import { financialRequest, readAll } from './financial-query.js';
 import { changeClassification, proposeClassification, readActiveChart, runFinancial } from './financial-actions.js';
 import { isArithmeticQuestion, normalizePlan, renderArithmetic, totalOf } from './financial-math.js';
+import { buildPanorama, isPanoramaQuestion } from './panorama.js';
 
 initializeApp();
 const db=getFirestore();
@@ -46,6 +47,9 @@ export const executiveAiAsk=onCall({
   const chart=await readActiveChart(db);
   const intent=financialRequest(question,undefined,chart);
   if(!intent && !isAppQuestion(question)) throw invalidQuestion();
+  if(intent?.kind!=='classification' && isPanoramaQuestion(question)) {
+    return buildPanorama(db,question,{resolveFinancial,runFinancial,chart});
+  }
   if(intent?.kind!=='classification' && isArithmeticQuestion(question)) {
     const computed=await arithmeticAnswer(question,chart);
     if(computed) return computed;
