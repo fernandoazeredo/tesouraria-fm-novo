@@ -35,6 +35,7 @@ import { db } from './lib/firebase'
 import { migratePendingPermissions } from './lib/pendingPermissions'
 import { effectiveView, modulePaths, pendingPermissionDocId, type ModuleId, type PermissionDocument } from './lib/permissionCatalog'
 import { PermissionsPanel } from './components/PermissionsPanel'
+import { BankAccountsPanel } from './components/BankAccountsPanel'
 import { isValidCNPJ } from './lib/cpfCnpjValidator'
 import { useAuth, PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL, type UserRole } from './auth/AuthContext'
 import { TreasuryPage } from './pages/SystemPages'
@@ -288,6 +289,7 @@ function Configuracoes() {
     <>
       <div className="page-heading"><div><span className="eyebrow">Administração Master</span><h1>Configurações</h1><p>Dados institucionais utilizados pelo aplicativo.</p></div></div>
       <PermissionsPanel />
+      <BankAccountsPanel />
       <section className="page-card">
         <span className="eyebrow">Dados institucionais</span>
         <h2>Configurações do Aplicativo</h2>
