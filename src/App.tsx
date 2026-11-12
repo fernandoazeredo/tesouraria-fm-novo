@@ -193,7 +193,7 @@ function LoginScreen() {
           </div>
         </section>
         <section className="auth-card">
-          <div className="auth-access-icon"><ShieldCheck size={26} /></div>
+          <img className="auth-globe" src="/login-globe.gif" alt="" aria-hidden="true" />
           <span className="eyebrow">Acesso ao sistema</span>
           <h2>{mode === 'login' ? 'Bem-vindo de volta!' : 'Solicitar acesso'}</h2>
           <p className="auth-helper">{mode === 'login' ? 'Entre com seu e-mail corporativo ou sua conta Google para acessar sua conta.' : 'Todo novo cadastro fica Pendente até a liberação do Administrador Master.'}</p>

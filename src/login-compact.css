@@ -479,3 +479,18 @@
   outline: 2px solid #1766d8;
   outline-offset: 1px;
 }
+
+/* Animação (globo) no topo do card de acesso */
+.auth-page.login-light-only .auth-globe {
+  display: block;
+  width: 100%;
+  max-width: 220px;
+  aspect-ratio: 477 / 354;
+  object-fit: cover;
+  margin: 0 auto 18px;
+  border-radius: 18px;
+  box-shadow: 0 10px 30px rgba(6, 24, 58, 0.25);
+}
+@media (max-height: 820px) {
+  .auth-page.login-light-only .auth-globe { max-width: 170px; margin-bottom: 12px; }
+}
