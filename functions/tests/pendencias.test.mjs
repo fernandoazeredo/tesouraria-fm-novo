@@ -27,7 +27,7 @@ test('pendências com responsável pela regra e quem lançou', () => {
   const find = text => rows.find(r => r.pendencia.includes(text));
   assert.match(find('aguardando aprovação').responsavel.label, /Fernando Azeredo, Flávio Marques/);
   assert.equal(find('aguardando aprovação').dias, 2);
-  assert.match(find('efetuar o pagamento').responsavel.label, /Tesouraria \(Dona Socorro\)/);
+  assert.match(find('efetuar o pagamento').responsavel.label, /Tesouraria — pagamentos e comprovantes \(Dona Socorro\)/);
   assert.ok(!find('efetuar o pagamento').responsavel.label.includes('Bloqueado'));
   assert.match(find('devolvida').responsavel.label, /Quem lançou \(Ana\)/);
   assert.match(find('confirmação do recebimento').responsavel.label, /Dona Socorro/);
@@ -62,4 +62,18 @@ test('filtra "pendências da Tesouraria"', () => {
   const t = filterFor(rows, 'Pendências da Tesouraria', '');
   assert.equal(t.rows.length, 1);
   assert.match(t.rows[0].pendencia, /efetuar o pagamento/);
+});
+
+test('Jurídico (Reinaldo) responde por receitas, repasses e comissões; Socorro por comprovantes', () => {
+  const team = [...users, { displayName: 'Reinaldo', role: 'gerente', status: 'active' }];
+  const { rows } = buildPendencias({ users: team, now,
+    expenses: [{ id: 'p', data: { status: 'pago', fornecedor: 'Light', valorTotal: 320 } }],
+    receivables: [{ id: 'r', data: { status: 'rascunho', processo: '999', valorAlvara: 1000 } }],
+    obligations: [{ type: 'Repasse de alvará', path: '/repasse-alvaras', data: { status: 'devolvido', beneficiary: 'Cliente Y', transferValue: 400 } }],
+    classMap: new Map([['expense__p', { confirmed: true, accountCode: '4.05.28', accountDre: 'Despesas Administrativas' }]]) });
+  const find = text => rows.find(r => r.pendencia.includes(text));
+  assert.match(find('sem comprovante').responsavel.label, /Tesouraria — pagamentos e comprovantes \(Dona Socorro\)/);
+  assert.match(find('Receita em rascunho').responsavel.label, /Jurídico — receitas, repasses e comissões \(Reinaldo\)/);
+  assert.match(find('Repasse de alvará devolvido').responsavel.label, /Jurídico.*Reinaldo/);
+  assert.equal(filterFor(rows, 'Pendências do Jurídico', '').rows.length, 2);
 });
