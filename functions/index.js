@@ -28,6 +28,14 @@ async function rateLimit(uid) {
     tx.set(ref,{count:count+1,updatedAt:FieldValue.serverTimestamp()}, {merge:true});
   });
 }
+/** Consulta liberada pelo Fernando em Configurações (userPermissions.modules.ia.ver). Alterações seguem exclusivas do Master. */
+async function iaGranted(uid,token,profile){
+  if(!profile || profile.status!=='active') return false;
+  const email=token?.email_verified===true ? String(token?.email||'').trim().toLowerCase() : '';
+  const byUid=await db.collection('userPermissions').doc(uid).get();
+  const doc=byUid.exists ? byUid : (email ? await db.collection('userPermissions').doc('email:'+email).get() : null);
+  return doc?.exists===true && doc.data()?.modules?.ia?.ver===true;
+}
 export const executiveAiAsk=onCall({
   region:'southamerica-east1', memory:'512MiB', timeoutSeconds:150, maxInstances:3,
   enforceAppCheck:false, secrets:[geminiKey],
@@ -39,7 +47,7 @@ export const executiveAiAsk=onCall({
   const token=request.auth?.token;
   if(!request.auth) throw new HttpsError('unauthenticated','Entre na sua conta para consultar.');
   const userSnap=await db.collection('users').doc(request.auth.uid).get();
-  if(!isMasterClaim(token,userSnap.data())) throw new HttpsError('permission-denied','IA exclusiva do Administrador Master principal com e-mail verificado.');
+  if(!isMasterClaim(token,userSnap.data()) && !(await iaGranted(request.auth.uid,token,userSnap.data()))) throw new HttpsError('permission-denied','IA Executiva não liberada para este usuário. Peça ao Fernando em Configurações.');
   const question=String(request.data?.question||'').trim();
   const invalidQuestion=()=>new HttpsError('invalid-argument','Pergunte apenas sobre os módulos, lançamentos e regras do Tesouraria FM Novo (5 a 500 caracteres).');
   if(question.length<5 || question.length>500) throw invalidQuestion();
