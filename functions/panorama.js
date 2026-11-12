@@ -4,11 +4,51 @@ import { FieldPath } from 'firebase-admin/firestore';
 import { normalizeText, APPROVAL_SOURCES, APPROVAL_DECIDED, buildApprovalQueue, approvalTotals, dateSP } from './ai-core.js';
 import { periodOf, readAll } from './financial-query.js';
 import { totalOf } from './financial-math.js';
+import { buildPendencias, filterFor, renderPendencias } from './pendencias.js';
 
 const PANORAMA = /\b(?:resumo (?:completo|geral|do dia|da semana|do mes|de hoje|dos movimentos|financeiro)|panorama|visao (?:geral|completa)|como (?:esta|estamos|ficou|ficamos)(?: o escritorio| o financeiro)?(?: hoje| nesta data| esta semana| este mes)?|tudo de uma (?:unica )?vez|movimentos (?:de hoje|do dia|desta data|nesta data))\b/;
 
 export function isPanoramaQuestion(question) {
   return PANORAMA.test(normalizeText(question));
+}
+
+const PENDING = /\b(?:o que (?:esta|tenho|ha|temos|falta)(?: de)? pendente|pendencias|pendente[s]? para|minhas pendencias|o que (?:eu )?(?:tenho|preciso) (?:que )?fazer|quem (?:e|esta) responsavel)\b/;
+/** "O que está pendente?", "pendências da Tesouraria", "o que está pendente para mim?". */
+export function isPendingQuestion(question) {
+  return PENDING.test(normalizeText(question));
+}
+
+/** Lê os módulos e devolve as pendências com responsáveis (todos os períodos). */
+export async function loadPendencias(db, { uid } = {}) {
+  const all = name => readAll(db.collection(name).orderBy(FieldPath.documentId())).then(docs => docs.map(doc => ({ id: doc.id, data: doc.data() })));
+  const [expenses, receivables, classes, users, commissions, transfers, societary] = await Promise.all([
+    all('expenses'), all('receivables'), all('managerialClassifications'), all('users'),
+    all('agentCommissions'), all('alvaraTransfers'), all('societaryTransfers'),
+  ]);
+  const obligations = [
+    ...commissions.map(item => ({ type: 'Comissão de agente', path: '/comissoes-agentes', data: item.data })),
+    ...transfers.map(item => ({ type: 'Repasse de alvará', path: '/repasse-alvaras', data: item.data })),
+    ...societary.map(item => ({ type: 'Repasse societário', path: '/repasse-societario', data: item.data })),
+  ];
+  const result = buildPendencias({
+    expenses, receivables, obligations,
+    classMap: new Map(classes.map(item => [item.id, item.data])),
+    users: users.map(item => item.data),
+  });
+  const me = users.find(item => item.id === uid)?.data;
+  return { ...result, currentUserName: me?.displayName || me?.name || '' };
+}
+
+export async function buildPendingAnswer(db, question, { uid } = {}) {
+  const { rows, currentUserName } = await loadPendencias(db, { uid });
+  const filtered = filterFor(rows, question, currentUserName);
+  return {
+    answer: renderPendencias(filtered.rows, { target: filtered.target ? (filtered.target === normalizeText(currentUserName) ? `para você (${currentUserName})` : `para ${filtered.target}`) : '' }),
+    consultedAt: new Date().toISOString(),
+    sources: [{ modulo: 'Pendências', caminho: '/aprovacoes', parcial: false, registros: filtered.rows.length }],
+    details: [],
+    disclaimer: 'Responsáveis pela regra do fluxo e pelo perfil no cadastro de Usuários; "lançado por" vem do registro do lançamento (login).',
+  };
 }
 
 const brl = value => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
@@ -49,7 +89,7 @@ export function renderPanorama({ label, entradas, saidas, approvals, tesouraria,
 }
 
 /** Calcula o resumo usando as mesmas consultas do restante da IA. */
-export async function buildPanorama(db, question, { resolveFinancial, runFinancial, chart, now = new Date() }) {
+export async function buildPanorama(db, question, { resolveFinancial, runFinancial, chart, now = new Date(), uid }) {
   const today = dateSP(now.toISOString());
   const { range, label, phrase } = panoramaPeriod(question, today);
   const [revIntent, expIntent] = await Promise.all([
@@ -77,12 +117,14 @@ export async function buildPanorama(db, question, { resolveFinancial, runFinanci
   const entradas = { total: totalOf(revenue) };
   const saidas = { total: totalOf(expenses) };
   const { answer } = renderPanorama({ label, entradas, saidas, approvals, tesouraria, alertas });
+  const pend = await loadPendencias(db, { uid });
+  const pendencias = renderPendencias(pend.rows);
   const detail = [
     revenue ? `---\n\n### Entradas em detalhe\n\n${revenue.answer}` : '',
     expenses ? `---\n\n### Saídas em detalhe\n\n${expenses.answer}` : '',
   ].filter(Boolean).join('\n\n');
   return {
-    answer: `${answer}\n\n${detail}`.trim(),
+    answer: `${answer}\n\n${pendencias}\n\n${detail}`.trim(),
     consultedAt: new Date().toISOString(),
     sources: [...(revenue?.sources ?? []), ...(expenses?.sources ?? []), { modulo: 'Aprovações', caminho: '/aprovacoes', parcial: false, registros: approvals.pendentes_quantidade }],
     details: [...(revenue?.details ?? []), ...(expenses?.details ?? [])],
