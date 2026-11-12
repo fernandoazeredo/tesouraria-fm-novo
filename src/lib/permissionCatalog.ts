@@ -66,11 +66,7 @@ export function effectiveView(id: ModuleId, role: string, email: string, config:
   const e = email.trim().toLowerCase()
   const master = e === masterEmail && role === 'master'
   if (master) return true
-  // A fila de Aprovações é visível para todos os perfis ativos, nunca decisória por esse motivo.
-  if (id === 'aprovacoes') return true
-  if (['auditoria','usuarios','configuracoes','utilitarios'].includes(id)) return false
   void directorEmail
-  if (!canGrant(id, role)) return false // Sem concessões incompatíveis com as Rules atuais.
   const configured = config?.modules?.[id]?.ver
   if (typeof configured === 'boolean') return configured
   if (personDefaultBlocked(id, e)) return false
@@ -85,5 +81,6 @@ export function canDecideApproval(role: string, email: string, masterEmail: stri
 /** Documento de permissões salvo antes do primeiro acesso (por e-mail). */
 export const pendingPermissionDocId = (email: string) => 'email:' + email.trim().toLowerCase()
 export function firestoreViewSupported(id: ModuleId, role: string) {
-  return canGrant(id, role)
+  void id; void role
+  return true // O Fernando decide: qualquer módulo pode ser liberado ou trancado por usuário.
 }
