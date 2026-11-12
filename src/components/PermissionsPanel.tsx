@@ -3,7 +3,7 @@ import { collection, doc, getDoc, getDocs, serverTimestamp, writeBatch } from 'f
 import { db } from '../lib/firebase'
 import { migratePendingPermissions } from '../lib/pendingPermissions'
 import { PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL, officialRoleForEmail, useAuth } from '../auth/AuthContext'
-import { modulePaths, defaultRoles, effectiveView, firestoreViewSupported, personDefaultBlocked, pendingPermissionDocId, type ModuleId, type PermissionDocument } from '../lib/permissionCatalog'
+import { modulePaths, defaultRoles, effectiveView, personDefaultBlocked, pendingPermissionDocId, type ModuleId, type PermissionDocument } from '../lib/permissionCatalog'
 
 const labels: Record<ModuleId,string> = {
   dashboard:'Dashboard',despesas:'Despesas',receitas:'Receitas / Alvarás',repasse_alvaras:'Repasse de Alvarás',
@@ -20,7 +20,6 @@ const initialUsers = [
   { label:'Socorro', email:'socorro@marquesemuller.adv.br' },
   { label:'Reinaldo', email:'reinaldo@marquesemuller.adv.br' },
 ] as const
-const locks = new Set<ModuleId>(['auditoria','usuarios','utilitarios','configuracoes'])
 export function PermissionsPanel() {
   const {profile}=useAuth()
   const master=profile?.role==='master' && profile.email?.trim().toLowerCase()===PRIMARY_ADMIN_EMAIL
@@ -40,7 +39,7 @@ export function PermissionsPanel() {
     load.then(s=>{if(!live)return;const value=s.exists()?s.data() as PermissionDocument:null;setOriginal(value);setValues(Object.fromEntries(Object.entries(value?.modules||{}).map(([k,v])=>[k,v?.ver]).filter(([,v])=>typeof v==='boolean')) as Partial<Record<ModuleId,boolean>>);if(target.pending)setMessage('Usuário ainda não acessou o app. As permissões salvas agora valem a partir do primeiro login.');setLoaded(true)}).catch(()=>{if(live){setOriginal(null);setValues({});setReadOnly(true);setMessage('Regras de permissão ainda não publicadas — somente visualização');setLoaded(true)}});return()=>{live=false}},[selected,master,users])
   if(!master)return null
   const ids=Object.keys(modulePaths) as ModuleId[]
-  const isLocked=(id:ModuleId)=>!!user && ((user.role==='master'&&user.email.toLowerCase()===PRIMARY_ADMIN_EMAIL)||locks.has(id)||id==='aprovacoes'||(!firestoreViewSupported(id,user.role)))
+  const isLocked=(id:ModuleId)=>{void id;return !!user && user.role==='master'&&user.email.toLowerCase()===PRIMARY_ADMIN_EMAIL}
   const effective=(id:ModuleId)=>user?effectiveView(id,user.role,user.email,{schemaVersion:1,modules:{...(original?.modules||{}),[id]:{...(original?.modules?.[id]||{}),...(values[id]===undefined?{}:{ver:values[id]})}}},PRIMARY_ADMIN_EMAIL,DIRECTOR_EMAIL):false
   const restore=()=>{if(!readOnly)setValues({})}
   const save=async()=>{
