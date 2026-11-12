@@ -39,16 +39,28 @@ export const defaultRoles: Record<ModuleId, readonly string[]> = {
   documentos:['master','diretor','gerente','tesouraria','operador'],
   usuarios:['master'],auditoria:['master'],utilitarios:['master'],configuracoes:['master'],
 }
+const REINALDO = 'reinaldo@marquesemuller.adv.br'
+const SOCORRO = 'socorro@marquesemuller.adv.br'
+const FLAVIO = 'flavio.marques@marquesemuller.adv.br'
+/** Reinaldo (Jurídico): todas as receitas/alvarás, repasse de alvarás e comissões de agentes. */
+export const REINALDO_MODULES: readonly ModuleId[] = ['receitas', 'repasse_alvaras', 'comissoes', 'aprovacoes']
+/** Flávio (Diretor): tudo, exceto IA, DRE, Plano de Contas, Contabilidade, administração, Documentos e Conciliação. */
+export const FLAVIO_BLOCKED: readonly ModuleId[] = ['dre', 'plano_contas', 'contabilidade', 'usuarios', 'auditoria', 'utilitarios', 'configuracoes', 'documentos', 'conciliacao']
+/** Restrição fixa por pessoa (definida pelo Fernando). Retorna o motivo ou ''. */
+export function fixedRestriction(id: ModuleId, rawEmail: string) {
+  const e = rawEmail.trim().toLowerCase()
+  if (e === REINALDO && !REINALDO_MODULES.includes(id)) return 'Reinaldo (Jurídico): somente Receitas, Repasse de Alvarás e Comissões'
+  if (e === FLAVIO && FLAVIO_BLOCKED.includes(id)) return 'Não liberado para o Flávio'
+  if (e === SOCORRO && id === 'plano_contas') return 'Não permitido para a Socorro'
+  return ''
+}
 export function effectiveView(id: ModuleId, role: string, email: string, config: PermissionDocument | null | undefined, masterEmail: string, directorEmail: string) {
   const e = email.trim().toLowerCase()
   const master = e === masterEmail && role === 'master'
   if (master) return true
   // A fila de Aprovações é visível para todos os perfis ativos, nunca decisória por esse motivo.
   if (id === 'aprovacoes') return true
-  // Reinaldo: somente Receitas e consulta à fila de Aprovações, sem outras rotas.
-  if (e === 'reinaldo@marquesemuller.adv.br' && id !== 'receitas') return false
-  // Proibição expressa: Socorro não pode ver nem operar Plano de Contas.
-  if (id === 'plano_contas' && e === 'socorro@marquesemuller.adv.br') return false
+  if (fixedRestriction(id, e)) return false
   if (['auditoria','usuarios','configuracoes','utilitarios'].includes(id)) return false
   if (id === 'fluxo_caixa' && !(role === 'diretor' && e === directorEmail)) return false
   if (!defaultRoles[id].includes(role) && id !== 'plano_contas') return false // Sem concessões incompatíveis com as Rules atuais.
