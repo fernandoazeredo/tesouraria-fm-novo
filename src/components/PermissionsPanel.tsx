@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { collection, doc, getDoc, getDocs, serverTimestamp, writeBatch } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL, officialRoleForEmail, useAuth } from '../auth/AuthContext'
-import { modulePaths, defaultRoles, effectiveView, firestoreViewSupported, fixedRestriction, type ModuleId, type PermissionDocument } from '../lib/permissionCatalog'
+import { modulePaths, defaultRoles, effectiveView, firestoreViewSupported, personDefaultBlocked, pendingPermissionDocId, type ModuleId, type PermissionDocument } from '../lib/permissionCatalog'
 
 const labels: Record<ModuleId,string> = {
   dashboard:'Dashboard',despesas:'Despesas',receitas:'Receitas / Alvarás',repasse_alvaras:'Repasse de Alvarás',
@@ -33,16 +33,19 @@ export function PermissionsPanel() {
   const [values,setValues]=useState<Partial<Record<ModuleId,boolean>>>({})
   const user=users.find(x=>x.id===selected)
   useEffect(()=>{if(!master)return;let live=true;getDocs(collection(db,'users')).then(s=>{if(live){const entries=s.docs.map(d=>({id:d.id,...d.data()} as UserOption));const listed=initialUsers.map(person=>{const found=entries.find(u=>String(u.email||'').trim().toLowerCase()===person.email);return found?{...found,displayName:person.label}:{id:'pending:'+person.email,email:person.email,displayName:person.label,role:officialRoleForEmail(person.email),pending:true}});setUsers([...listed,...entries.filter(u=>!initialUsers.some(person=>person.email===String(u.email||'').trim().toLowerCase()))])}}).catch(e=>{if(live)setMessage('Erro ao carregar usuários: '+String(e))});return()=>{live=false}},[master])
-  useEffect(()=>{if(!master||!selected)return;if(selected.startsWith('pending:')){setOriginal(null);setValues({});setReadOnly(true);setMessage('Prévia pelas regras do perfil. Ajustes individuais podem ser salvos depois do primeiro acesso deste usuário.');setLoaded(true);return};let live=true;setLoaded(false);setReadOnly(false);getDoc(doc(db,'userPermissions',selected)).then(s=>{if(!live)return;const value=s.exists()?s.data() as PermissionDocument:null;setOriginal(value);setValues(Object.fromEntries(Object.entries(value?.modules||{}).map(([k,v])=>[k,v?.ver]).filter(([,v])=>typeof v==='boolean')) as Partial<Record<ModuleId,boolean>>);setLoaded(true)}).catch(e=>{if(live){setOriginal(null);setValues({});setReadOnly(true);setMessage('Regras de permissão ainda não publicadas — somente visualização');setLoaded(true)}});return()=>{live=false}},[selected,master])
+  useEffect(()=>{if(!master||!selected)return;const target=users.find(x=>x.id===selected);if(!target)return;let live=true;setLoaded(false);setReadOnly(false)
+    const emailDoc=doc(db,'userPermissions',pendingPermissionDocId(target.email))
+    const load=target.pending?getDoc(emailDoc):getDoc(doc(db,'userPermissions',selected)).then(s=>s.exists()?s:getDoc(emailDoc))
+    load.then(s=>{if(!live)return;const value=s.exists()?s.data() as PermissionDocument:null;setOriginal(value);setValues(Object.fromEntries(Object.entries(value?.modules||{}).map(([k,v])=>[k,v?.ver]).filter(([,v])=>typeof v==='boolean')) as Partial<Record<ModuleId,boolean>>);if(target.pending)setMessage('Usuário ainda não acessou o app. As permissões salvas agora valem a partir do primeiro login.');setLoaded(true)}).catch(()=>{if(live){setOriginal(null);setValues({});setReadOnly(true);setMessage('Regras de permissão ainda não publicadas — somente visualização');setLoaded(true)}});return()=>{live=false}},[selected,master,users])
   if(!master)return null
   const ids=Object.keys(modulePaths) as ModuleId[]
-  const isLocked=(id:ModuleId)=>!!user && ((user.role==='master'&&user.email.toLowerCase()===PRIMARY_ADMIN_EMAIL)||locks.has(id)||id==='aprovacoes'||!!fixedRestriction(id,user.email)||(!firestoreViewSupported(id,user.role))||(id==='fluxo_caixa'&&!(user.role==='diretor'&&user.email.toLowerCase()===DIRECTOR_EMAIL)))
+  const isLocked=(id:ModuleId)=>!!user && ((user.role==='master'&&user.email.toLowerCase()===PRIMARY_ADMIN_EMAIL)||locks.has(id)||id==='aprovacoes'||(!firestoreViewSupported(id,user.role))||(id==='fluxo_caixa'&&!(user.role==='diretor'&&user.email.toLowerCase()===DIRECTOR_EMAIL)))
   const lockReason=(id:ModuleId)=>{
     if(!user)return ''
     const email=user.email.trim().toLowerCase()
     if(['auditoria','usuarios','utilitarios','configuracoes'].includes(id))return 'Exclusivo do Fernando'
     if(id==='fluxo_caixa')return 'Exclusivo de Fernando e Flávio'
-    if(id!=='aprovacoes'&&fixedRestriction(id,email))return fixedRestriction(id,email)
+    if(id!=='aprovacoes'&&values[id]===undefined&&original?.modules?.[id]?.ver===undefined&&personDefaultBlocked(id,email)&&defaultRoles[id].includes(user.role))return personDefaultBlocked(id,email)+' (padrão — pode liberar)'
     if(!defaultRoles[id].includes(user.role) && id!=='plano_contas')return 'Não permitido para este perfil'
     if(!firestoreViewSupported(id,user.role))return 'Permissão indisponível nesta etapa — depende das regras do Firestore (Etapa 2)'
     return ''
@@ -66,7 +69,7 @@ export function PermissionsPanel() {
     try{
       const payload={schemaVersion:1,modules,updatedBy:profile.uid,updatedAt:serverTimestamp()}
       const batch=writeBatch(db)
-      batch.set(doc(db,'userPermissions',user.id),payload)
+      batch.set(doc(db,'userPermissions',user.pending?pendingPermissionDocId(user.email):user.id),payload)
       batch.set(doc(collection(db,'auditLogs')),{action:'Permissões de usuário alteradas',module:'Configurações',entityId:user.id,detail:description,userId:profile.uid,userName:profile.displayName,userEmail:profile.email,targetUserId:user.id,targetEmail:user.email,before:old,after:modules,createdAt:serverTimestamp()})
       await batch.commit()
       setOriginal({schemaVersion:1,modules});setMessage('Permissões salvas e registradas na Auditoria.')
