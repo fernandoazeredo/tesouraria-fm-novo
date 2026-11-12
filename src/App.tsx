@@ -32,6 +32,7 @@ import {
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { collection, doc, getDoc, onSnapshot, serverTimestamp, writeBatch } from 'firebase/firestore'
 import { db } from './lib/firebase'
+import { migratePendingPermissions } from './lib/pendingPermissions'
 import { effectiveView, modulePaths, pendingPermissionDocId, type ModuleId, type PermissionDocument } from './lib/permissionCatalog'
 import { PermissionsPanel } from './components/PermissionsPanel'
 import { isValidCNPJ } from './lib/cpfCnpjValidator'
@@ -107,7 +108,7 @@ const menu: MenuItem[] = [
   { to: '/auditoria', label: 'Auditoria', icon: ShieldCheck, roles: ['master'] },
   { to: '/utilitarios', label: 'Utilitários', icon: Wrench, roles: ['master'] },
   { to: '/configuracoes', label: 'Configurações', icon: Settings, roles: ['master'] },
-  { to: '/ia', label: 'IA Executiva Privada', icon: Sparkles, roles: ['master'] },
+  { to: '/ia', label: 'IA Executiva Privada', icon: Sparkles, roles: ['master', 'diretor', 'gerente', 'tesouraria', 'operador'] },
 ]
 
 function accessRoleFromUserRole(role: UserRole | undefined): AccessRole {
@@ -356,8 +357,6 @@ function AppShell() {
   const { profile, logout } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const accessRole = accessRoleFromUserRole(profile?.role)
-  const canViewCashFlow = Boolean(profile?.email && [PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL].includes(profile.email.trim().toLowerCase()))
-  const canViewAudit = Boolean(profile?.email && profile.email.trim().toLowerCase() === PRIMARY_ADMIN_EMAIL && profile.role === 'master')
   const [permissionDoc, setPermissionDoc] = useState<PermissionDocument | null>(null)
   const [permissionsLoaded, setPermissionsLoaded] = useState(false)
   useEffect(() => {
@@ -371,10 +370,13 @@ function AppShell() {
     const stopEmail = profile.email ? onSnapshot(doc(db, 'userPermissions', pendingPermissionDocId(profile.email)), snapshot => { byEmail = snapshot.exists() ? snapshot.data() as PermissionDocument : null; sync() }, () => { byEmail = null; sync() }) : () => {}
     return () => { stopUid(); stopEmail() }
   }, [profile?.uid, profile?.email])
+  useEffect(() => {
+    if (!profile?.uid || profile.role !== 'master' || profile.email?.trim().toLowerCase() !== PRIMARY_ADMIN_EMAIL) return
+    void migratePendingPermissions(profile.uid).catch(() => undefined)
+  }, [profile?.uid, profile?.role, profile?.email])
   const pathToId = new Map<string, ModuleId>(Object.entries(modulePaths).map(([id, path]) => [path, id as ModuleId]))
   const canOpen = (path: string) => {
     if (!permissionsLoaded || !profile) return false
-    if (path === '/ia') return profile.role === 'master' && profile.email.trim().toLowerCase() === PRIMARY_ADMIN_EMAIL
     const id = pathToId.get(path)
     if (!id) return true
     return effectiveView(id, accessRole, profile.email || '', permissionDoc, PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL)
@@ -435,11 +437,11 @@ function AppShell() {
           <Route path="/plano-contas" element={guarded('/plano-contas', <AccountsPageFernando />)} />
           <Route path="/contabilidade" element={guarded('/contabilidade', <AccountingPageStorageV2 />)} />
           <Route path="/calendario-financeiro" element={guarded('/calendario-financeiro', <FinancialCalendarPage />)} />
-          <Route path="/fluxo-caixa" element={guarded('/fluxo-caixa', canViewCashFlow ? <CashFlowMonthlyPage /> : <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>Seu perfil não tem permissão para consultar o Fluxo de Caixa.</p></section>)} />
+          <Route path="/fluxo-caixa" element={guarded('/fluxo-caixa', <CashFlowMonthlyPage />)} />
           <Route path="/conciliacao-bancaria" element={guarded('/conciliacao-bancaria', <BankReconciliationPage />)} />
           <Route path="/documentos" element={guarded('/documentos', <DocumentsPageStorage />)} />
           <Route path="/usuarios" element={guarded('/usuarios', <UsersPageKitFernando />)} />
-          <Route path="/auditoria" element={guarded('/auditoria', canViewAudit ? <AuditPageEnhancedV2 /> : <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>A Auditoria é exclusiva do Administrador Master.</p></section>)} />
+          <Route path="/auditoria" element={guarded('/auditoria', <AuditPageEnhancedV2 />)} />
           <Route path="/utilitarios" element={guarded('/utilitarios', <UtilitiesPage />)} />
           <Route path="/configuracoes" element={guarded('/configuracoes', <Configuracoes />)} />
           <Route path="/ia" element={guarded('/ia', <ExecutiveAiPage />)} />
