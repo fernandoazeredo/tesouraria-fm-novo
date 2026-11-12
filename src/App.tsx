@@ -36,6 +36,7 @@ import { migratePendingPermissions } from './lib/pendingPermissions'
 import { effectiveView, modulePaths, pendingPermissionDocId, type ModuleId, type PermissionDocument } from './lib/permissionCatalog'
 import { PermissionsPanel } from './components/PermissionsPanel'
 import { BankAccountsPanel } from './components/BankAccountsPanel'
+import { UnsavedBadge } from './components/UnsavedBadge'
 import { isValidCNPJ } from './lib/cpfCnpjValidator'
 import { useAuth, PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL, type UserRole } from './auth/AuthContext'
 import { TreasuryPage } from './pages/SystemPages'
@@ -300,6 +301,7 @@ function Configuracoes() {
             <label><span>CNPJ</span><input value={institution.cnpj} disabled={loading || saving} onChange={event => setInstitution(previous => ({ ...previous, cnpj: event.target.value }))} required inputMode="numeric" /></label>
             <label className="settings-full-width"><span>Endereço</span><input value={institution.endereco} disabled={loading || saving} onChange={event => setInstitution(previous => ({ ...previous, endereco: event.target.value }))} required /></label>
           </div>
+          {changed && <UnsavedBadge />}
           <div className="quick-actions" style={{ marginTop: 16 }}>
             <button type="button" className="secondary-button" disabled={loading || saving || !changed} onClick={() => { setInstitution({ ...saved }); setMessage('Alterações descartadas.') }}>Cancelar alterações</button>
             <button type="submit" className="primary-button" disabled={loading || saving || !changed || message.includes('salvamento está indisponível')}>{saving ? 'Salvando…' : 'Salvar alterações'}</button>
