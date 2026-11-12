@@ -46,8 +46,8 @@ const FLAVIO = 'flavio.marques@marquesemuller.adv.br'
 export const REINALDO_MODULES: readonly ModuleId[] = ['receitas', 'repasse_alvaras', 'comissoes', 'aprovacoes']
 /** Flávio (Diretor): tudo, exceto IA, DRE, Plano de Contas, Contabilidade, administração, Documentos e Conciliação. */
 export const FLAVIO_BLOCKED: readonly ModuleId[] = ['dre', 'plano_contas', 'contabilidade', 'usuarios', 'auditoria', 'utilitarios', 'configuracoes', 'documentos', 'conciliacao']
-/** Restrição fixa por pessoa (definida pelo Fernando). Retorna o motivo ou ''. */
-export function fixedRestriction(id: ModuleId, rawEmail: string) {
+/** Padrão por pessoa (definido pelo Fernando). Só vale enquanto o Fernando não marcar/desmarcar o módulo em Configurações. */
+export function personDefaultBlocked(id: ModuleId, rawEmail: string) {
   const e = rawEmail.trim().toLowerCase()
   if (e === REINALDO && !REINALDO_MODULES.includes(id)) return 'Reinaldo (Jurídico): somente Receitas, Repasse de Alvarás e Comissões'
   if (e === FLAVIO && FLAVIO_BLOCKED.includes(id)) return 'Não liberado para o Flávio'
@@ -60,12 +60,13 @@ export function effectiveView(id: ModuleId, role: string, email: string, config:
   if (master) return true
   // A fila de Aprovações é visível para todos os perfis ativos, nunca decisória por esse motivo.
   if (id === 'aprovacoes') return true
-  if (fixedRestriction(id, e)) return false
   if (['auditoria','usuarios','configuracoes','utilitarios'].includes(id)) return false
   if (id === 'fluxo_caixa' && !(role === 'diretor' && e === directorEmail)) return false
   if (!defaultRoles[id].includes(role) && id !== 'plano_contas') return false // Sem concessões incompatíveis com as Rules atuais.
   const configured = config?.modules?.[id]?.ver
-  return typeof configured === 'boolean' ? configured : defaultRoles[id].includes(role)
+  if (typeof configured === 'boolean') return configured
+  if (personDefaultBlocked(id, e)) return false
+  return defaultRoles[id].includes(role)
 }
 
 /** Apenas consulta, até homologação da Etapa 3. Não concede operações. */
@@ -73,6 +74,8 @@ export function canDecideApproval(role: string, email: string, masterEmail: stri
   const value = email.trim().toLowerCase()
   return (role === 'master' && value === masterEmail) || (role === 'diretor' && value === directorEmail)
 }
+/** Documento de permissões salvo antes do primeiro acesso (por e-mail). */
+export const pendingPermissionDocId = (email: string) => 'email:' + email.trim().toLowerCase()
 export function firestoreViewSupported(id: ModuleId, role: string) {
   return id === 'plano_contas' || defaultRoles[id].includes(role)
 }
