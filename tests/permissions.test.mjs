@@ -44,10 +44,10 @@ test('Socorro não recebe Plano de Contas nem por concessão explícita',()=>{
   assert.equal(effectiveView('plano_contas','tesouraria',socorro,config('plano_contas',true),admin,director),false)
 })
 
-test('Reinaldo acessa somente Receitas e Aprovações, sem poder decidir',()=>{
+test('Reinaldo acessa somente Receitas, Repasse de Alvarás, Comissões e Aprovações, sem poder decidir',()=>{
   const email='reinaldo@marquesemuller.adv.br'
   for(const id of Object.keys(defaultRoles)){
-    assert.equal(effectiveView(id,'gerente',email,null,admin,director),id==='receitas'||id==='aprovacoes',id)
+    assert.equal(effectiveView(id,'gerente',email,null,admin,director),['receitas','repasse_alvaras','comissoes','aprovacoes'].includes(id),id)
   }
   assert.equal(effectiveView('despesas','gerente',email,config('despesas',true),admin,director),false)
   assert.equal(canDecideApproval('gerente',email,admin,director),false)
@@ -56,5 +56,12 @@ test('Aprovações são consultáveis por todos; Socorro não decide',()=>{
   for(const [role,email] of [['tesouraria','socorro@marquesemuller.adv.br'],['gerente','reinaldo@marquesemuller.adv.br'],['operador','operador@example.test']]){
     assert.equal(effectiveView('aprovacoes',role,email,config('aprovacoes',false),admin,director),true)
     assert.equal(canDecideApproval(role,email,admin,director),false)
+  }
+})
+
+test('Flávio vê tudo, exceto DRE, Plano de Contas, Contabilidade, administração, Documentos e Conciliação',()=>{
+  const blocked=['dre','plano_contas','contabilidade','usuarios','auditoria','utilitarios','configuracoes','documentos','conciliacao']
+  for(const id of Object.keys(defaultRoles)){
+    assert.equal(effectiveView(id,'diretor',director,config(id,true),admin,director),!blocked.includes(id),id)
   }
 })
