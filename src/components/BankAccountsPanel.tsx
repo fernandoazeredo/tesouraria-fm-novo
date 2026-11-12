@@ -3,6 +3,7 @@ import { collection, doc, serverTimestamp, writeBatch } from 'firebase/firestore
 import { db } from '../lib/firebase'
 import { PRIMARY_ADMIN_EMAIL, useAuth } from '../auth/AuthContext'
 import { useBankAccounts, type BankAccount } from '../data/bankAccounts'
+import { UnsavedBadge } from './UnsavedBadge'
 
 type Row = BankAccount & { isNew?: boolean }
 
@@ -66,6 +67,7 @@ export function BankAccountsPanel() {
         </tr>)}</tbody>
       </table>
     </div>
+    {master && dirty && <UnsavedBadge />}
     {master && <div className="quick-actions" style={{ marginTop: 14 }}>
       <button type="button" className="secondary-button" disabled={busy} onClick={add}>Adicionar conta</button>
       <button type="button" className="secondary-button" disabled={busy || !dirty} onClick={cancel}>Cancelar alterações</button>

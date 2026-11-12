@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { collection, doc, getDoc, getDocs, serverTimestamp, writeBatch } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { migratePendingPermissions } from '../lib/pendingPermissions'
+import { UnsavedBadge } from './UnsavedBadge'
 import { PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL, officialRoleForEmail, useAuth } from '../auth/AuthContext'
 import { modulePaths, defaultRoles, effectiveView, personDefaultBlocked, pendingPermissionDocId, type ModuleId, type PermissionDocument } from '../lib/permissionCatalog'
 
@@ -42,6 +43,7 @@ export function PermissionsPanel() {
   const isLocked=(id:ModuleId)=>{void id;return !!user && user.role==='master'&&user.email.toLowerCase()===PRIMARY_ADMIN_EMAIL}
   const effective=(id:ModuleId)=>user?effectiveView(id,user.role,user.email,{schemaVersion:1,modules:{...(original?.modules||{}),[id]:{...(original?.modules?.[id]||{}),...(values[id]===undefined?{}:{ver:values[id]})}}},PRIMARY_ADMIN_EMAIL,DIRECTOR_EMAIL):false
   const restore=()=>{if(!readOnly)setValues({})}
+  const pending=!!user&&loaded&&!readOnly&&ids.some(id=>values[id]!==original?.modules?.[id]?.ver)
   const save=async()=>{
     if(!user||!profile||!loaded||readOnly||busy)return
     const old=original?.modules||{}
@@ -71,6 +73,7 @@ export function PermissionsPanel() {
     <p>Defina quais módulos cada pessoa pode consultar. As ações financeiras permanecem controladas pelas regras vigentes.</p>
     <label>Usuário <select value={selected} onChange={e=>{setSelected(e.target.value);setMessage('')}}><option value="">Selecione um usuário</option>{users.map(u=><option key={u.id} value={u.id}>{u.displayName||u.email} — {u.role}{u.pending?' (aguardando primeiro acesso)':''}</option>)}</select></label>
     {user&&loaded&&<><div style={{overflowX:'auto',marginTop:16}}><table className="cash-flow-table" style={{minWidth:490}}><thead><tr><th>Módulo</th><th>Ver</th></tr></thead><tbody>{ids.map(id=><tr key={id}><td>{labels[id]}</td><td><label><input aria-label={'Ver '+labels[id]} type="checkbox" checked={effective(id)} disabled={readOnly||isLocked(id)} onChange={e=>setValues(p=>({...p,[id]:e.target.checked}))}/>{effective(id)?' 🔓':' 🔒'}</label></td></tr>)}</tbody></table></div>
+    {pending&&<UnsavedBadge/>}
     <div className="quick-actions" style={{marginTop:14}}><button type="button" className="secondary-button" disabled={busy||readOnly} onClick={restore}>Restaurar padrão do perfil</button><button type="button" className="primary-button" style={readOnly?{backgroundColor:'transparent',color:'inherit',border:'1px solid currentColor',opacity:0.75}:undefined} disabled={busy||readOnly} onClick={()=>void save()}>{busy?'Salvando...':'Salvar permissões'}</button></div></>}
     {message&&<p role="status">{message}</p>}
   </section>
