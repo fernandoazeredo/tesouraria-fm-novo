@@ -22,3 +22,8 @@ test('resumo da exclusão sem dados bancários e com aviso de finalizado', () =>
   assert.ok(v.avisos.some(a => /finalizado/.test(a)));
   assert.equal(isChangeRequest('Exclua a despesa da Light'), false);
 });
+
+test('histórico da despesa vem das linhas do demonstrativo', () => {
+  const v = describeRecord('expenses', { fornecedor: 'X', items: [{ historico: 'Conta de luz' }, { historico: '' }], valorTotal: 10 });
+  assert.equal(v.itens.find(r => r.label === 'Histórico').value, 'Conta de luz');
+});
