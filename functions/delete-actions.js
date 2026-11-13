@@ -24,7 +24,7 @@ export function describeRecord(collection, data) {
     ? [
       ['Módulo', 'Despesas'],
       ['Fornecedor / favorecido', txt(data.fornecedor || data.nome || data.favorecido) || '—'],
-      ['Histórico', txt(data.historico || data.descricao || data.detalhamento) || '—'],
+      ['Histórico', txt(data.historico || (Array.isArray(data.items) ? data.items.map(i => i?.historico).filter(Boolean).join('; ') : '') || data.descricao || data.detalhamento) || '—'],
       ['Competência', txt(data.competencia) || dateOf(data.dataPrevista) || '—'],
       ['Unidade', txt(data.unidade) || '—'],
       ['Valor', brl(data.valorTotal)],
@@ -46,6 +46,20 @@ export function describeRecord(collection, data) {
   if (FINAL.includes(status)) avisos.push('Lançamento já finalizado: ele sai dos relatórios, da DRE, do Fluxo de Caixa e da Contabilidade.');
   if (attachments) avisos.push(`${attachments} anexo(s) ficam guardados no armazenamento para permitir desfazer.`);
   return { itens: rows.map(([label, value]) => ({ label, value })), avisos, status };
+}
+
+/** Conciliações bancárias do lançamento. Mês com conciliação fechada bloqueia a exclusão. */
+export async function reconciliationsOf(db, collection, id) {
+  const q = await db.collection('bankReconciliations').where('sourceId', '==', id).get();
+  const list = q.docs.filter(d => !d.data().sourceCollection || d.data().sourceCollection === collection);
+  const closed = [];
+  for (const d of list) {
+    const periodId = String(d.data().periodId || '');
+    if (!periodId) continue;
+    const period = await db.collection('bankReconciliationPeriods').doc(periodId).get();
+    if (period.exists && period.data().status === 'fechada') closed.push(String(d.data().competence || periodId.split('__')[0]));
+  }
+  return { ids: list.map(d => d.id), closed: [...new Set(closed)] };
 }
 
 /** Registros que dependem de uma receita (mesmo id ou campo de origem). */
@@ -100,6 +114,8 @@ export async function proposeDelete(db, { key, model, question, evidence, uid, i
     const linked = await linkedRecords(db, docId);
     if (linked.length) return { ...base, answer: `Não posso excluir esta receita porque ela já gerou registros em: **${linked.join(', ')}**. Exclua ou ajuste esses registros primeiro no respectivo menu. Nada foi excluído.` };
   }
+  const recon = await reconciliationsOf(db, collection, docId);
+  if (recon.closed.length) return { ...base, answer: `Não posso excluir este lançamento porque ele está conciliado no banco em mês com **conciliação fechada** (${recon.closed.join(', ')}). Reabra a conciliação desse mês, se for o caso, e peça novamente. Nada foi excluído.` };
   const view = describeRecord(collection, data);
   const classRef = db.collection('managerialClassifications').doc(classKey(collection, docId));
   const classSnap = await classRef.get();
@@ -108,12 +124,13 @@ export async function proposeDelete(db, { key, model, question, evidence, uid, i
     kind: 'exclusao', uid, question: question.slice(0, 500), collection, docId, summary: String(parsed.proposal.summary || '').slice(0, 400),
     snapshot: data, updateTimeMs: snap.updateTime.toMillis(),
     classification: classSnap.exists ? { id: classSnap.id, data: classSnap.data() } : null,
+    reconciliationIds: recon.ids,
     display: view.itens, status: 'pendente', createdAt: FieldValue.serverTimestamp(), expiresAtMs,
   });
   const modulo = collection === 'expenses' ? 'Despesas' : 'Receitas';
   return { ...base,
     answer: `Encontrei o lançamento abaixo em **${modulo}**. A exclusão só acontece depois que você clicar em **Confirmar exclusão** e digitar **EXCLUIR**. Fica registrada na Auditoria e pode ser desfeita.`,
-    proposal: { id: prop.id, kind: 'exclusao', modulo, collection, docId, summary: String(parsed.proposal.summary || '').slice(0, 400), itens: view.itens, avisos: [...view.avisos, ...(classSnap.exists ? ['A classificação deste lançamento na DRE também será removida (volta se desfizer).'] : [])], expiresAtMs } };
+    proposal: { id: prop.id, kind: 'exclusao', modulo, collection, docId, summary: String(parsed.proposal.summary || '').slice(0, 400), itens: view.itens, avisos: [...view.avisos, ...(classSnap.exists ? ['A classificação deste lançamento na DRE também será removida (volta se desfizer).'] : []), ...(recon.ids.length ? ['A conciliação bancária deste lançamento (mês ainda aberto) será desfeita junto (volta se desfizer).'] : [])], expiresAtMs } };
 }
 
 /** Executa a exclusão dentro da transação de aplicar. Retorna o texto para a Auditoria. */
@@ -126,10 +143,20 @@ export async function applyDelete(db, tx, pRef, p, confirmText) {
   if (cur.updateTime.toMillis() !== p.updateTimeMs) { tx.update(pRef, { status: 'conflito' }); throw new HttpsError('aborted', 'O lançamento foi alterado depois da proposta. Nada foi excluído; peça novamente.'); }
   const classRef = db.collection('managerialClassifications').doc(classKey(p.collection, p.docId));
   const cls = await tx.get(classRef);
+  const recons = [];
+  for (const id of p.reconciliationIds || []) {
+    const r = await tx.get(db.collection('bankReconciliations').doc(id));
+    if (!r.exists) continue;
+    const periodId = String(r.data().periodId || '');
+    const period = periodId ? await tx.get(db.collection('bankReconciliationPeriods').doc(periodId)) : null;
+    if (period?.exists && period.data().status === 'fechada') throw new HttpsError('failed-precondition', 'A conciliação bancária deste mês foi fechada depois da proposta. Nada foi excluído.');
+    recons.push({ id: r.id, data: r.data() });
+  }
   tx.delete(ref);
   if (cls.exists) tx.delete(classRef);
-  tx.update(pRef, { status: 'aplicada', appliedAt: FieldValue.serverTimestamp(), classification: cls.exists ? { id: cls.id, data: cls.data() } : null });
-  return `${p.collection === 'expenses' ? 'Despesas' : 'Receitas'} ${p.docId} excluído: ${(p.display || []).filter(r => r.label !== 'Módulo').map(r => `${r.label}: ${r.value}`).join(' · ')} · Pedido: ${p.question}`;
+  for (const r of recons) tx.delete(db.collection('bankReconciliations').doc(r.id));
+  tx.update(pRef, { status: 'aplicada', appliedAt: FieldValue.serverTimestamp(), classification: cls.exists ? { id: cls.id, data: cls.data() } : null, reconciliations: recons });
+  return `${p.collection === 'expenses' ? 'Despesas' : 'Receitas'} ${p.docId} excluído${recons.length ? ` (e ${recons.length} conciliação(ões) bancária(s) desfeita(s))` : ''}: ${(p.display || []).filter(r => r.label !== 'Módulo').map(r => `${r.label}: ${r.value}`).join(' · ')} · Pedido: ${p.question}`;
 }
 
 /** Restaura o lançamento excluído (e sua classificação na DRE). */
@@ -138,7 +165,10 @@ export async function undoDelete(db, tx, pRef, p) {
   const cur = await tx.get(ref);
   if (cur.exists) throw new HttpsError('aborted', 'Já existe um lançamento com este identificador. Nada foi restaurado.');
   const cls = p.classification ? await tx.get(db.collection('managerialClassifications').doc(p.classification.id)) : null;
+  const recons = [];
+  for (const r of p.reconciliations || []) { const cur = await tx.get(db.collection('bankReconciliations').doc(r.id)); if (!cur.exists) recons.push(r); }
   tx.set(ref, p.snapshot);
+  for (const r of recons) tx.set(db.collection('bankReconciliations').doc(r.id), r.data);
   if (p.classification && !cls.exists) tx.set(db.collection('managerialClassifications').doc(p.classification.id), p.classification.data);
   tx.update(pRef, { status: 'desfeita', undoneAt: FieldValue.serverTimestamp() });
   return `${p.collection === 'expenses' ? 'Despesas' : 'Receitas'} ${p.docId} restaurado (exclusão desfeita).`;
