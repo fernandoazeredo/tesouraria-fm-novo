@@ -4,3 +4,30 @@ html[data-theme='dark'] .soc-settings,html[data-theme='dark'] .soc-metrics artic
 @media(max-width:1180px){.soc-settings-grid,.soc-settings-grid-full{grid-template-columns:repeat(2,minmax(0,1fr))}.soc-settings-save{grid-column:span 2}.soc-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.soc-toolbar{grid-template-columns:1fr 160px}.soc-toolbar>select{grid-column:span 2}.soc-report-actions{grid-column:span 2}}
 @media(max-width:720px){.soc-settings-grid,.soc-settings-grid-full,.soc-metrics,.soc-toolbar{grid-template-columns:1fr}.soc-settings-wide,.soc-settings-save,.soc-toolbar>select,.soc-report-actions{grid-column:auto}.soc-report-actions{justify-content:stretch}.soc-report-actions button{flex:1}.soc-metrics article{padding:13px}.soc-table{min-width:1750px}.soc-batchbar{align-items:stretch}.soc-batchbar strong{width:100%}}
 @media print{.sidebar,.mobile-app-header,.soc-settings,.soc-toolbar,.soc-batchbar,.soc-actions button{display:none!important}.main-content{margin:0!important;padding:0!important}.soc-card{border:0!important;box-shadow:none!important}.soc-table-wrap{overflow:visible;border:0}.soc-table{min-width:0;font-size:9px}.soc-table th,.soc-table td{font-size:9px;padding:5px 4px}}
+/* Regra das novas apurações em destaque */
+.soc-rule-note{display:flex;align-items:flex-start;gap:10px;margin:0 0 18px;padding:14px 16px;border-radius:12px;background:#fff7e6;border:1px solid #f5b971;border-left:6px solid #e08600;color:#7a4300;font-size:14px;line-height:1.45}
+.soc-rule-note svg{flex:0 0 auto;margin-top:1px;color:#e08600}
+.soc-rule-note b{color:#5c3200}
+html[data-theme='dark'] .soc-rule-note{background:rgba(224,134,0,.14)!important;border-color:rgba(245,185,113,.55)!important;color:#ffd9a3!important}
+html[data-theme='dark'] .soc-rule-note b{color:#ffe6c2!important}
+/* Card Parâmetros do acordo: indica que abre e fecha */
+.soc-settings summary{list-style:none}
+.soc-settings summary::-webkit-details-marker{display:none}
+.soc-settings-hint{margin-left:auto;font-size:12px;font-weight:600;color:var(--muted,#687386)}
+.soc-settings[open] .soc-settings-hint{visibility:hidden}
+.soc-settings-chevron{transition:transform .2s ease;color:var(--ui-blue,#1678c8)}
+.soc-settings[open] .soc-settings-chevron{transform:rotate(180deg)}
+.soc-settings summary:hover .soc-settings-chevron{color:#0b5cad}
+/* Dados bancários por campo */
+.soc-bank{border:1px solid var(--border,#d9e0e7);border-radius:12px;padding:10px 14px 14px;margin:4px 0 12px}
+.soc-bank legend{font-size:12px;font-weight:800;padding:0 6px}
+.soc-bank-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.soc-bank-grid label{display:grid;gap:6px}
+.soc-bank-grid label>span{font-size:12px;font-weight:700}
+.soc-bank-grid input,.soc-bank-grid select{width:100%;min-height:40px;border:1px solid var(--border,#cfd7df);border-radius:9px;padding:8px 10px;background:var(--surface,#fff);color:inherit}
+.soc-bank-wide{grid-column:span 3}
+.soc-bank-legacy{margin:10px 0 0;font-size:12px;color:var(--muted,#687386)}
+html[data-theme='dark'] .soc-bank,html[data-theme='dark'] .soc-bank-grid input,html[data-theme='dark'] .soc-bank-grid select{background:var(--ui-surface)!important;color:var(--ui-text)!important;border-color:var(--ui-border)!important}
+@media(max-width:720px){.soc-bank-grid{grid-template-columns:1fr}.soc-bank-wide{grid-column:auto}}
+.soc-settings>p.soc-rule-note{margin:0 0 14px;color:#7a4300;font-size:14px}
+html[data-theme='dark'] .soc-settings>p.soc-rule-note{color:#ffd9a3!important}
