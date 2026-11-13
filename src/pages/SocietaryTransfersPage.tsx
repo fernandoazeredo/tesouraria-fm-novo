@@ -25,7 +25,6 @@ import {
   Settings2,
   XCircle,
   ChevronDown,
-  Info,
 } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { saveRepassePdf, type RepassePdfRow } from '../lib/societaryPdf'
@@ -372,7 +371,7 @@ function SettingsPanel() {
       <label className="soc-active-check"><input type="checkbox" checked={form.active} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, active: event.target.checked }))} /><span> acordo ativo</span></label>
       {canEdit && <button className="secondary-button soc-settings-save" type="button" disabled={saving} onClick={() => void save()}><Save size={16} /> {saving ? 'Salvando...' : 'Salvar parâmetros'}</button>}
     </div>
-    <p>Percentual fixo de 40% para Ana Paula Müller, sobre honorários líquidos de 11,33% de impostos. Registros antigos não são recalculados.</p>
+    <p className="soc-rule-note"><b>Percentual fixo de 40% para Ana Paula Müller</b>, sobre honorários líquidos de 11,33% de impostos.</p>
   </details>
 }
 
@@ -680,7 +679,6 @@ export function SocietaryTransfersPage() {
 
     <SettingsPanel />
 
-    <p className="soc-rule-note"><Info size={18} aria-hidden="true" /> <span><b>Novas apurações:</b> Honorários do Escritório − 11,33% de impostos = base líquida; 60% Flávio e 40% Ana Paula. Repasses anteriores não são recalculados automaticamente.</span></p>
     <div className="soc-metrics">
       <article><span>Honorários do Escritório</span><strong>{money.format(totals.office)}</strong><small>Base integral dos alvarás filtrados</small></article>
       <article><span>Repasse Apurado</span><strong>{money.format(totals.apurado)}</strong><small>Percentual aplicado linha a linha</small></article>
