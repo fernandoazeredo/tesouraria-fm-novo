@@ -29,3 +29,5 @@ html[data-theme='dark'] .soc-rule-note b{color:#ffe6c2!important}
 .soc-bank-legacy{margin:10px 0 0;font-size:12px;color:var(--muted,#687386)}
 html[data-theme='dark'] .soc-bank,html[data-theme='dark'] .soc-bank-grid input,html[data-theme='dark'] .soc-bank-grid select{background:var(--ui-surface)!important;color:var(--ui-text)!important;border-color:var(--ui-border)!important}
 @media(max-width:720px){.soc-bank-grid{grid-template-columns:1fr}.soc-bank-wide{grid-column:auto}}
+.soc-settings>p.soc-rule-note{margin:0 0 14px;color:#7a4300;font-size:14px}
+html[data-theme='dark'] .soc-settings>p.soc-rule-note{color:#ffd9a3!important}
