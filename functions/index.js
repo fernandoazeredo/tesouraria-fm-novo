@@ -2,8 +2,9 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue, FieldPath } from 'firebase-admin/firestore';
-import { isMasterClaim, isAppQuestion, safeRecord, selectedCollections, SCOPES, APPROVAL_SOURCES, APPROVAL_DECIDED, buildApprovalQueue, approvalTotals, dateSP, isChangeRequest, validateProposal, buildDiff, sameValues, redactSensitive, WRITABLE_COLLECTIONS } from './ai-core.js';
+import { isMasterClaim, isAppQuestion, safeRecord, selectedCollections, SCOPES, APPROVAL_SOURCES, APPROVAL_DECIDED, buildApprovalQueue, approvalTotals, dateSP, isChangeRequest, isDeleteRequest, validateProposal, buildDiff, sameValues, redactSensitive, WRITABLE_COLLECTIONS } from './ai-core.js';
 import { SYSTEM_KNOWLEDGE } from './knowledge.js';
+import { proposeDelete, applyDelete, undoDelete } from './delete-actions.js';
 import { modelAccountSelection } from './account-query.js';
 import { financialRequest, readAll } from './financial-query.js';
 import { changeClassification, proposeClassification, readActiveChart, runFinancial } from './financial-actions.js';
@@ -55,18 +56,20 @@ export const executiveAiAsk=onCall({
   const chart=await readActiveChart(db);
   const intent=financialRequest(question,undefined,chart);
   if(!intent && !isAppQuestion(question)) throw invalidQuestion();
-  if(intent?.kind!=='classification' && isPendingQuestion(question) && !isPanoramaQuestion(question)) {
+  const deleting=isDeleteRequest(question);
+  if(deleting && !isMasterClaim(token,userSnap.data())) throw new HttpsError('permission-denied','Excluir lançamentos pela IA é exclusivo do Administrador Master principal.');
+  if(!deleting && intent?.kind!=='classification' && isPendingQuestion(question) && !isPanoramaQuestion(question)) {
     return buildPendingAnswer(db,question,{uid:request.auth.uid});
   }
-  if(intent?.kind!=='classification' && isPanoramaQuestion(question)) {
+  if(!deleting && intent?.kind!=='classification' && isPanoramaQuestion(question)) {
     return buildPanorama(db,question,{resolveFinancial,runFinancial,chart,uid:request.auth.uid});
   }
-  if(intent?.kind!=='classification' && isArithmeticQuestion(question)) {
+  if(!deleting && intent?.kind!=='classification' && isArithmeticQuestion(question)) {
     const computed=await arithmeticAnswer(question,chart);
     if(computed) return computed;
   }
-  if(intent?.kind==='classification') return proposeClassification(db,{question,intent,chart,uid:request.auth.uid,expiresAtMs:Date.now()+PROPOSAL_TTL_MS});
-  if(intent && (intent.kind==='plan' || !isChangeRequest(question))) {
+  if(!deleting && intent?.kind==='classification') return proposeClassification(db,{question,intent,chart,uid:request.auth.uid,expiresAtMs:Date.now()+PROPOSAL_TTL_MS});
+  if(!deleting && intent && (intent.kind==='plan' || !isChangeRequest(question))) {
     const resolved=intent.kind==='mixed' ? {...intent,queries:await Promise.all(intent.queries.map(query=>
       query.suggest ? suggestAccountIntent(query.question,query) : query
     ))} : intent.suggest ? await suggestAccountIntent(question,intent) : intent;
@@ -139,6 +142,7 @@ export const executiveAiAsk=onCall({
   ].join('\n');
   const key=geminiKey.value();
   if(!key) throw new HttpsError('failed-precondition','O provedor de IA ainda não está configurado.');
+  if(deleting) return await proposeDelete(db,{key,model:MODEL,question,evidence,uid:request.auth.uid,instructions,todayBR,ttlMs:PROPOSAL_TTL_MS});
   if(isChangeRequest(question)) return await proposeChange({key,question,evidence,uid:request.auth.uid,instructions});
   const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,{
     method:'POST',
@@ -333,6 +337,7 @@ if(!p||p.uid!==request.auth.uid) throw new HttpsError('not-found','Proposta não
 if(p.status!=='pendente') throw new HttpsError('failed-precondition',`Proposta já ${p.status}.`);
 if(Date.now()>p.expiresAtMs) {tx.update(pRef,{status:'expirada'});throw new HttpsError('deadline-exceeded','Proposta expirada (15 min). Peça novamente.');}
 if(p.kind==='classificacao') {await changeClassification(db,tx,pSnap,p,profile,'apply');return null;}
+if(p.kind==='exclusao') return {deleted:await applyDelete(db,tx,pRef,p,request.data?.confirmText),docId:p.docId,collection:p.collection};
 if(!WRITABLE_COLLECTIONS.includes(p.collection)) throw new HttpsError('permission-denied','Coleção não permitida.');
 const ref=db.collection(p.collection).doc(p.docId);const cur=await tx.get(ref);
 if(!cur.exists) throw new HttpsError('not-found','Lançamento não existe mais.');
@@ -342,6 +347,7 @@ tx.update(pRef,{status:'aplicada',appliedAt:FieldValue.serverTimestamp()});
 return p;
 });
 if(!result) return {ok:true,message:'Classificação gravada e registrada na Auditoria.'};
+if(result.deleted){await audit(profile,request.auth.uid,'IA Executiva: lançamento excluído',result.deleted,result.docId,titleOf(result.collection));return {ok:true,message:'Lançamento excluído e registrado na Auditoria. Use Desfazer se precisar restaurar.'};}
 const detail=`${titleOf(result.collection)} ${result.docId}: ${Object.entries(result.changes).map(([k,v])=>`${k}: ${JSON.stringify(result.before[k]??null)} → ${JSON.stringify(v)}`).join('; ')} · Pedido: ${result.question}`;
 await audit(profile,request.auth.uid,'IA Executiva: alteração aplicada',detail,result.docId,titleOf(result.collection));
 return {ok:true,message:'Alteração gravada e registrada na Auditoria.'};
@@ -355,6 +361,7 @@ const pRef=proposals().doc(id);const pSnap=await tx.get(pRef);const p=pSnap.data
 if(!p||p.uid!==request.auth.uid) throw new HttpsError('not-found','Alteração não encontrada.');
 if(p.status!=='aplicada') throw new HttpsError('failed-precondition','Só é possível desfazer alterações aplicadas.');
 if(p.kind==='classificacao') {await changeClassification(db,tx,pSnap,p,profile,'undo');return null;}
+if(p.kind==='exclusao') return {restored:await undoDelete(db,tx,pRef,p),docId:p.docId,collection:p.collection};
 const ref=db.collection(p.collection).doc(p.docId);const cur=await tx.get(ref);
 if(!cur.exists||!sameValues(cur.data(),p.changes)) throw new HttpsError('aborted','O lançamento mudou depois da alteração da IA. Desfaça manualmente no módulo.');
 const restore={...p.before};for(const f of p.missing||[]) restore[f]=FieldValue.delete();
@@ -363,6 +370,7 @@ tx.update(pRef,{status:'desfeita',undoneAt:FieldValue.serverTimestamp()});
 return p;
 });
 if(!result) return {ok:true,message:'Classificação desfeita e registrada na Auditoria.'};
+if(result.restored){await audit(profile,request.auth.uid,'IA Executiva: exclusão desfeita',result.restored,result.docId,titleOf(result.collection));return {ok:true,message:'Lançamento restaurado e registrado na Auditoria.'};}
 await audit(profile,request.auth.uid,'IA Executiva: alteração desfeita',`${titleOf(result.collection)} ${result.docId}: valores anteriores restaurados (${Object.keys(result.changes).join(', ')})`,result.docId,titleOf(result.collection));
 return {ok:true,message:'Alteração desfeita e registrada na Auditoria.'};
 }

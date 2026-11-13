@@ -50,7 +50,7 @@ export function isAppQuestion(q) {
   const n=normalizeText(q);
   if (n.length<5 || n.length>500) return false;
   const outside=/\b(clima|temperatura|futebol|receita culinaria|politica partidaria|horoscopo|poema|traduza ingles|cotacao bitcoin)\b/i;
-  return !outside.test(n) && (inScope(q).length>0 || isChangeRequest(q) || /tesouraria|aplicativo|sistema|modulo|regra|financeiro|caixa|calendario|lancamento|resumo|situacao financeira|panorama|visao geral|pendencia/.test(n));
+  return !outside.test(n) && (inScope(q).length>0 || isChangeRequest(q) || isDeleteRequest(q) || /tesouraria|aplicativo|sistema|modulo|regra|financeiro|caixa|calendario|lancamento|resumo|situacao financeira|panorama|visao geral|pendencia/.test(n));
 }
 export function redactSensitive(value) {
   return String(value).replace(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g,'[CPF oculto]')
@@ -77,6 +77,7 @@ export function isMasterClaim(token, profile) {
 }
 export function selectedCollections(q) {
   let keys=inScope(q);
+  if (isDeleteRequest(q)) return ['despesas','receitas'].filter(k=>keys.length===0||keys.includes(k)||!keys.some(x=>x==='despesas'||x==='receitas')).map(k=>({key:k,...SCOPES[k]}));
   if (isChangeRequest(q)) {
     // Para alterar é preciso ler o documento real (nomes de campo exatos), não só a fila calculada.
     if (keys.length===0 || keys.includes('aprovacoes')) keys=[...new Set([...keys.filter(k=>k!=='aprovacoes'),'despesas','receitas','comissoes','repasses','societario'])];
@@ -148,6 +149,11 @@ export const PROTECTED_FIELDS = new Set([
 const SENSITIVE_FIELD=/cpf|cnpj|agencia|agência|conta(?!b)|account(number|digit)|pix|senha|password|token/i;
 const CHANGE_VERBS=/\b(alter[ae]r?|alteracao|mud[ae]r?|corrij[ao]|corrigir|atualiz[ae]r?|troc[ae]r?|ajust[ae]r?|marqu[ae]|marcar|defin[ae]|definir|edit[ae]r?|substitu[ai]r?|coloqu[ae]|colocar|muda)\b/;
 export function isChangeRequest(q) { return CHANGE_VERBS.test(normalizeText(q)); }
+// Exclusão de lançamento (somente Despesas e Receitas, com confirmação expressa do Master).
+export const DELETABLE_COLLECTIONS = Object.freeze(['expenses','receivables']);
+const DELETE_VERBS=/\b(exclu(a|am|ir|ia)|exclusao|apag(ue|uem|ar)|delet(e|ar)|remov(a|er))\b/;
+const DELETE_TARGET=/\b(lancamento|lancamentos|despesa|despesas|receita|receitas|alvara|alvaras|acordo|acordos|recebimento|recebimentos)\b/;
+export function isDeleteRequest(q) { const n=normalizeText(q); return DELETE_VERBS.test(n) && DELETE_TARGET.test(n) && !/classific|\bdre\b|anexo|arquivo/.test(n); }
 export function coerceValue(type, raw) {
   if (type==='null') return null;
   if (type==='boolean') { const t=normalizeText(raw); if (['true','sim','verdadeiro'].includes(t)) return true; if (['false','nao','falso'].includes(t)) return false; throw new Error('Valor booleano inválido.'); }
