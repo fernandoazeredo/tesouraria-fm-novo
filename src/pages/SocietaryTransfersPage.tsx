@@ -24,6 +24,8 @@ import {
   Send,
   Settings2,
   XCircle,
+  ChevronDown,
+  Info,
 } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { saveRepassePdf, type RepassePdfRow } from '../lib/societaryPdf'
@@ -43,10 +45,15 @@ type Settings = {
   endDate: string
   dueDay: number
   bankData: string
+  bank: BankDetails
   active: boolean
   notes: string
 }
 type Draft = { percent: string; value: string }
+/** Dados bancários da beneficiária, separados por campo. */
+type BankDetails = { banco: string; agencia: string; conta: string; tipoConta: string; pixTipo: string; pixChave: string; titular: string }
+const EMPTY_BANK: BankDetails = { banco: '', agencia: '', conta: '', tipoConta: '', pixTipo: '', pixChave: '', titular: '' }
+const bankText = (b: BankDetails) => [b.banco && `Banco ${b.banco}`, b.agencia && `Ag. ${b.agencia}`, b.conta && `${b.tipoConta || 'Conta'} ${b.conta}`, b.pixChave && `PIX (${b.pixTipo || 'chave'}) ${b.pixChave}`, b.titular && `Titular ${b.titular}`].filter(Boolean).join(' · ')
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 // Formatação pt-BR usada apenas nos campos editáveis da tela.
@@ -59,6 +66,7 @@ const DEFAULT_SETTINGS: Settings = {
   endDate: '',
   dueDay: 0,
   bankData: '',
+  bank: EMPTY_BANK,
   active: true,
   notes: '',
 }
@@ -187,6 +195,7 @@ function useSocietarySettings() {
       endDate: String(data.endDate || ''),
       dueDay: toNumber(data.dueDay),
       bankData: String(data.bankData || ''),
+      bank: { ...EMPTY_BANK, ...Object.fromEntries(Object.entries((data.bank || {}) as Record<string, unknown>).filter(([k]) => k in EMPTY_BANK).map(([k, v]) => [k, String(v ?? '')])) } as BankDetails,
       active: data.active === undefined ? true : Boolean(data.active),
       notes: String(data.notes || ''),
     })
@@ -317,7 +326,8 @@ function SettingsPanel() {
         startDate: form.startDate,
         endDate: form.endDate,
         dueDay: form.dueDay,
-        bankData: form.bankData.trim(),
+        bank: Object.fromEntries(Object.entries(form.bank).map(([k, v]) => [k, String(v).trim()])),
+        bankData: bankText(form.bank) || form.bankData.trim(),
         active: form.active,
         notes: form.notes.trim(),
         updatedAt: serverTimestamp(),
@@ -333,15 +343,31 @@ function SettingsPanel() {
     }
   }
 
+  const setBank = (key: keyof BankDetails, value: string) => setForm((current) => ({ ...current, bank: { ...current.bank, [key]: value } }))
+  const hasStructured = Object.values(form.bank).some((v) => v.trim())
   return <details className="soc-settings">
-    <summary><Settings2 size={17} /> Parâmetros do acordo</summary>
+    <summary><Settings2 size={17} /> Parâmetros do acordo <span className="soc-settings-hint">clique para abrir</span><ChevronDown size={18} className="soc-settings-chevron" aria-hidden="true" /></summary>
     <div className="soc-settings-grid soc-settings-grid-full">
       <label><span>Beneficiária (fixa)</span><input value="Ana Paula Müller" disabled readOnly /></label>
       <label><span>Percentual fixo de Ana Paula Müller</span><input type="number" value={40} readOnly disabled /></label>
       <label><span>Data de início</span><input type="date" value={form.startDate} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></label>
       <label><span>Data de encerramento</span><input type="date" value={form.endDate} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></label>
       <label><span>Dia de vencimento</span><input type="number" min="0" max="31" value={form.dueDay} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, dueDay: toNumber(event.target.value) }))} /></label>
-      <label className="soc-settings-wide"><span>Dados bancários do beneficiário</span><input value={form.bankData} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, bankData: event.target.value }))} /></label>
+    </div>
+    <fieldset className="soc-bank">
+      <legend>Dados bancários da beneficiária</legend>
+      <div className="soc-bank-grid">
+        <label><span>Banco</span><input value={form.bank.banco} disabled={!canEdit} placeholder="Ex.: Itaú (341)" onChange={(event) => setBank('banco', event.target.value)} /></label>
+        <label><span>Agência</span><input value={form.bank.agencia} disabled={!canEdit} inputMode="numeric" onChange={(event) => setBank('agencia', event.target.value)} /></label>
+        <label><span>Tipo de conta</span><select value={form.bank.tipoConta} disabled={!canEdit} onChange={(event) => setBank('tipoConta', event.target.value)}><option value="">Selecione</option><option value="Conta corrente">Conta corrente</option><option value="Poupança">Poupança</option><option value="Conta pagamento">Conta pagamento</option></select></label>
+        <label><span>Número da conta</span><input value={form.bank.conta} disabled={!canEdit} onChange={(event) => setBank('conta', event.target.value)} /></label>
+        <label><span>Tipo de chave PIX</span><select value={form.bank.pixTipo} disabled={!canEdit} onChange={(event) => setBank('pixTipo', event.target.value)}><option value="">Sem PIX</option><option value="CPF">CPF</option><option value="CNPJ">CNPJ</option><option value="E-mail">E-mail</option><option value="Telefone">Telefone</option><option value="Aleatória">Chave aleatória</option></select></label>
+        <label><span>Chave PIX</span><input value={form.bank.pixChave} disabled={!canEdit} onChange={(event) => setBank('pixChave', event.target.value)} /></label>
+        <label className="soc-bank-wide"><span>Titular da conta</span><input value={form.bank.titular} disabled={!canEdit} placeholder="Ana Paula Müller" onChange={(event) => setBank('titular', event.target.value)} /></label>
+      </div>
+      {!hasStructured && form.bankData && <p className="soc-bank-legacy">Dados informados anteriormente (texto livre): <b>{form.bankData}</b> — preencha os campos acima e salve para organizar.</p>}
+    </fieldset>
+    <div className="soc-settings-grid soc-settings-grid-full">
       <label className="soc-settings-wide"><span>Observações</span><input value={form.notes} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} /></label>
       <label className="soc-active-check"><input type="checkbox" checked={form.active} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, active: event.target.checked }))} /><span> acordo ativo</span></label>
       {canEdit && <button className="secondary-button soc-settings-save" type="button" disabled={saving} onClick={() => void save()}><Save size={16} /> {saving ? 'Salvando...' : 'Salvar parâmetros'}</button>}
@@ -654,7 +680,7 @@ export function SocietaryTransfersPage() {
 
     <SettingsPanel />
 
-    <p className="soc-rule-note">Novas apurações: Honorários do Escritório − 11,33% de impostos = base líquida; 60% Flávio e 40% Ana Paula. Repasses anteriores não são recalculados automaticamente.</p>
+    <p className="soc-rule-note"><Info size={18} aria-hidden="true" /> <span><b>Novas apurações:</b> Honorários do Escritório − 11,33% de impostos = base líquida; 60% Flávio e 40% Ana Paula. Repasses anteriores não são recalculados automaticamente.</span></p>
     <div className="soc-metrics">
       <article><span>Honorários do Escritório</span><strong>{money.format(totals.office)}</strong><small>Base integral dos alvarás filtrados</small></article>
       <article><span>Repasse Apurado</span><strong>{money.format(totals.apurado)}</strong><small>Percentual aplicado linha a linha</small></article>
