@@ -93,3 +93,8 @@ html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-fina
 html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial td { border-bottom: 1px solid rgba(255,255,255,.3) !important; }
 html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial tr:hover td { background: rgba(255,255,255,.08) !important; }
 html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial-pages button { border: 1px solid rgba(255,255,255,.5) !important; border-radius: 6px; }
+
+/* Exclusão proposta pela IA */
+.executive-ai-proposal-head.executive-ai-proposal-delete { color: #b42318; }
+.executive-ai-proposal-warnings { margin: 8px 0 0; padding-left: 18px; color: #b54708; font-size: 0.86rem; }
+.executive-ai-proposal-warnings li { margin: 2px 0; }
