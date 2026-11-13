@@ -10,6 +10,7 @@ import { FinancialMovementCard } from '../components/FinancialMovementCard'
 import { WorkflowStatusBadge } from '../components/WorkflowStatusBadge'
 import { DEFAULT_BANK_ACCOUNT_ID, getBankAccount, type BankAccount } from '../data/bankAccounts'
 import type { ChartOfAccount } from '../data/chartOfAccounts'
+import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 type AnyRecord = { id: string } & DocumentData
@@ -62,14 +63,18 @@ function parseBRL(value: string) {
   return Number.isFinite(number) ? number : 0
 }
 
-function formatCurrencyFromDigits(value: string) {
-  const digits = value.replace(/\D/g, '')
-  return digits ? money.format(Number(digits) / 100) : ''
+function normalizeCurrencyEntry(value: string) {
+  return value.replace(/[^\d.,]/g, '')
+}
+
+function formatCurrencyEntry(value: string) {
+  const number = parseBRL(value)
+  return number > 0 ? number.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
 }
 
 function asCurrencyInput(value: unknown) {
   const number = toNumber(value)
-  return number ? money.format(number) : ''
+  return number ? number.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''
 }
 
 function safeFileName(value: string) {
@@ -100,8 +105,29 @@ async function writeAudit(profile: ReturnType<typeof useAuth>['profile'], action
   })
 }
 
-function Header({ onNew }: { onNew: () => void }) {
-  return <div className="page-heading"><div><span className="eyebrow">Tesouraria</span><h1>Despesas</h1><p>Criação, documentos, movimentação financeira, correção e acompanhamento do demonstrativo.</p></div><div className="quick-actions"><button className="outline-expense-button" type="button"><FileText size={18} /> Extrato de Despesas</button><button className="expense-button" type="button" onClick={onNew}><Plus size={18} /> Nova Despesa</button></div></div>
+
+function printExpenseExtract(records: AnyRecord[], classificationMap: Map<string, AnyRecord>) {
+  const accountLabel = (item: AnyRecord) => {
+    const classification = classificationMap.get(`expense__${item.id}`)
+    const code = String(classification?.accountCode || item.expenseAccountCode || item.classificacaoContabil || '').trim()
+    const name = String(classification?.accountName || item.expenseAccountName || '').trim()
+    return code ? `${code}${name ? ` - ${name}` : ''}` : '—'
+  }
+  const rows = records
+    .filter((item) => ['aprovado', 'pago', 'arquivado'].includes(String(item.status ?? '')))
+    .map((item) => `<tr><td>${String(item.competencia || '—')}</td><td>${String(item.fornecedor || item.nome || '—')}</td><td>${accountLabel(item)}</td><td>${String(item.status || '—')}</td><td class="num">${money.format(toNumber(item.valorTotal))}</td></tr>`)
+    .join('')
+  const total = records
+    .filter((item) => ['aprovado', 'pago', 'arquivado'].includes(String(item.status ?? '')))
+    .reduce((sum, item) => sum + toNumber(item.valorTotal), 0)
+  const w = window.open('', '_blank', 'width=1100,height=820')
+  if (!w) { window.alert('O navegador bloqueou a janela do extrato. Libere pop-ups para este site e tente novamente.'); return }
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Extrato de Despesas</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,Helvetica,sans-serif;color:#17202b;font-size:11px}h1{text-align:center}table{width:100%;border-collapse:collapse}th{background:#7f1d1d;color:#fff;padding:8px;text-align:left}td{padding:7px;border-bottom:1px solid #ddd}.num{text-align:right}.total{font-weight:700;font-size:13px;margin-top:14px;text-align:right}</style></head><body><h1>Extrato de Despesas</h1><table><thead><tr><th>Competência</th><th>Favorecido</th><th>Conta</th><th>Status</th><th>Valor</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Nenhuma despesa efetiva.</td></tr>'}</tbody></table><div class="total">Total: ${money.format(total)}</div></body></html>`)
+  w.document.close()
+}
+
+function Header({ onNew, onExtract }: { onNew: () => void; onExtract: () => void }) {
+  return <div className="page-heading"><div><span className="eyebrow">Tesouraria</span><h1>Despesas</h1><p>Criação, documentos, movimentação financeira, correção e acompanhamento do demonstrativo.</p></div><div className="quick-actions"><button className="outline-expense-button" type="button" onClick={onExtract}><FileText size={18} /> Extrato de Despesas</button><button className="expense-button" type="button" onClick={onNew}><Plus size={18} /> Nova Despesa</button></div></div>
 }
 
 function ExpenseModal({ record, onClose }: { record?: AnyRecord | null; onClose: () => void }) {
@@ -237,10 +263,15 @@ function ExpenseModal({ record, onClose }: { record?: AnyRecord | null; onClose:
 
   async function save(status: 'rascunho' | 'devolvido' | 'enviado_aprovacao') {
     const validItems = items.filter((item) => item.historico.trim() || parseBRL(item.valor) > 0)
-    if (!nome.trim() || !validItems.length || total <= 0) {
-      window.alert('Preencha o nome/responsável e pelo menos uma linha de despesa com histórico e valor.')
-      return
-    }
+    const missingKeys: string[] = []
+    if (!nome.trim()) missingKeys.push('expense-name')
+    if (status === 'enviado_aprovacao' && !fornecedor.trim()) missingKeys.push('expense-supplier')
+    const firstValidIndex = items.findIndex((item) => item.historico.trim() || parseBRL(item.valor) > 0)
+    const requiredIndex = firstValidIndex >= 0 ? firstValidIndex : 0
+    if (!items[requiredIndex]?.historico.trim()) missingKeys.push(`expense-history-${requiredIndex}`)
+    if (parseBRL(items[requiredIndex]?.valor || '') <= 0 || total <= 0) missingKeys.push(`expense-value-${requiredIndex}`)
+    if (missingKeys.length) { showRequiredFieldErrors('.expense-sheet', missingKeys); return }
+    clearRequiredFieldErrors('.expense-sheet')
     if (hasUploading) {
       window.alert('Aguarde a conclusão do envio dos anexos. O progresso está sendo mostrado no formulário.')
       return
@@ -309,9 +340,9 @@ function ExpenseModal({ record, onClose }: { record?: AnyRecord | null; onClose:
     <div className="legacy-title-block"><strong>FLÁVIO MARQUES ADVOGADOS ASSOCIADOS</strong><span>DEMONSTRATIVO DE DESPESAS</span></div>
     {isReturned && <div className="return-note"><div><strong>Devolvido para correção</strong><span>{record?.approvalNote || 'A Diretoria solicitou correção deste demonstrativo.'}</span></div></div>}
 
-    <div className="form-grid compact-grid"><label><span>Unidade</span><select value={unidade} onChange={(e) => setUnidade(e.target.value as 'RJ' | 'SP')}><option>RJ</option><option>SP</option></select></label><label className="span-2"><span>Nome / Responsável</span><input value={nome} onChange={(e) => setNome(e.target.value)} /></label><label><span>Competência</span><input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} /></label><label className="span-2"><span>Fornecedor / Favorecido</span><input value={fornecedor} onChange={(e) => setFornecedor(e.target.value)} /></label><label><span>CPF / CNPJ</span><input value={documento} onChange={(e) => setDocumento(e.target.value)} /></label></div>
+    <div className="form-grid compact-grid"><label><span>Unidade</span><select value={unidade} onChange={(e) => setUnidade(e.target.value as 'RJ' | 'SP')}><option>RJ</option><option>SP</option></select></label><label className="span-2"><span>Nome / Responsável</span><input data-required-key="expense-name" value={nome} onChange={(e) => setNome(e.target.value)} /></label><label><span>Competência</span><input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} /></label><label className="span-2"><span>Fornecedor / Favorecido</span><input data-required-key="expense-supplier" value={fornecedor} onChange={(e) => setFornecedor(e.target.value)} /></label><label><span>CPF / CNPJ</span><input value={documento} onChange={(e) => setDocumento(e.target.value)} /></label></div>
 
-    <div className="legacy-table expense-table"><div className="legacy-row legacy-head"><span>DATA</span><span>HISTÓRICO</span><span>VALOR</span><span></span></div>{items.map((item, index) => <div className="legacy-row" key={index}><input type="date" value={item.data} onChange={(e) => updateItem(index, 'data', e.target.value)} /><input value={item.historico} onChange={(e) => updateItem(index, 'historico', e.target.value)} /><input inputMode="numeric" value={item.valor} onChange={(e) => updateItem(index, 'valor', formatCurrencyFromDigits(e.target.value))} placeholder="R$ 0,00" /><button type="button" className="row-remove" onClick={() => setItems((current) => current.length > 1 ? current.filter((_, i) => i !== index) : current)}><Trash2 size={15} /></button></div>)}</div>
+    <div className="legacy-table expense-table"><div className="legacy-row legacy-head"><span>DATA</span><span>HISTÓRICO</span><span>VALOR</span><span></span></div>{items.map((item, index) => <div className="legacy-row" key={index}><input type="date" value={item.data} onChange={(e) => updateItem(index, 'data', e.target.value)} /><input data-required-key={`expense-history-${index}`} value={item.historico} onChange={(e) => updateItem(index, 'historico', e.target.value)} /><div className="money-input-with-preview"><input data-required-key={`expense-value-${index}`} inputMode="decimal" value={item.valor} onChange={(e) => updateItem(index, 'valor', normalizeCurrencyEntry(e.target.value))} onBlur={(e) => updateItem(index, 'valor', formatCurrencyEntry(e.target.value))} placeholder="0,00" /><small>{money.format(parseBRL(item.valor))}</small></div><button type="button" className="row-remove" onClick={() => setItems((current) => current.length > 1 ? current.filter((_, i) => i !== index) : current)}><Trash2 size={15} /></button></div>)}</div>
     <button type="button" className="add-row-button expense-text" onClick={() => setItems((current) => [...current, { data: '', historico: '', valor: '' }])}><Plus size={16} /> Adicionar linha</button>
 
     <div className="form-grid compact-grid section-gap"><label className="span-2"><span>Detalhamento complementar <small>(opcional)</small></span><input value={subcategoria} onChange={(e) => setSubcategoria(e.target.value)} /></label><label className="span-3"><span>OBS.</span><textarea rows={3} value={observacoes} onChange={(e) => setObservacoes(e.target.value)} /></label></div>
@@ -343,7 +374,14 @@ export function ExpensesPageStorage() {
   const [attachmentTarget, setAttachmentTarget] = useState<AnyRecord | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [search, setSearch] = useState('')
+  const [managerialClassifications, setManagerialClassifications] = useState<AnyRecord[]>([])
   const { records, loading } = useExpenses()
+
+  useEffect(() => onSnapshot(collection(db, 'managerialClassifications'), (snapshot) => {
+    setManagerialClassifications(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })))
+  }), [])
+
+  const managerialClassificationMap = useMemo(() => new Map(managerialClassifications.map((item) => [item.id, item])), [managerialClassifications])
 
   useEffect(() => {
     if (params.get('novo') === '1') {
@@ -380,7 +418,7 @@ export function ExpensesPageStorage() {
   }
 
   return <>
-    <Header onNew={() => { setEditing(null); setOpen(true) }} />
+    <Header onNew={() => { setEditing(null); setOpen(true) }} onExtract={() => printExpenseExtract(records, managerialClassificationMap)} />
     <ExpenseManagementDashboard records={records} loading={loading} />
     <section className="page-card module-card expense-module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por responsável, fornecedor, competência, código ou conta" /></div><button className="secondary-button"><Filter size={17} /> Filtros</button></div>
       {loading ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando despesas</strong></div> : filtered.length === 0 ? <div className="module-empty"><ReceiptText size={34} /><strong>Nenhuma despesa encontrada</strong><span>Clique em Nova Despesa para preencher o primeiro demonstrativo.</span></div> : <div className="data-table review-expenses-table"><div className="data-row data-head"><span>Competência</span><span>Responsável / Favorecido</span><span>Plano de Contas</span><span>Status</span><span className="numeric">Valor</span><span>Ações</span></div>{filtered.map((item) => {

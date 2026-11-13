@@ -5,7 +5,8 @@ import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage
 import { FileText, Plus, Send, Upload, X } from 'lucide-react'
 import { db, storage } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
-import { DEFAULT_BANK_ACCOUNT_ID, getBankAccount, type BankAccount } from '../data/bankAccounts'
+import { DEFAULT_BANK_ACCOUNT_ID, getBankAccount, useBankAccounts, type BankAccount } from '../data/bankAccounts'
+import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const decimalBR = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -39,7 +40,7 @@ function parseMoney(value: string) {
   return Number.isFinite(number) ? Math.max(0, number) : 0
 }
 
-function MoneyInput({ value, onChange, ariaLabel }: { value: number; onChange: (value: number) => void; ariaLabel: string }) {
+function MoneyInput({ value, onChange, ariaLabel, validationKey }: { value: number; onChange: (value: number) => void; ariaLabel: string; validationKey?: string }) {
   const [focused, setFocused] = useState(false)
   const [text, setText] = useState(value > 0 ? decimalBR.format(value) : '')
   useEffect(() => { if (!focused) setText(value > 0 ? decimalBR.format(value) : '') }, [value, focused])
@@ -47,6 +48,7 @@ function MoneyInput({ value, onChange, ariaLabel }: { value: number; onChange: (
     type="text"
     inputMode="decimal"
     aria-label={ariaLabel}
+    data-required-key={validationKey}
     placeholder="0,00"
     value={text}
     onFocus={(event) => { setFocused(true); event.currentTarget.select() }}
@@ -89,7 +91,9 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
   const [bancoCliente, setBancoCliente] = useState('')
   const [agenciaCliente, setAgenciaCliente] = useState('')
   const [contaCliente, setContaCliente] = useState('')
+  const [titularCliente, setTitularCliente] = useState('')
   const [cpfCliente, setCpfCliente] = useState('')
+  const [pixCliente, setPixCliente] = useState('')
   const [emailCliente, setEmailCliente] = useState('')
   const [telefoneCliente, setTelefoneCliente] = useState('')
   const [enderecoCliente, setEnderecoCliente] = useState('')
@@ -99,6 +103,7 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
   const [outrasDeducoesDescricao, setOutrasDeducoesDescricao] = useState('')
   const [dataRepassePerito, setDataRepassePerito] = useState('')
   const [receivingBankAccountId, setReceivingBankAccountId] = useState<BankAccount['id']>(DEFAULT_BANK_ACCOUNT_ID)
+  const bankOptions = useBankAccounts()
   const [files, setFiles] = useState<File[]>([])
 
   useEffect(() => setParcelas((current) => buildParcelas(quantidadeParcelas, current)), [quantidadeParcelas])
@@ -109,6 +114,8 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
   const honorariosRecebidos = useMemo(() => realizadas.reduce((sum, row) => sum + row.honorarios, 0), [realizadas])
   const deducoesParcelasRecebidas = useMemo(() => realizadas.reduce((sum, row) => sum + row.deducoes, 0), [realizadas])
   const liquidoClienteRecebido = useMemo(() => realizadas.reduce((sum, row) => sum + row.liquidoCliente, 0), [realizadas])
+  const clientDataIncomplete = !bancoCliente.trim() || !agenciaCliente.trim() || !contaCliente.trim() || !titularCliente.trim() || !cpfCliente.trim() || !emailCliente.trim() || !telefoneCliente.trim() || !enderecoCliente.trim()
+  const processDataIncomplete = !processo.trim() || !reclamante.trim()
 
   function updateParcela(index: number, patch: Partial<Parcela>) {
     setParcelas((current) => current.map((row, i) => {
@@ -144,18 +151,29 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
   }
 
   async function save(status: 'rascunho' | 'enviado_tesouraria') {
-    if (!processo.trim() || !reclamante.trim() || valorAcordoBruto <= 0) {
-      window.alert('Preencha número do processo, reclamante e valor bruto do acordo.')
-      return
-    }
+    const missingKeys: string[] = []
+    if (!processo.trim()) missingKeys.push('acordo-processo')
+    if (!reclamante.trim()) missingKeys.push('acordo-reclamante')
+    if (valorAcordoBruto <= 0) missingKeys.push('acordo-valor-bruto')
     if (status === 'enviado_tesouraria' && totalRecebido <= 0) {
-      window.alert('Para enviar à Tesouraria, informe ao menos uma parcela com data realizada e valor recebido.')
-      return
+      const firstIncomplete = parcelas.findIndex((row) => !row.dataRealizada || row.valorParcela <= 0)
+      const index = firstIncomplete >= 0 ? firstIncomplete : 0
+      if (!parcelas[index]?.dataRealizada) missingKeys.push(`acordo-realizada-${index}`)
+      if (Number(parcelas[index]?.valorParcela || 0) <= 0) missingKeys.push(`acordo-parcela-valor-${index}`)
     }
-    if (outrasDeducoes > 0 && !outrasDeducoesDescricao.trim()) {
-      window.alert('Especifique as Outras Deduções.')
-      return
+    if (status === 'enviado_tesouraria' && liquidoClienteRecebido > 0) {
+      if (!bancoCliente.trim()) missingKeys.push('acordo-banco')
+      if (!agenciaCliente.trim()) missingKeys.push('acordo-agencia')
+      if (!contaCliente.trim()) missingKeys.push('acordo-conta')
+      if (!titularCliente.trim()) missingKeys.push('acordo-titular')
+      if (!cpfCliente.trim()) missingKeys.push('acordo-cpf')
+      if (!emailCliente.trim()) missingKeys.push('acordo-email')
+      if (!telefoneCliente.trim()) missingKeys.push('acordo-telefone')
+      if (!enderecoCliente.trim()) missingKeys.push('acordo-endereco')
     }
+    if (outrasDeducoes > 0 && !outrasDeducoesDescricao.trim()) missingKeys.push('acordo-outras-deducoes')
+    if (missingKeys.length) { showRequiredFieldErrors('.labor-agreement-sheet', missingKeys); return }
+    clearRequiredFieldErrors('.labor-agreement-sheet')
     setBusy(true)
     try {
       const attachments = await uploadAttachments()
@@ -197,7 +215,9 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
         banco: bancoCliente.trim(),
         agencia: agenciaCliente.trim(),
         conta: contaCliente.trim(),
+        titular: titularCliente.trim(),
         cpf: cpfCliente.trim(),
+        pix: pixCliente.trim(),
         emailNf: emailCliente.trim(),
         telefoneCliente: telefoneCliente.trim(),
         enderecoNf: enderecoCliente.trim(),
@@ -244,18 +264,18 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
       <label><span>Unidade</span><select value={unidade} onChange={(e) => setUnidade(e.target.value as 'RJ' | 'SP')}><option>RJ</option><option>SP</option></select></label>
       <label><span>Data</span><input type="date" value={data} onChange={(e) => setData(e.target.value)} /></label>
       <label><span>Natureza</span><input value="Trabalhista" readOnly /></label>
-      <label className="span-2"><span>Número do processo</span><input value={processo} onChange={(e) => setProcesso(e.target.value)} /></label>
+      <label className="span-2"><span>Número do processo</span><input data-required-key="acordo-processo" value={processo} onChange={(e) => setProcesso(e.target.value)} /></label>
       <label className="span-2"><span>Reclamada</span><input value={reclamada} onChange={(e) => setReclamada(e.target.value)} /></label>
-      <label className="span-2"><span>Reclamante</span><input value={reclamante} onChange={(e) => setReclamante(e.target.value)} /></label>
+      <label className="span-2"><span>Reclamante</span><input data-required-key="acordo-reclamante" value={reclamante} onChange={(e) => setReclamante(e.target.value)} /></label>
       <label><span>Percentual Honorários (%)</span><input type="number" min="0" max="100" step="0.01" value={percentualHonorarios} onChange={(e) => setPercentualHonorarios(Math.max(0, Number(e.target.value) || 0))} /></label>
     </div>
 
     <h3 className="form-section-title">Dados do Acordo</h3>
     <div className="form-grid compact-grid labor-agreement-grid">
       <label className="span-2"><span>Forma de Recebimento</span><input value={formaRecebimento} onChange={(e) => setFormaRecebimento(e.target.value)} /></label>
-      <label><span>Valor bruto do acordo</span><MoneyInput value={valorAcordoBruto} onChange={setValorAcordoBruto} ariaLabel="Valor bruto do acordo" /></label>
+      <label><span>Valor bruto do acordo</span><MoneyInput value={valorAcordoBruto} onChange={setValorAcordoBruto} ariaLabel="Valor bruto do acordo" validationKey="acordo-valor-bruto" /></label>
       <label><span>Número de parcelas</span><input type="number" min="1" max="60" value={quantidadeParcelas} onChange={(e) => setQuantidadeParcelas(Math.min(60, Math.max(1, Number(e.target.value) || 1)))} /></label>
-      <label className="span-2"><span>Conta de recebimento do escritório</span><select value={receivingBankAccountId} onChange={(e) => setReceivingBankAccountId(e.target.value as BankAccount['id'])}>{(['itau-pj','bb-pf','cef-pf'] as BankAccount['id'][]).map((id) => { const account = getBankAccount(id); return <option key={id} value={id}>{account.bank} · Ag. {account.agency} · C/C {account.account}</option> })}</select></label>
+      <label className="span-2"><span>Conta de recebimento do escritório</span><select value={getBankAccount(receivingBankAccountId).id} onChange={(e) => setReceivingBankAccountId(e.target.value as BankAccount['id'])}>{bankOptions.map(({ id }) => { const account = getBankAccount(id); return <option key={id} value={id}>{account.bank} · Ag. {account.agency} · C/C {account.account}</option> })}</select></label>
     </div>
 
     <h3 className="form-section-title">Parcelas e Datas de Recebimento</h3>
@@ -264,8 +284,8 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
       {parcelas.map((row, index) => <div className="labor-installment-row" key={row.numero}>
         <strong>{row.numero}</strong>
         <input type="date" value={row.dataPrevista} onChange={(e) => updateParcela(index, { dataPrevista: e.target.value })} />
-        <input type="date" value={row.dataRealizada} onChange={(e) => updateParcela(index, { dataRealizada: e.target.value })} />
-        <MoneyInput value={row.valorParcela} onChange={(value) => updateParcela(index, { valorParcela: value })} ariaLabel={`Valor parcela ${row.numero}`} />
+        <input data-required-key={`acordo-realizada-${index}`} type="date" value={row.dataRealizada} onChange={(e) => updateParcela(index, { dataRealizada: e.target.value })} />
+        <MoneyInput value={row.valorParcela} onChange={(value) => updateParcela(index, { valorParcela: value })} ariaLabel={`Valor parcela ${row.numero}`} validationKey={`acordo-parcela-valor-${index}`} />
         <MoneyInput value={row.honorarios} onChange={(value) => updateParcela(index, { honorarios: value })} ariaLabel={`Honorários parcela ${row.numero}`} />
         <MoneyInput value={row.deducoes} onChange={(value) => updateParcela(index, { deducoes: value })} ariaLabel={`Deduções parcela ${row.numero}`} />
         <strong>{money.format(row.liquidoCliente)}</strong>
@@ -276,13 +296,15 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
 
     <h3 className="form-section-title">Dados bancários e contato do cliente</h3>
     <div className="form-grid compact-grid labor-agreement-grid">
-      <label><span>Banco</span><input value={bancoCliente} onChange={(e) => setBancoCliente(e.target.value)} /></label>
-      <label><span>Agência</span><input value={agenciaCliente} onChange={(e) => setAgenciaCliente(e.target.value)} /></label>
-      <label><span>Conta Corrente</span><input value={contaCliente} onChange={(e) => setContaCliente(e.target.value)} /></label>
-      <label><span>CPF</span><input value={cpfCliente} onChange={(e) => setCpfCliente(e.target.value)} /></label>
-      <label><span>E-mail</span><input type="email" value={emailCliente} onChange={(e) => setEmailCliente(e.target.value)} /></label>
-      <label><span>Telefone</span><input value={telefoneCliente} onChange={(e) => setTelefoneCliente(e.target.value)} /></label>
-      <label className="span-2"><span>Endereço</span><input value={enderecoCliente} onChange={(e) => setEnderecoCliente(e.target.value)} /></label>
+      <label><span>Banco *</span><input data-required-key="acordo-banco" value={bancoCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setBancoCliente(e.target.value)} /></label>
+      <label><span>Agência *</span><input data-required-key="acordo-agencia" value={agenciaCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setAgenciaCliente(e.target.value)} /></label>
+      <label><span>Conta Corrente *</span><input data-required-key="acordo-conta" value={contaCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setContaCliente(e.target.value)} /></label>
+      <label><span>Nome / Titular *</span><input data-required-key="acordo-titular" value={titularCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setTitularCliente(e.target.value)} /></label>
+      <label><span>CPF *</span><input data-required-key="acordo-cpf" value={cpfCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setCpfCliente(e.target.value)} /></label>
+      <label><span>PIX (opcional)</span><input value={pixCliente} onChange={(e) => setPixCliente(e.target.value)} /></label>
+      <label><span>E-mail *</span><input data-required-key="acordo-email" type="email" value={emailCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setEmailCliente(e.target.value)} /></label>
+      <label><span>Telefone *</span><input data-required-key="acordo-telefone" value={telefoneCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setTelefoneCliente(e.target.value)} /></label>
+      <label className="span-2"><span>Endereço *</span><input data-required-key="acordo-endereco" value={enderecoCliente} required={liquidoClienteRecebido > 0} onChange={(e) => setEnderecoCliente(e.target.value)} /></label>
     </div>
 
     <h3 className="form-section-title">Deduções</h3>
@@ -291,7 +313,7 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
       <label><span>Data Repasse Perito</span><input type="date" value={dataRepassePerito} onChange={(e) => setDataRepassePerito(e.target.value)} /></label>
       <label><span>Ressarcimentos de Custas</span><MoneyInput value={ressarcimentoCustas} onChange={setRessarcimentoCustas} ariaLabel="Ressarcimentos de Custas" /></label>
       <label><span>Outras Deduções</span><MoneyInput value={outrasDeducoes} onChange={setOutrasDeducoes} ariaLabel="Outras Deduções" /></label>
-      <label className="span-2"><span>Especificar outras deduções</span><input value={outrasDeducoesDescricao} onChange={(e) => setOutrasDeducoesDescricao(e.target.value)} /></label>
+      <label className="span-2"><span>Especificar outras deduções</span><input data-required-key="acordo-outras-deducoes" value={outrasDeducoesDescricao} onChange={(e) => setOutrasDeducoesDescricao(e.target.value)} /></label>
     </div>
 
     <h3 className="form-section-title">Documentos do Acordo</h3>

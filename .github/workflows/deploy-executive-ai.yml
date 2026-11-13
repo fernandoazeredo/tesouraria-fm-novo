@@ -1,0 +1,56 @@
+name: Publicar IA Executiva - Functions e Hosting
+
+# Ativação controlada. O Secret Manager deve conter GOOGLE_GENAI_API_KEY
+# e a conta de serviço do GitHub precisa ter permissão de deploy de Functions.
+# Papeis exigidos na conta do deploy: Usuario da conta de servico (compute SA), Administrador do Cloud Functions e Administrador do Cloud Run.
+on:
+  push:
+    branches:
+      - feature/fm-assistente-dev-20261020
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[deploy-executive-ai]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar frontend
+        run: |
+          npm install --no-package-lock
+          npm test
+          npm run build
+      - name: Validar backend
+        run: |
+          cd functions
+          npm install --no-package-lock
+          npm test
+          node --check index.js
+      - name: Autenticar no Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TESOURARIA_FM_NOVO }}
+      - name: Instalar Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Identificar conta de serviço autenticada
+        run: gcloud auth list --filter='status:ACTIVE' --format='value(account)'
+      - name: Verificar credencial de IA no Secret Manager
+        run: gcloud secrets describe GOOGLE_GENAI_API_KEY --project tesouraria-fm-novo --format='value(name)'
+      - name: Confirmar versão habilitada do segredo
+        run: |
+          COUNT=$(gcloud secrets versions list GOOGLE_GENAI_API_KEY --project tesouraria-fm-novo --filter='state=ENABLED' --format='value(name)' | wc -l)
+          if [ "$COUNT" -lt 1 ]; then echo 'Secret sem versão habilitada'; exit 1; fi
+      - name: Instalar Firebase CLI
+        run: npm install -g firebase-tools
+      - name: Publicar APENAS Cloud Function da IA
+        run: firebase deploy --only functions:executive-ai --project tesouraria-fm-novo --non-interactive --force
+      - name: Publicar APENAS Hosting
+        run: firebase deploy --only hosting --project tesouraria-fm-novo --non-interactive

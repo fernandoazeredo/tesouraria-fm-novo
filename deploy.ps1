@@ -1,11 +1,11 @@
 $ErrorActionPreference = 'Stop'
 
-$ProjectId = 'controle-despesas-receitas-mm'
-$ExpectedFolderName = 'Controle_Despesas_Receitas_MM_Firebase'
+$ProjectId = 'tesouraria-fm-novo'
+$ExpectedFolderName = 'TESOURARIA_FM_NOVO'
 
 Write-Host ''
 Write-Host '=============================================' -ForegroundColor Cyan
-Write-Host ' FLAVIO MARQUES - DEPLOY FINANCEIRO' -ForegroundColor Cyan
+Write-Host ' TESOURARIA FM NOVO - DEPLOY FIREBASE' -ForegroundColor Cyan
 Write-Host '=============================================' -ForegroundColor Cyan
 Write-Host "Projeto Firebase: $ProjectId"
 Write-Host "Pasta atual: $((Get-Location).Path)"
@@ -55,8 +55,6 @@ if (-not (Test-Path '.\dist\index.html')) {
 Write-Host '3/3 - Publicando Firestore, Storage e Hosting no projeto Firebase isolado...' -ForegroundColor Yellow
 Write-Host "Projeto fixado por parametro: $ProjectId" -ForegroundColor DarkCyan
 
-# No Windows, executar a CLI via cmd evita o retorno incorreto observado pelo PowerShell
-# depois de um deploy que, na pratica, foi concluido pelo Firebase.
 $FirebaseCommand = "firebase deploy --only firestore:rules,firestore:indexes,storage,hosting --project $ProjectId --non-interactive"
 cmd /c $FirebaseCommand
 $FirebaseExitCode = $LASTEXITCODE

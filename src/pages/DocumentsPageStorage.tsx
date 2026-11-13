@@ -26,22 +26,34 @@ function useCollection(name: string) {
 }
 function toNumber(value: unknown) { const number = Number(value); return Number.isFinite(number) ? number : 0 }
 function attachmentsOf(item: AnyRecord): AttachmentMeta[] { return Array.isArray(item.attachments) ? item.attachments as AttachmentMeta[] : [] }
+function demonstrativeOf(item: AnyRecord): AttachmentMeta | null {
+  const d = item.demonstrative as AttachmentMeta | undefined
+  if (d?.url || d?.path) return { name: d.name || 'demonstrativo.pdf', url: d.url, path: d.path, type: 'application/pdf' }
+  if (item.demonstrativeUrl || item.demonstrativePath) return { name: 'demonstrativo.pdf', url: item.demonstrativeUrl, path: item.demonstrativePath, type: 'application/pdf' }
+  return null
+}
 
 export function DocumentsPageStorage() {
   const { records: expenses, loading: loadingExpenses } = useCollection('expenses')
   const { records: receivables, loading: loadingReceivables } = useCollection('receivables')
+  const { records: transfers, loading: loadingTransfers } = useCollection('alvaraTransfers')
+  const { records: commissions, loading: loadingCommissions } = useCollection('agentCommissions')
+  const { records: societaryTransfers, loading: loadingSocietary } = useCollection('societaryTransfers')
   const [search, setSearch] = useState('')
 
   const dossiers = useMemo(() => [
-    ...expenses.map((item) => ({ id: item.id, type: 'Despesa', title: item.nome || item.fornecedor || 'Despesa', subtitle: item.fornecedor || item.competencia || '', value: item.valorTotal, status: expenseStatusLabels[item.status] || item.status, statusCode: item.status, tone: 'expense', attachments: attachmentsOf(item) })),
-    ...receivables.map((item) => ({ id: item.id, type: 'Recebimento', title: item.processo || item.reclamante || 'Recebimento', subtitle: item.reclamante || item.reclamada || '', value: item.valorAlvara, status: receivableStatusLabels[item.status] || item.status, statusCode: item.status, tone: 'revenue', attachments: attachmentsOf(item) })),
-  ].filter((item) => `${item.type} ${item.title} ${item.subtitle} ${item.status} ${item.attachments.map((a) => a.name ?? '').join(' ')}`.toLowerCase().includes(search.toLowerCase())), [expenses, receivables, search])
+    ...expenses.map((item) => ({ id: item.id, type: 'Despesa', title: item.nome || item.fornecedor || 'Despesa', subtitle: item.fornecedor || item.competencia || '', value: item.valorTotal, status: expenseStatusLabels[item.status] || item.status, statusCode: item.status, tone: 'expense', attachments: [...(demonstrativeOf(item) ? [demonstrativeOf(item)!] : []), ...attachmentsOf(item)] })),
+    ...receivables.map((item) => ({ id: item.id, type: 'Recebimento', title: item.processo || item.reclamante || 'Recebimento', subtitle: item.reclamante || item.reclamada || '', value: item.valorAlvara, status: receivableStatusLabels[item.status] || item.status, statusCode: item.status, tone: 'revenue', attachments: [...(demonstrativeOf(item) ? [demonstrativeOf(item)!] : []), ...attachmentsOf(item)] })),
+    ...transfers.map((item) => ({ id: item.id, type: 'Repasse de Alvará', title: item.processo || 'Repasse de Alvará', subtitle: item.beneficiary || item.sourceSnapshot?.reclamante || 'Cliente', value: item.amountDue, status: String(item.status || '—'), statusCode: item.status, tone: 'revenue', attachments: [...(demonstrativeOf(item) ? [demonstrativeOf(item)!] : []), ...attachmentsOf(item)] })),
+    ...commissions.map((item) => ({ id: item.id, type: 'Comissão de Agente', title: item.processo || 'Comissão', subtitle: item.beneficiary || item.sourceSnapshot?.agentName || 'Agente', value: item.netAmountDue ?? item.amountDue, status: String(item.status || '—'), statusCode: item.status, tone: 'expense', attachments: [...(demonstrativeOf(item) ? [demonstrativeOf(item)!] : []), ...attachmentsOf(item)] })),
+    ...societaryTransfers.map((item) => ({ id: item.id, type: 'Repasse Societário', title: item.processo || 'Repasse Societário', subtitle: item.beneficiary || 'Ana Müller', value: item.transferValue, status: String(item.status || '—'), statusCode: item.status, tone: 'revenue', attachments: [...(demonstrativeOf(item) ? [demonstrativeOf(item)!] : []), ...attachmentsOf(item)] })),
+  ].filter((item) => `${item.type} ${item.title} ${item.subtitle} ${item.status} ${item.attachments.map((a) => a.name ?? '').join(' ')}`.toLowerCase().includes(search.toLowerCase())), [commissions, expenses, receivables, search, societaryTransfers, transfers])
 
   const totalAttachments = dossiers.reduce((sum, item) => sum + item.attachments.length, 0)
-  const loading = loadingExpenses || loadingReceivables
+  const loading = loadingExpenses || loadingReceivables || loadingTransfers || loadingCommissions || loadingSocietary
 
   return <>
-    <div className="page-heading"><div><span className="eyebrow">Dossiê digital</span><h1>Arquivo de Documentos</h1><p>Pesquisa centralizada de lançamentos e anexos armazenados no Firebase Storage.</p></div></div>
+    <div className="page-heading"><div><span className="eyebrow">Dossiê digital</span><h1>Arquivo de Documentos</h1><p>Pesquisa centralizada dos demonstrativos oficiais e documentos comprobatórios armazenados no Firebase Storage.</p></div></div>
     <section className="page-card module-card storage-documents-card">
       <div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Pesquisar processo, fornecedor, cliente, status ou arquivo" /></div><span className="status-badge success"><CheckCircle2 size={14} /> Storage ativo · {totalAttachments} anexo(s)</span></div>
       {loading ? <div className="module-empty"><FolderArchive size={34} /><strong>Carregando dossiês</strong><span>Consultando Firestore e referências do Storage...</span></div> : dossiers.length === 0 ? <div className="module-empty"><FolderArchive size={34} /><strong>Arquivo ainda sem dossiês</strong><span>Os próximos lançamentos e anexos aparecerão aqui automaticamente.</span></div> : <div className="storage-dossier-grid">{dossiers.map((item) => <article key={`${item.type}-${item.id}`} className={`storage-dossier ${item.tone}`}>

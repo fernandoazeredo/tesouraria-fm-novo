@@ -26,11 +26,16 @@ import {
   XCircle,
 } from 'lucide-react'
 import { db } from '../lib/firebase'
-import { useAuth } from '../auth/AuthContext'
+import { saveRepassePdf, type RepassePdfRow } from '../lib/societaryPdf'
+import { groupByProcess } from '../lib/societaryGrouping'
+import { calculateSocietaryDistribution } from '../lib/societaryDistribution'
+import { ensureOfficialDemonstrative } from '../lib/officialDemonstrative'
+import { isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
+import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 import '../societary-transfers.css'
 
 type AnyRecord = { id: string } & DocumentData
-type TransferStatus = 'apurado' | 'aguardando_aprovacao' | 'rejeitado' | 'aprovado' | 'enviado_tesouraria' | 'pago' | 'cancelado'
+type TransferStatus = 'apurado' | 'aguardando_aprovacao' | 'devolvido' | 'rejeitado' | 'aprovado' | 'enviado_tesouraria' | 'pago' | 'cancelado'
 type Settings = {
   beneficiary: string
   defaultPercent: number
@@ -44,9 +49,11 @@ type Settings = {
 type Draft = { percent: string; value: string }
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+// Formatação pt-BR usada apenas nos campos editáveis da tela.
+const moneyInput = (value: number) => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const today = () => new Date().toISOString().slice(0, 10)
 const DEFAULT_SETTINGS: Settings = {
-  beneficiary: 'Ana Müller',
+  beneficiary: 'Ana Paula Müller',
   defaultPercent: 40,
   startDate: today(),
   endDate: '',
@@ -92,7 +99,8 @@ function receiptDateOf(receivable: AnyRecord) {
 
 function isAlvara(receivable: AnyRecord) {
   const type = normalize(receivable.tipoRecebimento)
-  if (type === 'outras_receitas' || type === 'acordo_trabalhista') return false
+  if (type === 'outras_receitas') return false
+  if (type === 'acordo_trabalhista') return false
   return normalize(receivable.origem).includes('alvara')
 }
 
@@ -125,7 +133,8 @@ function statusLabel(item: AnyRecord) {
   const labels: Record<TransferStatus, string> = {
     apurado: 'Apurado',
     aguardando_aprovacao: 'Aguardando Aprovação',
-    rejeitado: 'Rejeitado / Ajuste necessário',
+    devolvido: 'Devolvido / Ajuste necessário',
+    rejeitado: 'Rejeitado',
     aprovado: 'Aprovado',
     enviado_tesouraria: 'Enviado à Tesouraria',
     pago: 'Pago',
@@ -138,6 +147,7 @@ function statusClass(item: AnyRecord) {
   const label = statusLabel(item)
   if (label === 'Pago' || label === 'Aprovado') return 'soc-status success'
   if (label === 'Vencido' || label.startsWith('Rejeitado') || label === 'Cancelado') return 'soc-status danger'
+  if (label.startsWith('Devolvido')) return 'soc-status warning'
   if (label === 'Enviado à Tesouraria') return 'soc-status info'
   return 'soc-status warning'
 }
@@ -232,8 +242,10 @@ export function SocietaryTransferSync() {
           const batch = writeBatch(db)
           for (const source of chunk) {
             const officeFees = officeFeesOf(source)
-            const percent = settings.defaultPercent
-            const transferValue = calculateTransferValue(officeFees, percent)
+            const split = calculateSocietaryDistribution(officeFees)
+            const percent = 40
+            // Configuração societária aprovada: 40% Ana, 60% Flávio, após 11,33% de impostos.
+            const transferValue = split.anaShare
             batch.set(doc(db, 'societaryTransfers', source.id), {
               sourceReceivableId: source.id,
               processo: String(source.processo ?? ''),
@@ -242,12 +254,22 @@ export function SocietaryTransferSync() {
               receiptDate: receiptDateOf(source),
               competence: receiptDateOf(source).slice(0, 7),
               officeFees,
+              sourceGrossAmount: toNumber(source.valorAlvara),
+              // valorLiquidoCliente incorpora outras deduções: não equivale necessariamente à parcela do cliente.
+              sourceClientAmount: Number.isFinite(Number(source.valorLiquidoCliente)) ? Number(source.valorLiquidoCliente) : null,
+              sourceComponents: Array.isArray(source.components) ? source.components : [],
+              taxesPercent: split.taxPercent,
+              taxesValue: split.taxes,
+              netOfficeFees: split.netFees,
+              flavioShare: split.flavioShare,
+              anaShare: split.anaShare,
+              calculationVersion: 'net-1133-60-40-v1',
               percent,
               originalPercent: percent,
               originalTransferValue: transferValue,
               transferValue,
               paidValue: 0,
-              beneficiary: settings.beneficiary,
+              beneficiary: 'Ana Paula Müller',
               status: 'apurado',
               sourceStatus: String(source.status ?? ''),
               createdBy: profile.uid,
@@ -275,21 +297,23 @@ function SettingsPanel() {
   const settings = useSocietarySettings()
   const [form, setForm] = useState<Settings>(settings)
   const [saving, setSaving] = useState(false)
-  const canEdit = ['master', 'diretor'].includes(String(profile?.role ?? ''))
+  const canEdit = profile?.role === 'master' || Boolean(profile && isOfficialDirectorEmail(profile.email) && profile.role === 'diretor')
 
   useEffect(() => setForm(settings), [settings])
 
   async function save() {
     if (!canEdit) return
-    if (!form.beneficiary.trim() || form.defaultPercent < 0 || form.defaultPercent > 100 || form.dueDay < 0 || form.dueDay > 31) {
+    if (!form.beneficiary.trim()) { showRequiredFieldErrors('.soc-settings', ['soc-beneficiary']); return }
+    clearRequiredFieldErrors('.soc-settings')
+    if (form.defaultPercent < 0 || form.defaultPercent > 100 || form.dueDay < 0 || form.dueDay > 31) {
       window.alert('Revise beneficiário, percentual padrão e dia de vencimento.')
       return
     }
     setSaving(true)
     try {
       await setDoc(doc(db, 'appConfig', 'societaryTransfer'), {
-        beneficiary: form.beneficiary.trim(),
-        defaultPercent: form.defaultPercent,
+        beneficiary: 'Ana Paula Müller',
+        defaultPercent: 40,
         startDate: form.startDate,
         endDate: form.endDate,
         dueDay: form.dueDay,
@@ -300,7 +324,7 @@ function SettingsPanel() {
         updatedBy: profile?.uid,
         updatedByName: profile?.displayName,
       }, { merge: true })
-      await audit(profile, 'Parâmetros do acordo alterados', `${form.beneficiary.trim()} · ${form.defaultPercent.toLocaleString('pt-BR')}% · início ${dateBR(form.startDate)}${form.endDate ? ` · fim ${dateBR(form.endDate)}` : ''} · ${form.active ? 'ativo' : 'inativo'}`)
+      await audit(profile, 'Parâmetros do acordo alterados', `${form.beneficiary.trim()} · ${(40).toLocaleString('pt-BR')}% · início ${dateBR(form.startDate)}${form.endDate ? ` · fim ${dateBR(form.endDate)}` : ''} · ${form.active ? 'ativo' : 'inativo'}`)
     } catch (error) {
       console.error(error)
       window.alert('Não foi possível salvar os parâmetros do Repasse Societário.')
@@ -312,8 +336,8 @@ function SettingsPanel() {
   return <details className="soc-settings">
     <summary><Settings2 size={17} /> Parâmetros do acordo</summary>
     <div className="soc-settings-grid soc-settings-grid-full">
-      <label><span>Beneficiário</span><input value={form.beneficiary} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, beneficiary: event.target.value }))} /></label>
-      <label><span>Percentual padrão</span><input type="number" min="0" max="100" step="0.01" value={form.defaultPercent} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, defaultPercent: toNumber(event.target.value) }))} /></label>
+      <label><span>Beneficiária (fixa)</span><input value="Ana Paula Müller" disabled readOnly /></label>
+      <label><span>Percentual fixo de Ana Paula Müller</span><input type="number" value={40} readOnly disabled /></label>
       <label><span>Data de início</span><input type="date" value={form.startDate} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></label>
       <label><span>Data de encerramento</span><input type="date" value={form.endDate} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></label>
       <label><span>Dia de vencimento</span><input type="number" min="0" max="31" value={form.dueDay} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, dueDay: toNumber(event.target.value) }))} /></label>
@@ -322,7 +346,7 @@ function SettingsPanel() {
       <label className="soc-active-check"><input type="checkbox" checked={form.active} disabled={!canEdit} onChange={(event) => setForm((current) => ({ ...current, active: event.target.checked }))} /><span> acordo ativo</span></label>
       {canEdit && <button className="secondary-button soc-settings-save" type="button" disabled={saving} onClick={() => void save()}><Save size={16} /> {saving ? 'Salvando...' : 'Salvar parâmetros'}</button>}
     </div>
-    <p>O percentual padrão vale somente para novos alvarás apurados. Alterações futuras não recalculam lançamentos já existentes.</p>
+    <p>Percentual fixo de 40% para Ana Paula Müller, sobre honorários líquidos de 11,33% de impostos. Registros antigos não são recalculados.</p>
   </details>
 }
 
@@ -331,21 +355,25 @@ export function SocietaryTransfersPage() {
   const { records, loading } = useSocietaryTransfers()
   const [search, setSearch] = useState('')
   const [month, setMonth] = useState('')
+  const [dateStart, setDateStart] = useState('')
+  const [dateEnd, setDateEnd] = useState('')
   const [status, setStatus] = useState('todos')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [busyId, setBusyId] = useState('')
-  const canDecide = ['master', 'diretor'].includes(String(profile?.role ?? ''))
+  const canDecide = profile?.role === 'master' || Boolean(profile && isOfficialDirectorEmail(profile.email) && profile.role === 'diretor')
 
   const rows = useMemo(() => records
     .filter((item) => {
       const haystack = normalize(`${item.processo ?? ''} ${item.reclamante ?? ''} ${item.reclamada ?? ''} ${item.beneficiary ?? ''}`)
       if (search && !haystack.includes(normalize(search))) return false
       if (month && String(item.competence ?? '') !== month) return false
+      if (dateStart && String(item.receiptDate ?? '') < dateStart) return false
+      if (dateEnd && String(item.receiptDate ?? '') > dateEnd) return false
       if (status !== 'todos' && String(item.status ?? '') !== status) return false
       return true
     })
-    .sort((a, b) => String(a.receiptDate ?? '').localeCompare(String(b.receiptDate ?? ''))), [month, records, search, status])
+    .sort((a, b) => String(a.receiptDate ?? '').localeCompare(String(b.receiptDate ?? ''))), [month, dateStart, dateEnd, records, search, status])
 
   const rowBalances = useMemo(() => {
     let running = 0
@@ -371,14 +399,14 @@ export function SocietaryTransfersPage() {
   function draftFor(item: AnyRecord): Draft {
     return drafts[item.id] ?? {
       percent: toNumber(item.percent).toFixed(2),
-      value: toNumber(item.transferValue).toFixed(2),
+      value: moneyInput(toNumber(item.transferValue)),
     }
   }
 
   function changePercent(item: AnyRecord, raw: string) {
     const percent = Math.max(0, Math.min(100, toNumber(raw)))
-    const value = calculateTransferValue(toNumber(item.officeFees), percent)
-    setDrafts((current) => ({ ...current, [item.id]: { percent: raw, value: value.toFixed(2) } }))
+    const value = calculateTransferValue(toNumber(item.netOfficeFees ?? item.officeFees), percent)
+    setDrafts((current) => ({ ...current, [item.id]: { percent: raw, value: moneyInput(value) } }))
   }
 
   function changeValue(item: AnyRecord, raw: string) {
@@ -387,7 +415,8 @@ export function SocietaryTransfersPage() {
   }
 
   async function saveAdjustment(item: AnyRecord) {
-    if (!canDecide || !['apurado', 'rejeitado'].includes(String(item.status ?? ''))) return
+    if (!canDecide || !['apurado', 'devolvido', 'rejeitado'].includes(String(item.status ?? ''))) return
+    if (item.calculationVersion === 'net-1133-60-40-v1') { window.alert('O ajuste manual está bloqueado para repasses calculados pela nova regra societária.'); return }
     const draft = draftFor(item)
     const percent = Math.max(0, Math.min(100, toNumber(draft.percent)))
     const transferValue = parseMoney(draft.value)
@@ -418,7 +447,7 @@ export function SocietaryTransfersPage() {
   }
 
   async function submitForApproval(item: AnyRecord) {
-    if (!canDecide || !['apurado', 'rejeitado'].includes(String(item.status ?? ''))) return
+    if (!canDecide || !['apurado', 'devolvido', 'rejeitado'].includes(String(item.status ?? ''))) return
     setBusyId(item.id)
     try {
       await updateDoc(doc(db, 'societaryTransfers', item.id), {
@@ -574,6 +603,16 @@ export function SocietaryTransfersPage() {
     setSelected(new Set())
   }
 
+  async function exportRepassePdf(items: AnyRecord[], all: boolean) {
+    if (!profile || items.length===0) return
+    try {
+      saveRepassePdf(items as RepassePdfRow[], profile.displayName||profile.email||'', all?'Extrato Geral do Repasse Societário':'Repasse Societário — Memória de Cálculo', all?'Extrato_Geral_Repasse_Societario.pdf':'Memoria_Repasse_'+String(items[0].processo||items[0].id).replace(/[^0-9A-Za-z.-]/g,'_')+'.pdf')
+      await audit(profile, all?'Extrato geral do Repasse Societário gerado':'PDF individual do Repasse Societário gerado', (all?'Registros: '+items.length:'CNJ: '+String(items[0].processo||'não informado')), all?undefined:items[0].id)
+    } catch (error) {
+      window.alert('Não foi possível concluir a emissão do PDF e seu registro: '+String(error))
+    }
+  }
+
   function exportExcel() {
     const header = ['Data', 'Processo', 'Reclamante', 'Reclamada', 'Honorários Escritório', '% Repasse', 'Valor Repasse', 'Valor Pago', 'Saldo', 'Aprovação', 'Status', 'Data Pagamento', 'Saldo Acumulado']
     const body = rows.map((item) => [
@@ -615,6 +654,7 @@ export function SocietaryTransfersPage() {
 
     <SettingsPanel />
 
+    <p className="soc-rule-note">Novas apurações: Honorários do Escritório − 11,33% de impostos = base líquida; 60% Flávio e 40% Ana Paula. Repasses anteriores não são recalculados automaticamente.</p>
     <div className="soc-metrics">
       <article><span>Honorários do Escritório</span><strong>{money.format(totals.office)}</strong><small>Base integral dos alvarás filtrados</small></article>
       <article><span>Repasse Apurado</span><strong>{money.format(totals.apurado)}</strong><small>Percentual aplicado linha a linha</small></article>
@@ -626,12 +666,31 @@ export function SocietaryTransfersPage() {
     <section className="page-card soc-card">
       <div className="soc-toolbar">
         <div className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar processo, reclamante ou reclamada" /></div>
+        <label>De <input type="date" value={dateStart} onChange={e=>setDateStart(e.target.value)}/></label><label>Até <input type="date" value={dateEnd} onChange={e=>setDateEnd(e.target.value)}/></label>
         <input className="soc-month" type="month" value={month} onChange={(event) => setMonth(event.target.value)} aria-label="Filtrar por competência" />
         <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filtrar por status">
-          <option value="todos">Todos os status</option><option value="apurado">Apurado</option><option value="aguardando_aprovacao">Aguardando Aprovação</option><option value="rejeitado">Rejeitado / Ajuste</option><option value="aprovado">Aprovado</option><option value="enviado_tesouraria">Enviado à Tesouraria</option><option value="pago">Pago</option><option value="cancelado">Cancelado</option>
+          <option value="todos">Todos os status</option><option value="apurado">Apurado</option><option value="aguardando_aprovacao">Aguardando Aprovação</option><option value="devolvido">Devolvido / Ajuste</option><option value="rejeitado">Rejeitado</option><option value="aprovado">Aprovado</option><option value="enviado_tesouraria">Enviado à Tesouraria</option><option value="pago">Pago</option><option value="cancelado">Cancelado</option>
         </select>
-        <div className="soc-report-actions"><button className="small-neutral-button" type="button" onClick={() => window.print()}><FileText size={14} /> PDF / Imprimir</button><button className="small-neutral-button" type="button" onClick={exportExcel}><FileDown size={14} /> Excel</button></div>
+        <div className="soc-report-actions"><button className="small-neutral-button" type="button" disabled={!rows.length} onClick={() => void exportRepassePdf(rows,true)}><FileText size={14} /> Extrato Geral PDF</button><button className="small-neutral-button" type="button" onClick={exportExcel}><FileDown size={14} /> Excel</button></div>
       </div>
+
+      {!loading && rows.length>0 && <div className="soc-cnjs" style={{display:'grid',gap:12,marginTop:16}}>
+        {groupByProcess(rows).map((items)=><article className="page-card" key={items[0].id}>
+          <h3>CNJ: {items[0].processo || 'Não informado'}</h3>
+          <p><strong>Subtotal dos repasses deste CNJ: {money.format(items.reduce((sum,item)=>sum+toNumber(item.transferValue),0))}</strong></p>
+          {items.map(item=><div key={item.id} style={{padding:'12px 0',borderTop:'1px solid var(--border-color, #ccc)'}}>
+            <p><strong>{item.reclamante||'Reclamante não informado'}</strong> · {item.reclamada||'Reclamada não informada'}</p>
+            <p>Recebimento: {dateBR(item.receiptDate)} · Status: {statusLabel(item)}</p>
+            {item.calculationVersion!=='net-1133-60-40-v1'&&<strong>Cálculo anterior — memória tributária indisponível</strong>}
+            <p>Total recebido: {item.calculationVersion==='net-1133-60-40-v1'&&typeof item.sourceGrossAmount==='number'?money.format(item.sourceGrossAmount):'Não informado'} · Líquido do cliente: {item.calculationVersion==='net-1133-60-40-v1'&&typeof item.sourceClientAmount==='number'?money.format(item.sourceClientAmount):'Não informado'}</p>
+            {Array.isArray(item.sourceComponents)&&item.sourceComponents.map((part:DocumentData,index:number)=><p key={index}>{String(part.nome||'Dedução')}: {money.format(toNumber(part.valor))}</p>)}
+            <p>Honorários: {money.format(toNumber(item.officeFees))} · Impostos 11,33%: {item.calculationVersion==='net-1133-60-40-v1'?money.format(toNumber(item.taxesValue)):'Não disponível'}</p>
+            <p>Líquido: {item.calculationVersion==='net-1133-60-40-v1'?money.format(toNumber(item.netOfficeFees)):'Não disponível'} · Flávio 60% (informativo): {item.calculationVersion==='net-1133-60-40-v1'?money.format(toNumber(item.flavioShare)):'Não disponível'}</p>
+            <p>Ana Paula Müller 40%: {item.calculationVersion==='net-1133-60-40-v1'?money.format(toNumber(item.anaShare)):'Não disponível'} · Pago: {money.format(toNumber(item.paidValue))} · Saldo: {money.format(Math.max(0,toNumber(item.transferValue)-toNumber(item.paidValue)))}</p>
+            <button className="small-neutral-button" type="button" onClick={()=>void exportRepassePdf(items,false)}><FileDown size={14}/> Baixar PDF individual</button>
+          </div>)}
+        </article>)}
+      </div>}
 
       {canDecide && selected.size > 0 && <div className="soc-batchbar"><strong>{selected.size} selecionado(s)</strong><button className="small-success-button" onClick={() => void approveSelected()}><BadgeCheck size={15} /> Aprovar selecionados</button><button className="small-revenue-button" onClick={() => void sendSelected()}><Send size={15} /> Enviar aprovados à Tesouraria</button></div>}
 
@@ -639,7 +698,7 @@ export function SocietaryTransfersPage() {
         <thead><tr><th><input type="checkbox" checked={rows.length > 0 && rows.every((item) => selected.has(item.id))} onChange={toggleAll} /></th><th>Data</th><th>Processo</th><th>Reclamante / Reclamada</th><th>Honorários do Escritório</th><th>% Repasse</th><th>Valor do Repasse</th><th>Valor Pago</th><th>Saldo Linha</th><th>Aprovação</th><th>Status</th><th>Data Pagamento</th><th>Saldo Acumulado</th><th>Ações</th></tr></thead>
         <tbody>{rows.map((item) => {
           const draft = draftFor(item)
-          const editable = canDecide && ['apurado', 'rejeitado'].includes(String(item.status ?? ''))
+          const editable = canDecide && item.calculationVersion !== 'net-1133-60-40-v1' && ['apurado', 'devolvido', 'rejeitado'].includes(String(item.status ?? ''))
           const balance = Math.max(0, toNumber(item.transferValue) - toNumber(item.paidValue))
           const currentApproval = approvalLabel(item)
           return <tr key={item.id}>
@@ -653,7 +712,7 @@ export function SocietaryTransfersPage() {
             <td className="numeric">{money.format(toNumber(item.paidValue))}</td>
             <td className="numeric"><strong>{money.format(balance)}</strong></td>
             <td className="soc-approval">{currentApproval ? (item.status === 'aguardando_aprovacao' ? <span>Aguardando</span> : <strong>{currentApproval}</strong>) : <span>—</span>}</td>
-            <td><span className={statusClass(item)}>{statusLabel(item)}</span>{item.rejectionReason && <small className="soc-reason">{String(item.rejectionReason)}</small>}</td>
+            <td><span className={statusClass(item)}>{statusLabel(item)}</span>{(item.returnReason || item.rejectionReason) && <small className="soc-reason">{String(item.returnReason || item.rejectionReason)}</small>}</td>
             <td>{item.paymentDate ? dateBR(item.paymentDate) : '—'}</td>
             <td className="numeric"><strong>{money.format(rowBalances.get(item.id) ?? 0)}</strong></td>
             <td><div className="soc-actions">
@@ -701,6 +760,16 @@ export function SocietaryTreasuryPanel() {
       updatedAt: serverTimestamp(),
     }))
     await batch.commit()
+    await Promise.all(items.map((item) => ensureOfficialDemonstrative('societaryTransfer', {
+      ...item,
+      status: 'pago',
+      paidValue: toNumber(item.transferValue),
+      paymentDate: today(),
+      paymentGroupId,
+      paymentReference: reference.trim(),
+      paidBy: profile?.uid,
+      paidByName: profile?.displayName,
+    }, { generatedBy: profile?.uid ?? null })))
     await audit(profile, 'Pagamento societário confirmado', `${items.length} repasse(s) · ${money.format(total)} · grupo ${paymentGroupId}${reference.trim() ? ` · referência ${reference.trim()}` : ''}`)
     setSelected(new Set())
   }
@@ -734,6 +803,6 @@ export function SocietaryTreasuryPanel() {
   return <section className="page-card soc-treasury-card">
     <div className="soc-treasury-heading"><div><span className="eyebrow">Fila de pagamentos</span><h2>Repasse Societário</h2><p>Obrigações societárias já aprovadas e encaminhadas para pagamento.</p></div><CircleDollarSign size={28} /></div>
     {canPay && selected.size > 0 && <div className="soc-batchbar"><strong>{selected.size} selecionado(s)</strong><button className="small-success-button" onClick={() => void payItems(queue.filter((item) => selected.has(item.id)))}><CheckCircle2 size={14} /> Confirmar pagamento consolidado</button></div>}
-    {loading ? <div className="module-empty"><RefreshCw className="spin" size={26} /><strong>Carregando repasses societários</strong></div> : queue.length === 0 ? <div className="module-empty"><FileText size={28} /><strong>Nenhum repasse societário aguardando pagamento</strong></div> : <div className="soc-table-wrap"><table className="soc-table treasury"><thead><tr><th></th><th>Data</th><th>Processo</th><th>Beneficiário</th><th>Honorários</th><th>%</th><th>Valor</th><th>Ações</th></tr></thead><tbody>{queue.map((item) => <tr key={item.id}><td><input type="checkbox" disabled={!canPay} checked={selected.has(item.id)} onChange={() => toggle(item.id)} /></td><td>{dateBR(item.receiptDate)}</td><td>{item.processo || '—'}</td><td><strong>{item.beneficiary || 'Ana Müller'}</strong></td><td className="numeric">{money.format(toNumber(item.officeFees))}</td><td className="numeric">{toNumber(item.percent).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td><td className="numeric"><strong>{money.format(toNumber(item.transferValue))}</strong></td><td><div className="soc-actions">{canPay && <button className="small-success-button" onClick={() => void payItems([item])}><CheckCircle2 size={14} /> Confirmar pagamento</button>}{canPay && <button className="small-neutral-button" onClick={() => void returnForAdjustment(item)}>Devolver</button>}{!canPay && <span className="soc-action-note">Somente leitura</span>}</div></td></tr>)}</tbody></table></div>}
+    {loading ? <div className="module-empty"><RefreshCw className="spin" size={26} /><strong>Carregando repasses societários</strong></div> : queue.length === 0 ? <div className="module-empty"><FileText size={28} /><strong>Nenhum repasse societário aguardando pagamento</strong></div> : <div className="soc-table-wrap"><table className="soc-table treasury"><thead><tr><th></th><th>Data</th><th>Processo</th><th>Beneficiário</th><th>Honorários</th><th>%</th><th>Valor</th><th>Ações</th></tr></thead><tbody>{queue.map((item) => <tr key={item.id}><td><input type="checkbox" disabled={!canPay} checked={selected.has(item.id)} onChange={() => toggle(item.id)} /></td><td>{dateBR(item.receiptDate)}</td><td>{item.processo || '—'}</td><td><strong>{item.beneficiary || 'Ana Paula Müller'}</strong></td><td className="numeric">{money.format(toNumber(item.officeFees))}</td><td className="numeric">{toNumber(item.percent).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%</td><td className="numeric"><strong>{money.format(toNumber(item.transferValue))}</strong></td><td><div className="soc-actions">{canPay && <button className="small-success-button" onClick={() => void payItems([item])}><CheckCircle2 size={14} /> Confirmar pagamento</button>}{canPay && <button className="small-neutral-button" onClick={() => void returnForAdjustment(item)}>Devolver</button>}{!canPay && <span className="soc-action-note">Somente leitura</span>}</div></td></tr>)}</tbody></table></div>}
   </section>
 }

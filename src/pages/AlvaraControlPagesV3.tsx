@@ -1,8 +1,12 @@
+import { getCurrentInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
 import { BadgeDollarSign, CheckCircle2, FileText, RefreshCw, Search, Send, Users, X } from 'lucide-react'
 import { db } from '../lib/firebase'
-import { useAuth } from '../auth/AuthContext'
+import { ensureOfficialDemonstrative } from '../lib/officialDemonstrative'
+import { isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
+import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
+import { isEffectiveAlvaraReceivable } from '../lib/receivableClassification'
 
 type AnyRecord = { id: string } & DocumentData
 type PaymentKind = 'client' | 'agent'
@@ -58,7 +62,6 @@ function componentOf(item: AnyRecord, name: string) {
 }
 function componentValue(item: AnyRecord, name: string) { return toNumber(componentOf(item, name)?.valor) }
 function componentPercent(item: AnyRecord, name: string) { return toNumber(componentOf(item, name)?.percentual) }
-function eligibleReceivable(item: AnyRecord) { return ['recebido_tesouraria', 'encerrado'].includes(String(item.status ?? '')) }
 
 function addMonths(dateValue: string, months: number) {
   if (!dateValue) return ''
@@ -116,13 +119,14 @@ function planPaidValue(plan?: AnyRecord) { return planInstallments(plan).reduce(
 function nextInstallment(plan?: AnyRecord) { return planInstallments(plan).filter((item) => !item.paid).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] }
 function statusLabel(plan?: AnyRecord) {
   if (!plan) return 'Aguardando programação'
-  const labels: Record<string, string> = { aguardando_aprovacao: 'Aguardando aprovação', aprovado: 'Aprovado', rejeitado: 'Rejeitado', parcialmente_pago: 'Parcialmente pago', pago: 'Pago integralmente' }
+  const labels: Record<string, string> = { aguardando_aprovacao: 'Aguardando aprovação', aprovado: 'Aprovado', devolvido: 'Devolvido', rejeitado: 'Rejeitado', parcialmente_pago: 'Parcialmente pago', pago: 'Pago integralmente' }
   return labels[String(plan.status ?? '')] || String(plan.status ?? 'Aguardando programação')
 }
 function statusClass(plan?: AnyRecord) {
   if (!plan) return 'workflow-neutral'
   if (plan.status === 'pago' || plan.status === 'aprovado') return 'workflow-success'
   if (plan.status === 'rejeitado') return 'workflow-danger'
+  if (plan.status === 'devolvido') return 'workflow-warning'
   if (plan.status === 'aguardando_aprovacao') return 'workflow-warning'
   if (plan.status === 'parcialmente_pago') return 'workflow-info'
   return 'workflow-neutral'
@@ -146,7 +150,7 @@ function openPdfPrint(title: string, body: string) {
   if (!reportWindow) { window.alert('O navegador bloqueou a janela do relatório. Libere pop-ups para gerar o PDF.'); return }
   reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>
     @page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;font-size:11px}h1{margin:0;text-align:center;font-size:18px}h2{font-size:13px;margin:14px 0 7px}.company{text-align:center;font-weight:700;font-size:12px;margin-bottom:3px}.subtitle{text-align:center;margin:3px 0 14px}.section{page-break-inside:avoid;margin-bottom:18px;border:1px solid #222}.meta{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid #222}.meta div{padding:5px 7px;border-right:1px solid #222;min-height:34px}.meta div:nth-child(4n){border-right:0}.meta b{display:block;font-size:9px;text-transform:uppercase;margin-bottom:3px}.wide{grid-column:span 2}.value{font-weight:700}table{width:100%;border-collapse:collapse}th,td{border:1px solid #222;padding:6px;text-align:left;vertical-align:top}th{background:#efefef;text-align:center;font-size:9px;text-transform:uppercase}.num{text-align:right}.center{text-align:center}.total-row td{font-weight:700;background:#f7f7f7}.summary{margin-top:12px;display:flex;gap:20px;justify-content:flex-end}.summary b{font-size:12px}.footer{margin-top:18px;border-top:1px solid #999;padding-top:6px;color:#555;font-size:9px}.page-break{page-break-before:always}
-  </style></head><body>${body}<div class="footer">FLÁVIO MARQUES ADVOGADOS ASSOCIADOS · Controle de Despesas e Receitas · Relatório gerado em ${new Date().toLocaleString('pt-BR')}</div><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`)
+  </style></head><body>${body}<div class="footer">${escapeHtml(getCurrentInstitutionalSettings().razaoSocial)} · Controle de Despesas e Receitas · Relatório gerado em ${new Date().toLocaleString('pt-BR')}</div><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`)
   reportWindow.document.close()
 }
 
@@ -159,11 +163,11 @@ function generatePaymentPdf(kind: PaymentKind, sources: AnyRecord[], planMap: Ma
     const paid = planPaidValue(plan)
     const installments = planInstallments(plan)
     const percent = componentPercent(source, 'Outras Deduções / Participações')
-    const header = `<div class="meta"><div class="wide"><b>${kind === 'client' ? 'Cliente / Titular' : 'Agente'}</b>${escapeHtml(sourceBeneficiary(source, kind))}</div><div><b>Data do recebimento</b>${escapeHtml(dateBr(source.data))}</div><div><b>Valor recebido</b><span class="value">${escapeHtml(money.format(toNumber(source.valorAlvara)))}</span></div><div class="wide"><b>Processo</b>${escapeHtml(source.processo || '—')}</div><div><b>Reclamante</b>${escapeHtml(source.reclamante || '—')}</div><div><b>Reclamada</b>${escapeHtml(source.reclamada || '—')}</div>${kind === 'client' ? `<div><b>CPF</b>${escapeHtml(source.cpf || '—')}</div><div><b>Banco / Agência / Conta</b>${escapeHtml(`${source.banco || '—'} / ${source.agencia || '—'} / ${source.conta || '—'}`)}</div>` : `<div><b>Comissão</b>${percent ? `${percent.toLocaleString('pt-BR')}%` : '—'}</div>`}</div>`
+    const header = `<div class="meta"><div class="wide"><b>${kind === 'client' ? 'Cliente / Titular' : 'Agente'}</b>${escapeHtml(sourceBeneficiary(source, kind))}</div><div><b>Data do recebimento</b>${escapeHtml(dateBr(source.data))}</div><div><b>Valor recebido</b><span class="value">${escapeHtml(money.format(toNumber(source.valorAlvara)))}</span></div><div class="wide"><b>Processo</b>${escapeHtml(source.processo || '—')}</div><div><b>Reclamante</b>${escapeHtml(source.reclamante || '—')}</div><div><b>Reclamada</b>${escapeHtml(source.reclamada || '—')}</div>${kind === 'client' ? `<div><b>CPF</b>${escapeHtml(source.cpf || '—')}</div><div><b>Banco / Agência / Conta</b>${escapeHtml(`${source.banco || '—'} / ${source.agencia || '—'} / ${source.conta || '—'}`)}</div><div><b>PIX</b>${escapeHtml(source.pix || '—')}</div>` : `<div><b>Comissão</b>${percent ? `${percent.toLocaleString('pt-BR')}%` : '—'}</div>`}</div>`
     const rows = installments.length ? installments.map((item) => `<tr><td class="center">${item.number}</td><td class="num">${escapeHtml(money.format(item.value))}</td><td class="center">${escapeHtml(dateBr(item.dueDate))}</td><td class="center">${escapeHtml(installmentLabel(item.status))}</td><td class="center">${escapeHtml(dateBr(item.paidDate))}</td></tr>`).join('') : `<tr><td colspan="5" class="center">Pagamento ainda não programado</td></tr>`
     return `<section class="section${index ? ' page-break' : ''}">${header}<table><thead><tr><th>Parcela</th><th>Valor</th><th>Data prevista</th><th>Status</th><th>Data pagamento</th></tr></thead><tbody>${rows}<tr class="total-row"><td>TOTAL DEVIDO</td><td class="num">${escapeHtml(money.format(amount))}</td><td>JÁ PAGO</td><td class="num">${escapeHtml(money.format(paid))}</td><td>SALDO: ${escapeHtml(money.format(Math.max(0, amount - paid)))}</td></tr></tbody></table><div class="summary"><span>Status consolidado: <b>${escapeHtml(statusLabel(plan))}</b></span></div></section>`
   }).join('')
-  openPdfPrint(title, `<div class="company">FLÁVIO MARQUES ADVOGADOS ASSOCIADOS</div><h1>${escapeHtml(title)}</h1><div class="subtitle">Controle financeiro por pagamento efetivo</div>${sections}`)
+  openPdfPrint(title, `<div class="company">${escapeHtml(getCurrentInstitutionalSettings().razaoSocial)}</div><h1>${escapeHtml(title)}</h1><div class="subtitle">Controle financeiro por pagamento efetivo</div>${sections}`)
 }
 
 function SourceSnapshot({ source, kind }: { source: AnyRecord; kind: PaymentKind }) {
@@ -173,7 +177,7 @@ function SourceSnapshot({ source, kind }: { source: AnyRecord; kind: PaymentKind
     <div><span>Valor recebido</span><strong>{money.format(toNumber(source.valorAlvara))}</strong></div>
     <div><span>Reclamante</span><strong>{source.reclamante || '—'}</strong></div>
     <div><span>Reclamada</span><strong>{source.reclamada || '—'}</strong></div>
-    {kind === 'client' && <><div><span>Banco</span><strong>{source.banco || '—'}</strong></div><div><span>Agência / Conta</span><strong>{source.agencia || '—'} / {source.conta || '—'}</strong></div><div><span>CPF</span><strong>{source.cpf || '—'}</strong></div></>}
+    {kind === 'client' && <><div><span>Banco</span><strong>{source.banco || '—'}</strong></div><div><span>Agência / Conta</span><strong>{source.agencia || '—'} / {source.conta || '—'}</strong></div><div><span>CPF</span><strong>{source.cpf || '—'}</strong></div><div><span>PIX</span><strong>{source.pix || '—'}</strong></div></>}
     <div className="obligation-source-value"><span>{kind === 'client' ? 'Valor líquido devido ao cliente' : 'Comissão devida'}</span><strong>{money.format(sourceAmount(source, kind))}</strong></div>
   </div>
 }
@@ -181,7 +185,7 @@ function SourceSnapshot({ source, kind }: { source: AnyRecord; kind: PaymentKind
 function PaymentPlanModal({ source, plan, kind, collectionName, onClose }: { source: AnyRecord; plan?: AnyRecord; kind: PaymentKind; collectionName: string; onClose: () => void }) {
   const { profile } = useAuth()
   const canOperate = profile?.role === 'master' || profile?.role === 'tesouraria'
-  const canApprove = profile?.role === 'master' || profile?.role === 'diretor'
+  const canApprove = profile?.role === 'master' || Boolean(profile && isOfficialDirectorEmail(profile.email) && profile.role === 'diretor')
   const amount = sourceAmount(source, kind)
   const isExecutionStage = Boolean(plan && ['aprovado', 'parcialmente_pago', 'pago'].includes(String(plan.status)))
   const [paymentType, setPaymentType] = useState<'avista' | 'parcelado'>(plan?.paymentType === 'parcelado' ? 'parcelado' : 'avista')
@@ -206,7 +210,16 @@ function PaymentPlanModal({ source, plan, kind, collectionName, onClose }: { sou
 
   async function saveSchedule() {
     if (!profile || !canOperate) return
-    if (!installments.length || installments.some((item) => !item.dueDate || toNumber(item.value) <= 0)) { window.alert('Informe valor e data de todas as parcelas.'); return }
+    if (kind === 'client' && (!String(source.banco || '').trim() || !String(source.agencia || '').trim() || !String(source.conta || '').trim() || !String(source.titular || '').trim() || !String(source.cpf || '').trim())) {
+      window.alert('Para realizar o repasse ao cliente, preencha Banco, Agência, Conta, Nome/Titular e CPF no recebimento de origem.')
+      return
+    }
+    if (!installments.length || installments.some((item) => !item.dueDate || toNumber(item.value) <= 0)) {
+      const missingKeys: string[] = []
+      installments.forEach((item, index) => { if (toNumber(item.value) <= 0) missingKeys.push(`transfer-value-${index}`); if (!item.dueDate) missingKeys.push(`transfer-date-${index}`) })
+      if (missingKeys.length) { showRequiredFieldErrors('.obligation-modal', missingKeys); return }
+    }
+    clearRequiredFieldErrors('.obligation-modal')
     if (Math.abs(sum - amount) > 0.02) { window.alert(`A soma das parcelas deve ser igual ao valor devido (${money.format(amount)}).`); return }
     setBusy(true)
     try {
@@ -217,7 +230,7 @@ function PaymentPlanModal({ source, plan, kind, collectionName, onClose }: { sou
         processo: source.processo || '', reclamante: source.reclamante || '', reclamada: source.reclamada || '', beneficiary: sourceBeneficiary(source, kind),
         amountReceived: toNumber(source.valorAlvara), amountDue: amount, paymentType, installmentCount: scheduled.length, firstDueDate: scheduled[0]?.dueDate || firstDueDate,
         installments: scheduled, status: 'aguardando_aprovacao', notes: notes.trim(), approvalNote: '', approvedBy: null, approvedByName: null, approvedAt: null,
-        sourceSnapshot: { unidade: source.unidade || '', data: source.data || '', natureza: source.natureza || '', processo: source.processo || '', reclamante: source.reclamante || '', reclamada: source.reclamada || '', origem: source.origem || '', banco: source.banco || '', agencia: source.agencia || '', conta: source.conta || '', titular: source.titular || '', cpf: source.cpf || '', agentName: source.agentName || '', valorAlvara: toNumber(source.valorAlvara), valorLiquidoCliente: toNumber(source.valorLiquidoCliente), agentCommissionValue: sourceAmount(source, 'agent') },
+        sourceSnapshot: { unidade: source.unidade || '', data: source.data || '', natureza: source.natureza || '', processo: source.processo || '', reclamante: source.reclamante || '', reclamada: source.reclamada || '', origem: source.origem || '', banco: source.banco || '', agencia: source.agencia || '', conta: source.conta || '', titular: source.titular || '', cpf: source.cpf || '', pix: source.pix || '', agentName: source.agentName || '', valorAlvara: toNumber(source.valorAlvara), valorLiquidoCliente: toNumber(source.valorLiquidoCliente), agentCommissionValue: sourceAmount(source, 'agent') },
         createdBy: plan?.createdBy || profile.uid, createdByName: plan?.createdByName || profile.displayName, createdAt: plan?.createdAt || serverTimestamp(), updatedBy: profile.uid, updatedByName: profile.displayName, updatedAt: serverTimestamp(),
       }, { merge: false })
       await audit(profile, moduleName, 'Programação enviada para aprovação', `Processo ${source.processo || '—'} — ${sourceBeneficiary(source, kind)} — ${money.format(amount)} em ${scheduled.length} parcela(s)`, source.id)
@@ -256,7 +269,10 @@ function PaymentPlanModal({ source, plan, kind, collectionName, onClose }: { sou
     const nextStatus = paidCount === 0 ? 'aprovado' : paidCount === finalized.length ? 'pago' : 'parcialmente_pago'
     setBusy(true)
     try {
-      await setDoc(doc(db, collectionName, source.id), { installments: finalized, status: nextStatus, paidValue: finalized.reduce((total, item) => total + (item.paid ? toNumber(item.value) : 0), 0), updatedBy: profile.uid, updatedByName: profile.displayName, updatedAt: serverTimestamp() }, { merge: true })
+      const paidValue = finalized.reduce((total, item) => total + (item.paid ? toNumber(item.value) : 0), 0)
+      const finalizedPlan = { ...plan, id: source.id, installments: finalized, status: nextStatus, paidValue, updatedBy: profile.uid, updatedByName: profile.displayName }
+      await setDoc(doc(db, collectionName, source.id), { installments: finalized, status: nextStatus, paidValue, updatedBy: profile.uid, updatedByName: profile.displayName, updatedAt: serverTimestamp() }, { merge: true })
+      if (nextStatus === 'pago') await ensureOfficialDemonstrative(kind === 'client' ? 'alvaraTransfer' : 'commission', finalizedPlan, { collectionName, generatedBy: profile.uid })
       for (let index = 0; index < finalized.length; index += 1) {
         if (finalized[index].paid && !previous[index]?.paid) await audit(profile, moduleName, `Parcela ${finalized[index].number} paga`, `Processo ${source.processo || '—'} — ${sourceBeneficiary(source, kind)} — ${money.format(finalized[index].value)} em ${dateBr(finalized[index].paidDate)}`, source.id)
         if (!finalized[index].paid && previous[index]?.paid) await audit(profile, moduleName, `Pagamento da parcela ${finalized[index].number} desmarcado`, `Processo ${source.processo || '—'} — ${money.format(finalized[index].value)}`, source.id)
@@ -270,11 +286,11 @@ function PaymentPlanModal({ source, plan, kind, collectionName, onClose }: { sou
     <div className="modal-toolbar"><div><span className="eyebrow">{moduleName}</span><h2>{plan ? 'Programação do pagamento' : 'Nova programação'}</h2></div><button className="icon-button" type="button" onClick={onClose}><X size={20} /></button></div>
     <SourceSnapshot source={source} kind={kind} />
     {!isExecutionStage && <><div className="obligation-form-grid"><label><span>Forma de pagamento</span><select value={paymentType} disabled={!canOperate || plan?.status === 'aguardando_aprovacao'} onChange={(event) => { const value = event.target.value as 'avista' | 'parcelado'; setPaymentType(value); if (value === 'avista') setCount(1) }}><option value="avista">À vista</option><option value="parcelado">Parcelado</option></select></label><label><span>Número de parcelas</span><input type="number" min="1" max="60" value={paymentType === 'avista' ? 1 : count} disabled={!canOperate || paymentType === 'avista' || plan?.status === 'aguardando_aprovacao'} onChange={(event) => setCount(Math.max(1, Number(event.target.value)))} /></label><label><span>Primeira data prevista</span><input type="date" value={firstDueDate} disabled={!canOperate || plan?.status === 'aguardando_aprovacao'} onChange={(event) => setFirstDueDate(event.target.value)} /></label></div>{canOperate && plan?.status !== 'aguardando_aprovacao' && <button className="secondary-button obligation-generate" type="button" onClick={regenerate}>Gerar / atualizar parcelas</button>}</>}
-    <div className="obligation-installments"><div className="obligation-installment-head enhanced"><span>Parcela</span><span>Valor</span><span>Data prevista</span><span>Status</span><span>Pago</span><span>Data do pagamento</span></div>{installments.map((item, index) => <div className="obligation-installment-row enhanced" key={item.number}><strong>{index + 1}/{installments.length}</strong><input type="number" min="0" step="0.01" value={item.value} disabled={isExecutionStage || !canOperate || plan?.status === 'aguardando_aprovacao'} onChange={(event) => patchInstallment(index, { value: Number(event.target.value) })} /><input type="date" value={item.dueDate} disabled={isExecutionStage || !canOperate || plan?.status === 'aguardando_aprovacao'} onChange={(event) => patchInstallment(index, { dueDate: event.target.value })} /><b className={`workflow-status-badge ${installmentClass(item.status)}`}>{installmentLabel(item.status)}</b><label className="obligation-paid-check"><input type="checkbox" checked={Boolean(item.paid)} disabled={!isExecutionStage || !canOperate || plan?.status === 'pago'} onChange={(event) => patchInstallment(index, { paid: event.target.checked, status: event.target.checked ? 'paga' : 'aprovada', paidDate: event.target.checked ? (item.paidDate || today()) : '' })} /><span>{item.paid ? 'Sim' : 'Não'}</span></label><input type="date" value={item.paidDate || ''} disabled={!isExecutionStage || !canOperate || !item.paid || plan?.status === 'pago'} onChange={(event) => patchInstallment(index, { paidDate: event.target.value })} /></div>)}<div className="obligation-installment-total enhanced"><span>Total programado</span><strong className={Math.abs(sum - amount) > .02 ? 'expense-text' : ''}>{money.format(sum)}</strong></div></div>
+    <div className="obligation-installments"><div className="obligation-installment-head enhanced"><span>Parcela</span><span>Valor</span><span>Data prevista</span><span>Status</span><span>Pago</span><span>Data do pagamento</span></div>{installments.map((item, index) => <div className="obligation-installment-row enhanced" key={item.number}><strong>{index + 1}/{installments.length}</strong><input data-required-key={`transfer-value-${index}`} type="number" min="0" step="0.01" value={item.value} disabled={isExecutionStage || !canOperate || plan?.status === 'aguardando_aprovacao'} onChange={(event) => patchInstallment(index, { value: Number(event.target.value) })} /><input data-required-key={`transfer-date-${index}`} type="date" value={item.dueDate} disabled={isExecutionStage || !canOperate || plan?.status === 'aguardando_aprovacao'} onChange={(event) => patchInstallment(index, { dueDate: event.target.value })} /><b className={`workflow-status-badge ${installmentClass(item.status)}`}>{installmentLabel(item.status)}</b><label className="obligation-paid-check"><input type="checkbox" checked={Boolean(item.paid)} disabled={!isExecutionStage || !canOperate || plan?.status === 'pago'} onChange={(event) => patchInstallment(index, { paid: event.target.checked, status: event.target.checked ? 'paga' : 'aprovada', paidDate: event.target.checked ? (item.paidDate || today()) : '' })} /><span>{item.paid ? 'Sim' : 'Não'}</span></label><input type="date" value={item.paidDate || ''} disabled={!isExecutionStage || !canOperate || !item.paid || plan?.status === 'pago'} onChange={(event) => patchInstallment(index, { paidDate: event.target.value })} /></div>)}<div className="obligation-installment-total enhanced"><span>Total programado</span><strong className={Math.abs(sum - amount) > .02 ? 'expense-text' : ''}>{money.format(sum)}</strong></div></div>
     <label className="obligation-notes"><span>Observações</span><textarea rows={3} value={notes} disabled={isExecutionStage || !canOperate || plan?.status === 'aguardando_aprovacao'} onChange={(event) => setNotes(event.target.value)} /></label>
     {plan?.status === 'aguardando_aprovacao' && <div className="obligation-approval-box"><strong>Aprovação do pagamento</strong><span>A aprovação é do repasse/comissão, não do recebimento do Alvará. Todas as parcelas passam de “Aguardando aprovação” para “Aprovada”.</span><textarea rows={2} placeholder="Observação da aprovação / motivo da rejeição (opcional)" value={approvalNote} disabled={!canApprove} onChange={(event) => setApprovalNote(event.target.value)} /></div>}
     {plan?.approvalNote && plan.status !== 'aguardando_aprovacao' && <div className="obligation-approval-note"><strong>Observação da decisão:</strong> {plan.approvalNote}</div>}
-    <div className="modal-actions"><button className="secondary-button" type="button" onClick={onClose}>Fechar</button>{canOperate && (!plan || plan.status === 'rejeitado') && <button className="revenue-button" type="button" disabled={busy} onClick={() => void saveSchedule()}><Send size={16} /> Enviar para aprovação</button>}{canApprove && plan?.status === 'aguardando_aprovacao' && <><button className="expense-button" type="button" disabled={busy} onClick={() => void decide('rejeitado')}>Rejeitar</button><button className="revenue-button" type="button" disabled={busy} onClick={() => void decide('aprovado')}><CheckCircle2 size={16} /> Aprovar pagamento</button></>}{canOperate && plan && ['aprovado', 'parcialmente_pago'].includes(String(plan.status)) && <button className="revenue-button" type="button" disabled={busy} onClick={() => void saveExecution()}><CheckCircle2 size={16} /> Salvar pagamentos</button>}</div>
+    <div className="modal-actions"><button className="secondary-button" type="button" onClick={onClose}>Fechar</button>{canOperate && (!plan || ['rejeitado', 'devolvido'].includes(String(plan.status))) && <button className="revenue-button" type="button" disabled={busy} onClick={() => void saveSchedule()}><Send size={16} /> Enviar para aprovação</button>}{canApprove && plan?.status === 'aguardando_aprovacao' && <><button className="expense-button" type="button" disabled={busy} onClick={() => void decide('rejeitado')}>Rejeitar</button><button className="revenue-button" type="button" disabled={busy} onClick={() => void decide('aprovado')}><CheckCircle2 size={16} /> Aprovar pagamento</button></>}{canOperate && plan && ['aprovado', 'parcialmente_pago'].includes(String(plan.status)) && <button className="revenue-button" type="button" disabled={busy} onClick={() => void saveExecution()}><CheckCircle2 size={16} /> Salvar pagamentos</button>}</div>
   </section></div>
 }
 
@@ -287,7 +303,7 @@ function PaymentControlPage({ kind }: { kind: PaymentKind }) {
   const [search, setSearch] = useState('')
   const [target, setTarget] = useState<AnyRecord | null>(null)
   const planMap = useMemo(() => new Map(plans.map((item) => [item.id, item])), [plans])
-  const eligibleReceivables = useMemo(() => receivables.filter(eligibleReceivable), [receivables])
+  const eligibleReceivables = useMemo(() => receivables.filter(isEffectiveAlvaraReceivable), [receivables])
   const sources = useMemo(() => eligibleReceivables.filter((item) => {
     const amount = sourceAmount(item, kind)
     if (amount <= 0) return false
@@ -316,7 +332,7 @@ function PaymentControlPage({ kind }: { kind: PaymentKind }) {
   const loading = loadingReceivables || loadingPlans
   const Icon = kind === 'client' ? BadgeDollarSign : Users
 
-  return <><div className="page-heading"><div><span className="eyebrow">Controle financeiro separado</span><h1>{title}</h1><p>{subtitle}</p></div><div className="quick-actions"><button className="secondary-button" type="button" onClick={() => generatePaymentPdf(kind, sources, planMap)}><FileText size={17} /> Gerar PDF do relatório</button></div></div>
+  return <><div className="page-heading payment-control-heading"><div><span className="eyebrow">Controle financeiro separado</span><h1>{title}</h1><p>{subtitle}</p></div><div className="quick-actions"><button className="secondary-button" type="button" onClick={() => generatePaymentPdf(kind, sources, planMap)}><FileText size={17} /> Gerar PDF do relatório</button></div></div>
     <div className="obligation-metrics enhanced"><article><span>Valor recebido</span><strong>{money.format(totals.received)}</strong></article><article><span>{kind === 'client' ? 'Líquido devido' : 'Comissões devidas'}</span><strong>{money.format(totals.due)}</strong></article><article><span>Já pago</span><strong>{money.format(totals.paid)}</strong></article><article><span>Saldo a pagar</span><strong>{money.format(totals.pending)}</strong></article><article><span>Aguardando aprovação</span><strong>{totals.approvals}</strong></article><article><span>Parcelas vencidas</span><strong>{totals.overdue}</strong></article></div>
     {kind === 'client' && <section className="page-card module-card"><div className="module-toolbar"><div><span className="eyebrow">Informação financeira acumulada</span><h2>Composição dos Demonstrativos de Alvarás</h2><p>Valores extraídos automaticamente dos demonstrativos confirmados pela Tesouraria. Este quadro é informativo e não altera o fluxo de aprovação, baixa ou Contabilidade.</p></div></div><div className="obligation-metrics enhanced">{financialBreakdown.values.map((item) => <article key={item.name}><span>{item.label}</span><strong>{money.format(item.value)}</strong></article>)}<article><span>Total dos componentes</span><strong>{money.format(financialBreakdown.total)}</strong></article></div></section>}
     <section className="page-card module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por processo, cliente, parte ou beneficiário" /></div></div>{loading ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando controle</strong></div> : sources.length === 0 ? <div className="module-empty"><Icon size={34} /><strong>Nenhum valor disponível para este controle</strong><span>Os registros entram automaticamente depois que a Tesouraria confirma o recebimento do Alvará.</span></div> : <div className="obligation-list enhanced"><div className="obligation-list-row obligation-list-head enhanced"><span>Processo / Beneficiário</span><span>Valor recebido</span><span>Valor devido</span><span>Já pago</span><span>Saldo</span><span>Próxima parcela</span><span>Status</span><span>Ação</span></div>{sources.map((source) => {

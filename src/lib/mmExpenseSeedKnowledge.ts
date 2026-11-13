@@ -1,4 +1,4 @@
-import { officialChartOfAccounts, type ChartOfAccount } from '../data/chartOfAccounts'
+import type { ChartOfAccount } from '../data/chartOfAccounts'
 
 export type MmSeedSuggestion = {
   account: ChartOfAccount
@@ -19,17 +19,19 @@ function normalized(value: unknown) {
   return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
 }
 
-function expenseAccountByFragments(fragments: string[]) {
+function expenseAccountByFragments(fragments: string[], accounts: readonly ChartOfAccount[]) {
   for (const fragment of fragments) {
     const needle = normalized(fragment)
-    const exactish = officialChartOfAccounts.find((account) => account.kind === 'account' && account.category === 'Despesa' && normalized(account.name).includes(needle))
-    if (exactish) return exactish
+    const matching = accounts.filter((account) => ` ${normalized(account.name)} `.includes(` ${needle} `))
+    const exact = matching.find(account => normalized(account.name) === needle)
+    if (exact) return exact
+    if (matching.length === 1) return matching[0]
   }
   return null
 }
 
 // Base inicial extraída do padrão real de despesas MM de julho/2026.
-// Ela só sugere contas que já existem no Plano de Contas oficial; nunca cria códigos.
+// Ela só sugere contas que existem no Plano de Contas vigente; nunca cria códigos.
 const seedRules: SeedRule[] = [
   { label: 'FGTS', any: ['fgts'], accountFragments: ['fgts'], confidence: 96 },
   { label: 'INSS', any: ['inss'], accountFragments: ['inss'], confidence: 96 },
@@ -65,18 +67,19 @@ const seedRules: SeedRule[] = [
   { label: 'Depósito Judicial', all: ['deposito judicial'], accountFragments: ['deposito judicial'], confidence: 99 },
 ]
 
-export function mmExpenseSeedSuggestion(args: { counterparty: string; description: string }): MmSeedSuggestion | null {
+export function mmExpenseSeedSuggestion(args: { counterparty: string; description: string; accounts: readonly ChartOfAccount[] }): MmSeedSuggestion | null {
   const supplier = normalized(args.counterparty)
-  const text = normalized(`${args.counterparty} ${args.description}`)
+  const text = normalized(args.description)
+  const includes = (haystack: string, value: string) => ` ${haystack} `.includes(` ${normalized(value)} `)
 
   for (const rule of seedRules) {
-    const supplierMatch = Boolean(rule.suppliers?.some((value) => supplier.includes(normalized(value)) || text.includes(normalized(value))))
-    const allMatch = !rule.all?.length || rule.all.every((value) => text.includes(normalized(value)))
-    const anyMatch = !rule.any?.length || rule.any.some((value) => text.includes(normalized(value)))
+    const supplierMatch = Boolean(rule.suppliers?.some((value) => includes(supplier, value)))
+    const allMatch = !rule.all?.length || rule.all.every((value) => includes(text, value))
+    const anyMatch = !rule.any?.length || rule.any.some((value) => includes(text, value))
     const hasRequiredSignal = Boolean(rule.suppliers?.length ? supplierMatch : true) && allMatch && anyMatch
     if (!hasRequiredSignal) continue
 
-    const account = expenseAccountByFragments(rule.accountFragments)
+    const account = expenseAccountByFragments(rule.accountFragments, args.accounts)
     if (!account) continue
     return { account, confidence: rule.confidence, reason: `Base inicial MM: ${rule.label}` }
   }

@@ -1,0 +1,19 @@
+.reconciliation-panel{display:grid;gap:18px}
+.reconciliation-toolbar{display:grid;grid-template-columns:180px 220px minmax(240px,1fr);gap:12px;align-items:end}
+.reconciliation-toolbar label{display:grid;gap:6px}.reconciliation-toolbar label>span{font-size:12px;color:var(--muted);font-weight:700}
+.reconciliation-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.reconciliation-summary article{display:grid;gap:6px;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.reconciliation-summary svg{color:var(--muted)}.reconciliation-summary span{font-size:12px;color:var(--muted)}.reconciliation-summary strong{font-size:22px}
+.reconciliation-state{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:13px 14px;border:1px solid #c9d8e6;border-radius:12px;background:#f7fbff}
+.reconciliation-state>span{color:var(--muted);font-size:13px;flex:1}.reconciliation-state>div{display:flex;gap:8px}.reconciliation-state.is-closed{border-color:#b7ddc5;background:var(--success-soft)}
+.reconciliation-list{display:grid;gap:10px}.reconciliation-row{display:grid;grid-template-columns:minmax(220px,1fr) 150px minmax(320px,1.35fr);gap:14px;align-items:start;padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.reconciliation-bank{display:grid;gap:3px}.reconciliation-bank small,.reconciliation-bank span{font-size:12px;color:var(--muted)}.reconciliation-bank strong{font-size:14px}
+.reconciliation-amount{font-weight:800;text-align:right}.reconciliation-amount.credit{color:var(--success)}.reconciliation-amount.debit{color:var(--danger)}
+.reconciliation-match{display:grid;gap:8px}.reconciliation-badge{width:max-content;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:800}.reconciliation-badge.ok{background:var(--success-soft);color:var(--success)}.reconciliation-badge.probable{background:#fff4d6;color:#8a5a00}.reconciliation-badge.missing{background:#fff0f0;color:var(--danger)}
+.candidate,.matched-detail{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border:1px solid var(--border);border-radius:9px}.candidate>div,.matched-detail{font-size:12px}.candidate>div{display:grid;gap:2px}.candidate span,.matched-detail span{color:var(--muted);font-size:11px}
+.unmatched-system-list{display:grid;gap:8px}.unmatched-system-list article{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:9px}.unmatched-system-list span{color:var(--muted);font-size:12px}
+@media(max-width:1050px){.reconciliation-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.reconciliation-row{grid-template-columns:1fr 130px}.reconciliation-match{grid-column:1/-1}}
+@media(max-width:760px){.reconciliation-toolbar{grid-template-columns:1fr}.reconciliation-summary{grid-template-columns:1fr}.reconciliation-row{grid-template-columns:1fr}.reconciliation-amount{text-align:left}.candidate,.matched-detail,.unmatched-system-list article{align-items:flex-start;flex-direction:column}}
+
+.bank-statement-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+@media(max-width:760px){.bank-statement-actions{width:100%}.bank-statement-actions>*{width:100%;justify-content:center}}

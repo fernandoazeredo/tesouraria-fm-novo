@@ -35,6 +35,29 @@ service firebase.storage {
       return isPrimaryAdminEmail() || isManagerEmail() || isTreasuryEmail();
     }
 
+    function activeUser() {
+      return signedIn()
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+
+    // A consulta cruzada ao Firestore depende das permissões de um service agent
+    // distinto da conta do GitHub Actions. As contas financeiras oficiais já
+    // identificadas no Firebase Auth têm uma rota explícita e restrita de acesso.
+    // Mantemos a autorização anterior para usuários ativos.
+    function demonstrativeAuthorizedUser() {
+      return signedIn() && (financialReader() || activeUser());
+    }
+
+    // Exclusão de PDFs somente na janela de limpeza solicitada pelo Master.
+    // Sem a janela temporária no Firestore, os PDFs permanecem imutáveis.
+    function masterWipeMode() {
+      return signedIn()
+        && isPrimaryAdminEmail()
+        && firestore.exists(/databases/(default)/documents/systemControl/wipe)
+        && firestore.get(/databases/(default)/documents/systemControl/wipe).data.uid == request.auth.uid
+        && firestore.get(/databases/(default)/documents/systemControl/wipe).data.expiresAt > request.time;
+    }
+
     function validAttachmentSize() {
       return request.resource == null || request.resource.size <= 20 * 1024 * 1024;
     }
@@ -62,9 +85,12 @@ service firebase.storage {
     }
 
     match /demonstrativos/{allPaths=**} {
-      allow read: if signedIn();
-      allow create, update: if signedIn() && validAttachmentSize();
-      allow delete: if isPrimaryAdminEmail();
+      allow read: if demonstrativeAuthorizedUser();
+      allow create: if demonstrativeAuthorizedUser()
+        && validAttachmentSize()
+        && request.resource.contentType == 'application/pdf';
+      allow update: if false;
+      allow delete: if masterWipeMode();
     }
 
     // Extrato consolidado mensal usado no ZIP da Contabilidade.
@@ -75,6 +101,8 @@ service firebase.storage {
       allow create, update: if financialWriter() && validBankStatementSize();
       allow delete: if financialWriter();
     }
+
+    match /envios-contabilidade/{allPaths=**}
 
     // Estrutura antiga mantida somente para leitura/limpeza de pacotes já existentes.
     match /pacotes-contabeis/{allPaths=**} {

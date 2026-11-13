@@ -3,8 +3,8 @@ import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type Docu
 import { BarChart3, CheckCircle2, ChevronDown, CircleAlert, Filter, RefreshCw, Search, Sparkles } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
-import { officialChartOfAccounts, type ChartOfAccount } from '../data/chartOfAccounts'
-import { learnedClassificationSuggestion, type LearningClassification } from '../lib/managerialClassificationLearning'
+import { officialChartOfAccounts, storedToChart, type ChartOfAccount } from '../data/chartOfAccounts'
+import { managerialAccounts, suggestManagerialClassification, type LearningClassification } from '../lib/managerialClassificationLearning'
 import '../dre-gerencial.css'
 
 type SourceType = 'expense' | 'revenue'
@@ -51,7 +51,13 @@ const drePreferredOrder = [
 ]
 
 function toNumber(value: unknown) {
-  const number = Number(value)
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  const raw = String(value ?? '').trim().replace(/R\$/gi, '').replace(/\s/g, '')
+  if (!raw) return 0
+  let normalizedValue = raw
+  if (raw.includes(',') && raw.includes('.')) normalizedValue = raw.lastIndexOf(',') > raw.lastIndexOf('.') ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/,/g, '')
+  else if (raw.includes(',')) normalizedValue = raw.replace(/\./g, '').replace(',', '.')
+  const number = Number(normalizedValue)
   return Number.isFinite(number) ? number : 0
 }
 
@@ -70,8 +76,16 @@ function truncateText(value: string, limit = 60) {
   return text.length > limit ? `${text.slice(0, limit).trimEnd()}...` : text
 }
 
-function receivableManagementAmount(record: AnyRecord) {
-  if (record.tipoRecebimento === 'outras_receitas') return toNumber(record.valorAlvara)
+function receivableManagementAmount(record: AnyRecord, classification?: ClassificationRecord) {
+  const gross = toNumber(record.valorAlvara)
+  const type = normalized(record.tipoRecebimento).replace(/\s+/g, '_')
+  const isLegacyOtherRevenue = !String(record.processo ?? '').trim() && gross > 0
+  const classifiedAsOtherRevenue = classification?.accountDre === 'Outras Receitas Não Operacionais'
+
+  // Receitas antigas já classificadas como "Outras Receitas Não Operacionais"
+  // devem levar o valor bruto efetivamente recebido para a DRE.
+  if (type === 'outras_receitas' || isLegacyOtherRevenue || classifiedAsOtherRevenue) return gross
+
   const direct = toNumber(record.invoiceValue)
   if (direct > 0) return direct
   const components = Array.isArray(record.components) ? record.components as DocumentData[] : []
@@ -82,17 +96,6 @@ function expenseHistory(item: AnyRecord) {
   return Array.isArray(item.items)
     ? (item.items as DocumentData[]).map((row) => String(row.historico ?? '').trim()).filter(Boolean).join(' · ')
     : ''
-}
-
-function sourceDescription(type: SourceType, item: AnyRecord) {
-  if (type === 'expense') {
-    const itemText = expenseHistory(item)
-    return [item.nome, item.fornecedor, item.subcategoria, itemText].filter(Boolean).join(' · ')
-  }
-  if (item.tipoRecebimento === 'outras_receitas') {
-    return String(item.descricaoOrigem ?? item.descricao ?? item.origem ?? 'Outras Receitas')
-  }
-  return [item.origem, item.natureza, item.processo, item.reclamante, item.reclamada].filter(Boolean).join(' · ')
 }
 
 function sourceCounterparty(type: SourceType, item: AnyRecord) {
@@ -118,107 +121,44 @@ function sourceCardDescription(type: SourceType, item: AnyRecord) {
   return String(item.descricaoOrigem ?? item.descricao ?? (item.processo ? `Processo ${item.processo}` : item.origem ?? 'Sem histórico/descrição'))
 }
 
-function sourceExistingAccount(type: SourceType, item: AnyRecord) {
-  const code = String(type === 'expense' ? item.expenseAccountCode ?? item.classificacaoContabil ?? '' : item.revenueAccountCode ?? item.classificacaoContabil ?? '')
-  if (!code) return null
-  return officialChartOfAccounts.find((account) => account.code === code && account.kind === 'account') ?? null
-}
-
-function accountByText(category: 'Receita' | 'Despesa', fragment: string) {
-  const needle = normalized(fragment)
-  return officialChartOfAccounts.find((account) => account.kind === 'account' && account.category === category && normalized(account.name).includes(needle)) ?? null
-}
-
-function suggestAccount(type: SourceType, item: AnyRecord, classifications: ClassificationRecord[]): Suggestion {
-  const existing = sourceExistingAccount(type, item)
-  if (existing) return { account: existing, confidence: 100, reason: 'Classificação já existente no lançamento' }
-
-  const learned = learnedClassificationSuggestion({
-    type,
-    sourceId: item.id,
-    counterparty: sourceCounterparty(type, item),
-    description: sourceDescription(type, item),
-    history: classifications,
-  })
-  if (learned) return learned
-
-  if (type === 'revenue') {
-    const origem = normalized(item.origem)
-    const natureza = normalized(item.natureza)
-    if (origem.includes('alvara') && natureza.includes('trabalh')) {
-      const account = officialChartOfAccounts.find((row) => row.code === '3.01.04') ?? null
-      return { account, confidence: account ? 98 : 0, reason: 'Alvará trabalhista reconhecido pelo tipo do recebimento' }
-    }
-    if (origem.includes('acordo') && natureza.includes('trabalh')) {
-      const account = officialChartOfAccounts.find((row) => row.code === '3.01.05') ?? null
-      return { account, confidence: account ? 98 : 0, reason: 'Acordo trabalhista reconhecido pelo tipo do recebimento' }
-    }
-    if (natureza.includes('civil')) {
-      const account = officialChartOfAccounts.find((row) => row.code === '3.01.02') ?? null
-      return { account, confidence: account ? 88 : 0, reason: 'Recebimento identificado como área cível' }
-    }
+function classificationDescription(type: SourceType, item: AnyRecord) {
+  if (type === 'expense') {
+    const history = expenseHistory(item)
+    return [history || (item.nome !== item.fornecedor ? item.nome : ''), item.descricao, item.subcategoria].filter(Boolean).join(' · ')
   }
-
-  const category = type === 'expense' ? 'Despesa' : 'Receita'
-  const text = normalized(sourceDescription(type, item))
-  const rules: Array<[string[], string]> = type === 'expense'
-    ? [
-        [['fgts'], 'fgts'],
-        [['inss'], 'inss'],
-        [['salario', 'folha', 'remuneracao'], 'salario'],
-        [['plano de saude', 'assistencia medica'], 'plano de saude'],
-        [['aluguel'], 'aluguel'],
-        [['condominio'], 'condominio'],
-        [['energia', 'light'], 'energia'],
-        [['telefone', 'telefonia', 'tim', 'claro', 'vivo'], 'telefone'],
-        [['internet'], 'internet'],
-        [['estacionamento'], 'estacionamento'],
-        [['software', 'sistema', 'assinatura'], 'software'],
-        [['contador', 'contabilidade'], 'contab'],
-        [['comissao'], 'comissao'],
-        [['tarifa bancaria', 'tarifa'], 'tarifa'],
-        [['imposto', 'darf', 'iss', 'irpj', 'csll', 'pis', 'cofins'], 'imposto'],
-      ]
-    : [
-        [['honorario'], 'honorario'],
-        [['rendimento', 'aplicacao'], 'rendimento'],
-        [['ressarcimento'], 'ressarcimento'],
-      ]
-
-  for (const [needles, accountFragment] of rules) {
-    if (!needles.some((needle) => text.includes(normalized(needle)))) continue
-    const account = accountByText(category, accountFragment)
-    if (account) return { account, confidence: 94, reason: `Correspondência automática por descrição: ${needles[0]}` }
-  }
-
-  const tokens = new Set(text.split(' ').filter((token) => token.length >= 4))
-  let best: { account: ChartOfAccount; score: number } | null = null
-  for (const account of officialChartOfAccounts) {
-    if (account.kind !== 'account' || account.category !== category) continue
-    const accountTokens = normalized(account.name).split(' ').filter((token) => token.length >= 4)
-    const score = accountTokens.reduce((sum, token) => sum + (tokens.has(token) ? 1 : 0), 0)
-    if (score > (best?.score ?? 0)) best = { account, score }
-  }
-  if (best && best.score >= 2) return { account: best.account, confidence: Math.min(89, 68 + best.score * 7), reason: 'Correspondência por palavras do histórico' }
-  if (best && best.score === 1) return { account: best.account, confidence: 58, reason: 'Correspondência parcial; requer revisão' }
-  return { account: null, confidence: 0, reason: 'Sem correspondência suficiente' }
+  return [item.descricaoOrigem, item.descricao, item.origem, item.natureza].filter(Boolean).join(' · ')
 }
 
 function useManagerialData() {
   const [expenses, setExpenses] = useState<AnyRecord[]>([])
   const [revenues, setRevenues] = useState<AnyRecord[]>([])
   const [classifications, setClassifications] = useState<ClassificationRecord[]>([])
-  const [loadingParts, setLoadingParts] = useState(3)
+  const [chart, setChart] = useState<ChartOfAccount[]>(officialChartOfAccounts)
+  const [pending, setPending] = useState(['expenses', 'receivables', 'managerialClassifications', 'chartOfAccounts'])
 
   useEffect(() => {
-    const done = () => setLoadingParts((value) => Math.max(0, value - 1))
-    const offExpenses = onSnapshot(collection(db, 'expenses'), (snapshot) => { setExpenses(snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))); done() }, done)
-    const offRevenues = onSnapshot(collection(db, 'receivables'), (snapshot) => { setRevenues(snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))); done() }, done)
-    const offClassifications = onSnapshot(collection(db, 'managerialClassifications'), (snapshot) => { setClassifications(snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))); done() }, done)
-    return () => { offExpenses(); offRevenues(); offClassifications() }
+    const done = (key: string) => setPending(current => current.includes(key) ? current.filter(part => part !== key) : current)
+    const offExpenses = onSnapshot(collection(db, 'expenses'), snapshot => {
+      setExpenses(snapshot.docs.map(item => ({ id: item.id, ...item.data() })))
+      done('expenses')
+    }, () => done('expenses'))
+    const offRevenues = onSnapshot(collection(db, 'receivables'), snapshot => {
+      setRevenues(snapshot.docs.map(item => ({ id: item.id, ...item.data() })))
+      done('receivables')
+    }, () => done('receivables'))
+    const offClassifications = onSnapshot(collection(db, 'managerialClassifications'), snapshot => {
+      setClassifications(snapshot.docs.map(item => ({ id: item.id, ...item.data() })))
+      done('managerialClassifications')
+    }, () => done('managerialClassifications'))
+    const offChart = onSnapshot(collection(db, 'chartOfAccounts'), snapshot => {
+      const accounts = snapshot.docs.map(item => storedToChart(item.data())).filter((row): row is ChartOfAccount => Boolean(row))
+      setChart(accounts.length ? accounts : officialChartOfAccounts)
+      done('chartOfAccounts')
+    }, () => done('chartOfAccounts'))
+    return () => { offExpenses(); offRevenues(); offClassifications(); offChart() }
   }, [])
 
-  return { expenses, revenues, classifications, loading: loadingParts > 0 }
+  return { expenses, revenues, classifications, chart, loading: pending.length > 0 }
 }
 
 function classificationKey(type: SourceType, sourceId: string) {
@@ -227,19 +167,26 @@ function classificationKey(type: SourceType, sourceId: string) {
 
 export function DreGerencialPageV2() {
   const { profile } = useAuth()
-  const { expenses, revenues, classifications, loading } = useManagerialData()
+  const { expenses, revenues, classifications, chart, loading } = useManagerialData()
   const [tab, setTab] = useState<'classification' | 'dre'>('classification')
   const [classificationView, setClassificationView] = useState<'pending' | 'classified'>('pending')
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<'all' | SourceType>('all')
   const [draftAccounts, setDraftAccounts] = useState<Record<string, string>>({})
   const [savingKey, setSavingKey] = useState('')
-  const [dreCompetence, setDreCompetence] = useState(new Date().toISOString().slice(0, 7))
+  const [dreCompetence, setDreCompetence] = useState('')
   const [dreUnit, setDreUnit] = useState('Todas')
 
   const classificationMap = useMemo(() => new Map(classifications.map((item) => [item.id, item])), [classifications])
+
+  function validDreClassification(item: UnifiedLaunch) {
+    if (!item.classification?.confirmed) return false
+    if (!item.classification.accountCode || !item.classification.accountDre) return false
+    if (item.sourceType === 'expense' && item.classification.accountDre === 'Não mostrar no DRE Gerencial') return false
+    return true
+  }
   const launches = useMemo<UnifiedLaunch[]>(() => {
-    const expenseRows = expenses.map((item) => {
+    const expenseRows = expenses.filter((item) => EXPENSE_DRE_STATUSES.has(String(item.status ?? ''))).map((item) => {
       const date = String(Array.isArray(item.items) && item.items[0]?.data ? item.items[0].data : `${item.competencia || ''}-01`).slice(0, 10)
       return {
         key: classificationKey('expense', item.id), sourceType: 'expense' as const, sourceId: item.id, source: item,
@@ -248,36 +195,58 @@ export function DreGerencialPageV2() {
         amount: toNumber(item.valorTotal), status: String(item.status ?? ''), classification: classificationMap.get(classificationKey('expense', item.id)),
       }
     })
-    const revenueRows = revenues.map((item) => {
+    const revenueRows = revenues.filter((item) => REVENUE_DRE_STATUSES.has(String(item.status ?? ''))).map((item) => {
       const date = String(item.receiptDate ?? item.data ?? '').slice(0, 10)
+      const classification = classificationMap.get(classificationKey('revenue', item.id))
       return {
         key: classificationKey('revenue', item.id), sourceType: 'revenue' as const, sourceId: item.id, source: item,
         date, competence: date.slice(0, 7), unit: String(item.unidade ?? 'RJ'),
         title: sourceCardTitle('revenue', item), description: sourceCardDescription('revenue', item), counterparty: sourceCounterparty('revenue', item),
-        amount: receivableManagementAmount(item), status: String(item.status ?? ''), classification: classificationMap.get(classificationKey('revenue', item.id)),
+        amount: receivableManagementAmount(item, classification), status: String(item.status ?? ''), classification,
       }
     })
     return [...expenseRows, ...revenueRows].sort((a, b) => b.date.localeCompare(a.date))
   }, [expenses, revenues, classificationMap])
 
-  const pendingCount = launches.filter((item) => !item.classification?.confirmed).length
+  const pendingCount = launches.filter((item) => !validDreClassification(item)).length
   const classifiedCount = launches.length - pendingCount
   const visibleClassificationRows = launches.filter((item) => {
-    const isClassified = Boolean(item.classification?.confirmed)
+    const isClassified = validDreClassification(item)
     if (classificationView === 'pending' ? isClassified : !isClassified) return false
     if (typeFilter !== 'all' && item.sourceType !== typeFilter) return false
     const haystack = normalized(`${item.title} ${item.description} ${item.counterparty} ${item.classification?.accountName ?? ''} ${item.classification?.accountCode ?? ''}`)
     return haystack.includes(normalized(search))
   })
 
+  const accountsByType = useMemo(() => ({
+    expense: managerialAccounts(chart, 'expense'),
+    revenue: managerialAccounts(chart, 'revenue'),
+  }), [chart])
+
+  function suggestionFor(item: UnifiedLaunch) {
+    const source = item.source
+    return suggestManagerialClassification({
+      type: item.sourceType, sourceId: item.sourceId,
+      sourceAccountCode: String((item.sourceType === 'expense' ? source.expenseAccountCode : source.revenueAccountCode) || source.classificacaoContabil || ''),
+      counterparty: item.counterparty, description: classificationDescription(item.sourceType, source),
+      origin: source.origem, nature: source.natureza, history: classifications,
+      accounts: accountsByType[item.sourceType],
+    })
+  }
+
   function selectedAccountCode(item: UnifiedLaunch, suggestion: Suggestion) {
-    return draftAccounts[item.key] ?? item.classification?.accountCode ?? suggestion.account?.code ?? ''
+    const accounts = accountsByType[item.sourceType]
+    const draft = draftAccounts[item.key]
+    if (draft !== undefined && (draft === '' || accounts.some(account => account.code === draft))) return draft
+    const currentCode = validDreClassification(item) ? item.classification?.accountCode : undefined
+    if (currentCode && accounts.some(account => account.code === currentCode)) return currentCode
+    return currentCode ? '' : suggestion.account?.code ?? ''
   }
 
   async function confirmClassification(item: UnifiedLaunch, accountCode: string) {
-    const account = officialChartOfAccounts.find((row) => row.code === accountCode && row.kind === 'account' && row.category === (item.sourceType === 'expense' ? 'Despesa' : 'Receita'))
+    const account = accountsByType[item.sourceType].find(row => row.code === accountCode)
     if (!account) { window.alert('Selecione uma conta válida do Plano de Contas.'); return }
-    const suggestion = suggestAccount(item.sourceType, item.source, classifications)
+    const suggestion = suggestionFor(item)
     setSavingKey(item.key)
     try {
       await setDoc(doc(db, 'managerialClassifications', item.key), {
@@ -287,7 +256,7 @@ export function DreGerencialPageV2() {
         sourceCompetence: item.competence || null,
         sourceUnit: item.unit || null,
         sourceTitle: item.title,
-        sourceDescription: item.description,
+        sourceDescription: classificationDescription(item.sourceType, item.source),
         sourceCounterparty: item.counterparty,
         sourceAmount: item.amount,
         sourceStatus: item.status,
@@ -323,8 +292,8 @@ export function DreGerencialPageV2() {
   }
 
   const dreRows = useMemo(() => launches.filter((item) => {
-    if (!item.classification?.confirmed) return false
-    if (!item.classification.accountDre || item.classification.accountDre === 'Não mostrar no DRE Gerencial') return false
+    if (!validDreClassification(item)) return false
+    if (!item.classification?.accountDre || item.classification.accountDre === 'Não mostrar no DRE Gerencial') return false
     if (dreCompetence && item.competence !== dreCompetence) return false
     if (dreUnit !== 'Todas' && item.unit !== dreUnit) return false
     return item.sourceType === 'expense' ? EXPENSE_DRE_STATUSES.has(item.status) : REVENUE_DRE_STATUSES.has(item.status)
@@ -370,15 +339,14 @@ export function DreGerencialPageV2() {
       <div className="dre-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar descrição, favorecido, processo ou conta" /></div><label className="dre-filter"><Filter size={16} /><select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as 'all' | SourceType)}><option value="all">Receitas e Despesas</option><option value="revenue">Somente Receitas</option><option value="expense">Somente Despesas</option></select><ChevronDown size={14} /></label></div>
 
       {loading ? <div className="module-empty"><RefreshCw className="spin" size={28} /><strong>Carregando lançamentos</strong></div> : visibleClassificationRows.length === 0 ? <div className="module-empty"><CheckCircle2 size={32} /><strong>{classificationView === 'pending' ? 'Nenhum lançamento pendente' : 'Nenhum lançamento classificado'}</strong><span>{classificationView === 'pending' ? 'Todos os lançamentos disponíveis já foram classificados.' : 'As classificações confirmadas aparecerão aqui.'}</span></div> : <div className="dre-classification-list">{visibleClassificationRows.map((item) => {
-        const suggestion = suggestAccount(item.sourceType, item.source, classifications)
-        const category = item.sourceType === 'expense' ? 'Despesa' : 'Receita'
-        const accounts = officialChartOfAccounts.filter((row) => row.kind === 'account' && row.category === category)
+        const suggestion = suggestionFor(item)
+        const accounts = accountsByType[item.sourceType]
         const accountCode = selectedAccountCode(item, suggestion)
         return <article className="dre-launch-row" key={item.key}>
           <div className="dre-launch-summary"><div className={`dre-type-badge ${item.sourceType}`}>{item.sourceType === 'expense' ? 'Despesa' : 'Receita'}</div><strong title={item.title}>{item.title}</strong><span title={item.description}>{truncateText(item.description || 'Sem descrição complementar')}</span><small>{readableDate(item.date)} · {item.unit} · {item.status || 'sem status'}</small></div>
           <div className="dre-launch-amount"><span>Valor gerencial</span><strong>{money.format(item.amount)}</strong>{item.sourceType === 'revenue' && <small>{item.source.tipoRecebimento === 'outras_receitas' ? 'Valor da receita' : 'Honorários do escritório'}</small>}</div>
           <div className="dre-account-choice">
-            {suggestion.account && !item.classification?.confirmed && <div className={`dre-suggestion confidence-${suggestion.confidence >= 90 ? 'high' : suggestion.confidence >= 60 ? 'medium' : 'low'}`}><Sparkles size={14} /><span>Sugestão {suggestion.confidence}% · {suggestion.reason}</span></div>}
+            {!item.classification?.confirmed && <div className={`dre-suggestion confidence-${suggestion.confidence >= 90 ? 'high' : suggestion.confidence >= 60 ? 'medium' : 'low'}`}><Sparkles size={14} /><span>{suggestion.account ? `Sugestão · ${suggestion.reason}` : suggestion.reason}</span></div>}
             <label><span>Conta gerencial</span><select value={accountCode} onChange={(event) => setDraftAccounts((current) => ({ ...current, [item.key]: event.target.value }))}><option value="">Selecione a conta...</option>{accounts.map((account) => <option key={account.code} value={account.code}>{account.code} — {account.name}</option>)}</select></label>
             {item.classification?.accountDre && <small className="dre-destination">DRE: {item.classification.accountDre}</small>}
           </div>
@@ -388,7 +356,7 @@ export function DreGerencialPageV2() {
     </section> : <>
       <section className="page-card dre-report-card">
         <div className="dre-section-heading"><div><span className="eyebrow">Demonstrativo Gerencial</span><h2>Resultado do Período</h2><p>Somente lançamentos classificados e em status financeiro válido entram nesta visão.</p></div></div>
-        <div className="dre-report-filters"><label><span>Competência</span><input type="month" value={dreCompetence} onChange={(event) => setDreCompetence(event.target.value)} /></label><label><span>Unidade</span><select value={dreUnit} onChange={(event) => setDreUnit(event.target.value)}><option>Todas</option><option>RJ</option><option>SP</option></select></label></div>
+        <div className="dre-report-filters"><label><span>Competência</span><input type="month" value={dreCompetence} onChange={(event) => setDreCompetence(event.target.value)} /><small>{dreCompetence ? 'Filtrando somente a competência selecionada' : 'Todo o período'}</small></label><label><span>Unidade</span><select value={dreUnit} onChange={(event) => setDreUnit(event.target.value)}><option>Todas</option><option>RJ</option><option>SP</option></select></label></div>
         <div className="dre-kpis"><div><span>Receitas</span><strong>{money.format(totalRevenue)}</strong></div><div><span>Despesas</span><strong>{money.format(totalExpense)}</strong></div><div className={result >= 0 ? 'positive' : 'negative'}><span>Resultado Gerencial</span><strong>{money.format(result)}</strong></div><div><span>Lançamentos na DRE</span><strong>{dreRows.length}</strong></div></div>
 
         <div className="dre-statement"><div className="dre-statement-row head"><span>Grupo DRE</span><span>Lançamentos</span><span>Valor</span></div>{dreGroups.length === 0 ? <div className="dre-empty-statement">Nenhum lançamento classificado para os filtros selecionados.</div> : dreGroups.map(([label, values]) => {

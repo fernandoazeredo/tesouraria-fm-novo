@@ -1,0 +1,39 @@
+name: Validar IA Executiva Privada
+
+on:
+  pull_request:
+    branches:
+      - feature/fm-assistente-dev-20261020
+    paths:
+      - "src/pages/ExecutiveAiPage.*"
+      - "src/App.tsx"
+      - "functions/**"
+      - "firebase.json"
+      - ".github/workflows/validate-executive-ai.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Instalar app
+        run: npm install --no-package-lock
+      - name: Testes do app
+        run: npm test
+      - name: Build do app
+        run: npm run build
+      - name: Instalar backend
+        working-directory: functions
+        run: npm install --no-package-lock
+      - name: Testes da IA
+        working-directory: functions
+        run: npm test
+      - name: Validar sintaxe do backend
+        run: node --check functions/index.js && node --check functions/ai-core.js

@@ -1,8 +1,10 @@
+import { getCurrentInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
 import { FileText, RefreshCw, Search, X } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
+import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 import '../fiscal-notes-v3.css'
 
 type AnyRecord = { id: string } & DocumentData
@@ -39,6 +41,10 @@ function eligibleReceivable(item: AnyRecord) {
 
 function invoiceValue(source: AnyRecord) {
   return toNumber(source.invoiceValue) || componentValue(source, 'Honorários do Escritório')
+}
+
+function fiscalClientName(source: AnyRecord) {
+  return String(source.reclamante || source.titular || '')
 }
 
 function statusLabel(note?: AnyRecord) {
@@ -79,16 +85,19 @@ function FiscalNoteModal({ source, note, onClose }: { source: AnyRecord; note?: 
 
   async function save() {
     if (!profile || !canEdit) return
-    if (status === 'emitida' && (!number.trim() || !issueDate)) {
-      window.alert('Para marcar como Emitida, informe o número da NFS-e e a data de emissão.')
-      return
+    if (status === 'emitida') {
+      const missingKeys: string[] = []
+      if (!number.trim()) missingKeys.push('fiscal-number')
+      if (!issueDate) missingKeys.push('fiscal-date')
+      if (missingKeys.length) { showRequiredFieldErrors('.obligation-modal', missingKeys); return }
     }
+    clearRequiredFieldErrors('.obligation-modal')
     setBusy(true)
     try {
       await setDoc(doc(db, 'fiscalNotes', source.id), {
         sourceReceivableId: source.id,
         processo: source.processo || '',
-        clientName: source.titular || source.reclamante || '',
+        clientName: fiscalClientName(source),
         cpf: source.cpf || '',
         email: source.emailNf || '',
         address: source.enderecoNf || '',
@@ -126,8 +135,8 @@ function FiscalNoteModal({ source, note, onClose }: { source: AnyRecord; note?: 
 
   return <div className="modal-backdrop"><section className="decision-modal obligation-modal" role="dialog" aria-modal="true">
     <div className="modal-toolbar"><div><span className="eyebrow">Nota Fiscal / NFS-e</span><h2>Dados para emissão</h2></div><button className="icon-button" type="button" onClick={onClose}><X size={20} /></button></div>
-    <div className="fiscal-client-card"><div><span>Cliente</span><strong>{source.titular || source.reclamante || '—'}</strong></div><div><span>CPF</span><strong>{source.cpf || '—'}</strong></div><div><span>E-mail</span><strong>{source.emailNf || '—'}</strong></div><div><span>Endereço</span><strong>{source.enderecoNf || '—'}</strong></div><div><span>Processo</span><strong>{source.processo || '—'}</strong></div><div className="fiscal-value"><span>Valor da NFS-e / Honorários</span><strong>{money.format(value)}</strong></div></div>
-    <div className="obligation-form-grid fiscal-form-grid"><label><span>Status da NFS-e</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="pendente">Pendente de emissão</option><option value="emitida">Emitida</option><option value="cancelada">Cancelada</option></select></label><label><span>Número da NFS-e</span><input value={number} onChange={(event) => setNumber(event.target.value)} placeholder="Ex.: 0085967" /></label><label><span>Data de emissão</span><input type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} /></label></div>
+    <div className="fiscal-client-card"><div><span>Cliente</span><strong>{fiscalClientName(source) || '—'}</strong></div><div><span>CPF</span><strong>{source.cpf || '—'}</strong></div><div><span>E-mail</span><strong>{source.emailNf || '—'}</strong></div><div><span>Endereço</span><strong>{source.enderecoNf || '—'}</strong></div><div><span>Processo</span><strong>{source.processo || '—'}</strong></div><div className="fiscal-value"><span>Valor da NFS-e / Honorários</span><strong>{money.format(value)}</strong></div></div>
+    <div className="obligation-form-grid fiscal-form-grid"><label><span>Status da NFS-e</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="pendente">Pendente de emissão</option><option value="emitida">Emitida</option><option value="cancelada">Cancelada</option></select></label><label><span>Número da NFS-e</span><input data-required-key="fiscal-number" value={number} onChange={(event) => setNumber(event.target.value)} placeholder="Ex.: 0085967" /></label><label><span>Data de emissão</span><input data-required-key="fiscal-date" type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} /></label></div>
     <label className="obligation-notes"><span>Observações</span><textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
     <div className="modal-actions"><button className="secondary-button" type="button" onClick={onClose}>Fechar</button>{canEdit && <button className="revenue-button" type="button" disabled={busy} onClick={() => void save()}><FileText size={16} /> Salvar controle da NFS-e</button>}</div>
   </section></div>
@@ -140,14 +149,14 @@ function printExtract(sources: AnyRecord[], noteMap: Map<string, AnyRecord>) {
   }
   const rows = sources.map((source) => {
     const note = noteMap.get(source.id)
-    return `<tr><td>${escapeHtml(source.processo || '—')}</td><td>${escapeHtml(source.titular || source.reclamante || '—')}</td><td>${escapeHtml(source.cpf || '—')}</td><td>${escapeHtml(source.emailNf || '—')}</td><td class="num">${escapeHtml(money.format(invoiceValue(source)))}</td><td>${escapeHtml(statusLabel(note))}</td><td>${escapeHtml(note?.number || '—')}</td><td>${escapeHtml(dateBr(note?.issueDate))}</td></tr>`
+    return `<tr><td>${escapeHtml(source.processo || '—')}</td><td>${escapeHtml(fiscalClientName(source) || '—')}</td><td>${escapeHtml(source.cpf || '—')}</td><td>${escapeHtml(source.emailNf || '—')}</td><td class="num">${escapeHtml(money.format(invoiceValue(source)))}</td><td>${escapeHtml(statusLabel(note))}</td><td>${escapeHtml(note?.number || '—')}</td><td>${escapeHtml(dateBr(note?.issueDate))}</td></tr>`
   }).join('')
   const w = window.open('', '_blank', 'width=1200,height=820')
   if (!w) {
     window.alert('O navegador bloqueou a janela do relatório. Libere pop-ups para gerar o extrato.')
     return
   }
-  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Extrato de NFS-e</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,Helvetica,sans-serif;color:#17202b;font-size:11px}h1{text-align:center;margin:0 0 6px;font-size:20px}.sub{text-align:center;margin-bottom:18px;color:#5b6775}table{width:100%;border-collapse:collapse}th{background:#24557d;color:white;padding:8px;text-align:left}td{padding:7px;border-bottom:1px solid #ddd;vertical-align:top}.num{text-align:right;white-space:nowrap}tbody tr:nth-child(even){background:#f6f8fa}.footer{margin-top:16px;color:#687585;font-size:9px}</style></head><body><h1>FLÁVIO MARQUES ADVOGADOS ASSOCIADOS</h1><div class="sub">Extrato de NFS-e — Status e numeração das Notas Fiscais de Serviço</div><table><thead><tr><th>Processo</th><th>Cliente</th><th>CPF</th><th>E-mail</th><th>Valor</th><th>Status NFS-e</th><th>Nº NFS-e</th><th>Emissão</th></tr></thead><tbody>${rows}</tbody></table><div class="footer">Controle de Despesas e Receitas · Gerado em ${new Date().toLocaleString('pt-BR')}</div><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`)
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Extrato de NFS-e</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,Helvetica,sans-serif;color:#17202b;font-size:11px}h1{text-align:center;margin:0 0 6px;font-size:20px}.sub{text-align:center;margin-bottom:18px;color:#5b6775}table{width:100%;border-collapse:collapse}th{background:#24557d;color:white;padding:8px;text-align:left}td{padding:7px;border-bottom:1px solid #ddd;vertical-align:top}.num{text-align:right;white-space:nowrap}tbody tr:nth-child(even){background:#f6f8fa}.footer{margin-top:16px;color:#687585;font-size:9px}</style></head><body><h1>${escapeHtml(getCurrentInstitutionalSettings().razaoSocial)}</h1><div class="sub">Extrato de NFS-e — Status e numeração das Notas Fiscais de Serviço</div><table><thead><tr><th>Processo</th><th>Cliente</th><th>CPF</th><th>E-mail</th><th>Valor</th><th>Status NFS-e</th><th>Nº NFS-e</th><th>Emissão</th></tr></thead><tbody>${rows}</tbody></table><div class="footer">Controle de Despesas e Receitas · Gerado em ${new Date().toLocaleString('pt-BR')}</div><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`)
   w.document.close()
 }
 
@@ -175,7 +184,7 @@ export function FiscalNotesPageV3() {
     <section className="page-card module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por processo, cliente, CPF, status ou nº da NFS-e" /></div></div>
       {loadingReceivables || loadingNotes ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando Notas Fiscais</strong></div> : sources.length === 0 ? <div className="module-empty"><FileText size={34} /><strong>Nenhum honorário disponível para emissão</strong></div> : <div className="obligation-list fiscal-v3-list"><div className="obligation-list-row obligation-list-head"><span>Processo / Cliente</span><span>CPF</span><span>E-mail</span><span>Valor</span><span>Status NFS-e</span><span>Nº NFSe e Data</span><span>Ação</span></div>{sources.map((source) => {
         const note = noteMap.get(source.id)
-        return <div className="obligation-list-row" key={source.id}><span><strong>{source.processo || '—'}</strong><small>{source.titular || source.reclamante || '—'}</small></span><span>{source.cpf || '—'}</span><span className="fiscal-email-cell">{source.emailNf || '—'}</span><span><strong>{money.format(invoiceValue(source))}</strong></span><span><b className={`workflow-status-badge ${statusClass(note)}`}>{statusLabel(note)}</b></span><span className="fiscal-number-cell"><strong>{note?.number || '—'}</strong>{note?.issueDate && <small>{dateBr(note.issueDate)}</small>}</span><span><button className="small-neutral-button" type="button" onClick={() => setTarget(source)}>{note ? 'Abrir controle' : 'Preparar NFS-e'}</button></span></div>
+        return <div className="obligation-list-row" key={source.id}><span><strong>{source.processo || '—'}</strong><small>{fiscalClientName(source) || '—'}</small></span><span>{source.cpf || '—'}</span><span className="fiscal-email-cell">{source.emailNf || '—'}</span><span><strong>{money.format(invoiceValue(source))}</strong></span><span><b className={`workflow-status-badge ${statusClass(note)}`}>{statusLabel(note)}</b></span><span className="fiscal-number-cell"><strong>{note?.number || '—'}</strong>{note?.issueDate && <small>{dateBr(note.issueDate)}</small>}</span><span><button className="small-neutral-button" type="button" onClick={() => setTarget(source)}>{note ? 'Abrir controle' : 'Preparar NFS-e'}</button></span></div>
       })}</div>}
     </section>
     {target && <FiscalNoteModal source={target} note={noteMap.get(target.id)} onClose={() => setTarget(null)} />}

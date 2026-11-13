@@ -1,0 +1,100 @@
+.executive-ai{max-width:1050px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.executive-ai-head{display:flex;gap:13px;align-items:flex-start}.executive-ai-head svg{color:#58bdf5;flex-shrink:0}
+.executive-ai-head h1{margin:3px 0}.executive-ai-head p{color:#9eb1c2}
+.executive-ai-security{display:flex;align-items:center;gap:8px;border-radius:10px;padding:12px;background:rgba(36,151,210,.09);font-size:13px}
+.executive-ai-messages{display:flex;flex-direction:column;gap:14px;min-height:260px;max-height:56vh;overflow-y:auto;border:1px solid rgba(130,165,190,.25);border-radius:16px;padding:17px}
+.executive-ai-welcome{text-align:center;margin:auto;max-width:650px}.executive-ai-welcome>svg{color:#60bdf2}.executive-ai-welcome strong{display:block;margin:10px}.executive-ai-welcome p{color:#9eb1c2}
+.executive-ai-prompts{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:16px}
+.executive-ai-prompts button{padding:9px 12px;border:1px solid #43637a;border-radius:9px;color:inherit;background:transparent;cursor:pointer}
+.executive-ai-bubble{padding:12px 14px;border-radius:12px;max-width:90%;white-space:pre-wrap;overflow-wrap:anywhere}
+.executive-ai-bubble.user{align-self:flex-end;background:rgba(47,157,226,.19)}
+.executive-ai-bubble.assistant{align-self:flex-start;background:rgba(120,143,155,.14)}
+.executive-ai-bubble p{white-space:pre-wrap;margin:6px 0}
+.executive-ai-sources{display:flex;flex-wrap:wrap;gap:9px;align-items:center;border-top:1px solid rgba(120,143,155,.2);padding-top:10px;font-size:12px}
+.executive-ai-sources a{display:flex;align-items:center;gap:3px;color:#58bdf5}
+.executive-ai-form{display:flex;flex-direction:column;gap:8px}.executive-ai-form textarea{width:100%;box-sizing:border-box;resize:vertical;min-height:90px;border:1px solid #496579;border-radius:10px;background:transparent;color:inherit;padding:11px}
+.executive-ai-form>div{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.executive-ai-form button{display:flex;align-items:center;gap:7px}.executive-ai-error{color:#eb7481;padding:10px;border:1px solid #c95466;border-radius:9px}
+.executive-ai-loading{display:flex;gap:8px;align-items:center}
+@media(max-width:600px){.executive-ai{padding:12px}.executive-ai-head h1{font-size:23px}.executive-ai-messages{padding:11px;max-height:48vh}.executive-ai-bubble{max-width:100%}}
+.executive-ai-proposal{margin-top:10px;border:1px solid rgba(88,189,245,.45);border-radius:11px;padding:11px;background:rgba(88,189,245,.06);white-space:normal}
+.executive-ai-proposal.aplicada{border-color:rgba(46,160,90,.6)}.executive-ai-proposal.cancelada,.executive-ai-proposal.desfeita{opacity:.75}
+.executive-ai-proposal-head{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;margin-bottom:8px;flex-wrap:wrap}
+.executive-ai-proposal table{width:100%;border-collapse:collapse;font-size:13px}.executive-ai-proposal th,.executive-ai-proposal td{text-align:left;padding:5px 7px;border-bottom:1px solid rgba(120,143,155,.25);overflow-wrap:anywhere}
+.executive-ai-proposal-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}.executive-ai-proposal-actions button{display:flex;align-items:center;gap:5px}
+.executive-ai-note{display:block;margin-top:7px}
+.executive-ai-welcome{max-width:900px}
+.executive-ai-groups{display:flex;flex-direction:column;gap:12px;margin-top:14px;text-align:left}
+.executive-ai-group>span{display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#58bdf5;margin-bottom:6px}
+.executive-ai-group .executive-ai-prompts{justify-content:flex-start;margin-top:0}
+.executive-ai-group:first-child .executive-ai-prompts button{border-color:#15803d}
+.executive-ai-bubble.assistant{white-space:normal}
+.executive-ai-md{font-size:14px;line-height:1.55}
+.executive-ai-md h3{font-size:16px;margin:12px 0 6px}.executive-ai-md h4{font-size:14.5px;margin:10px 0 4px}
+.executive-ai-md p{margin:6px 0;white-space:normal}
+.executive-ai-md ul,.executive-ai-md ol{margin:4px 0 8px;padding-left:20px}.executive-ai-md li{margin:3px 0}
+.executive-ai-md hr{border:0;border-top:1px solid rgba(120,143,155,.3);margin:10px 0}
+.executive-ai-md code{font-size:12px;padding:1px 5px;border-radius:5px;background:rgba(120,143,155,.18)}
+.executive-ai-md a{color:#1678c8;text-decoration:underline}
+/* Cores vivas: resposta da IA em azul com letra branca; sua pergunta em verde */
+.executive-ai-bubble.user,html[data-theme] .executive-ai-bubble.user{background:#15803d !important;color:#fff !important;box-shadow:0 2px 8px rgba(21,128,61,.3)}
+.executive-ai-bubble.user strong,.executive-ai-bubble.user p{color:#fff !important}
+.executive-ai-bubble.assistant,html[data-theme] .executive-ai-bubble.assistant{background:#0b5ea8 !important;color:#fff !important;border:0;box-shadow:0 3px 12px rgba(11,94,168,.3)}
+.executive-ai-bubble.assistant>strong{color:#b9f6ca !important}
+.executive-ai-bubble.assistant .executive-ai-md,.executive-ai-bubble.assistant .executive-ai-md p,.executive-ai-bubble.assistant .executive-ai-md li,.executive-ai-bubble.assistant .executive-ai-md strong,.executive-ai-bubble.assistant .executive-ai-md em{color:#fff !important}
+.executive-ai-bubble.assistant .executive-ai-md h3,.executive-ai-bubble.assistant .executive-ai-md h4{color:#ffe08a !important}
+.executive-ai-bubble.assistant .executive-ai-md code{background:rgba(255,255,255,.18);color:#fff}
+.executive-ai-bubble.assistant .executive-ai-md a,.executive-ai-bubble.assistant .executive-ai-sources a{color:#bfe6ff !important}
+.executive-ai-bubble.assistant .executive-ai-md hr{border-top-color:rgba(255,255,255,.35)}
+.executive-ai-bubble.assistant .executive-ai-sources{border-top-color:rgba(255,255,255,.3)}
+.executive-ai-bubble.assistant .executive-ai-sources,.executive-ai-bubble.assistant .executive-ai-sources small{color:#e6f2ff !important}
+.executive-ai-bubble.assistant .executive-ai-proposal{background:#ffffff !important;color:#0f172a !important;border-color:#bfe6ff}
+.executive-ai-bubble.assistant .executive-ai-proposal *{color:#0f172a}
+.executive-ai-bubble.assistant .executive-ai-proposal .small-success-button,.executive-ai-bubble.assistant .executive-ai-proposal .small-success-button *{color:#fff}
+html[data-theme] .executive-ai .executive-ai-bubble.user p,html[data-theme] .executive-ai .executive-ai-bubble.user strong{color:#fff !important}
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-md p,html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-md li{color:#fff !important}
+.executive-ai-form-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.executive-ai-clear{display:flex;align-items:center;gap:6px}
+.executive-ai-bubble-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.executive-ai-copy{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:7px;border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.14);color:#fff;cursor:pointer;flex-shrink:0}
+.executive-ai-copy:hover{background:rgba(255,255,255,.28)}
+.executive-ai-copy svg{color:#fff}
+/* copiar/colar e Enter para enviar */
+.executive-ai-proposal-account{margin:2px 0 8px;font-size:13.5px}
+.executive-ai-proposal-scroll{max-height:300px;overflow:auto;border-radius:8px}
+.executive-ai-proposal-desc{display:block;font-weight:400;opacity:.8;font-size:12px}
+
+.executive-ai-financial { margin-top: 12px; }
+.executive-ai-financial summary { cursor: pointer; font-weight: 700; margin-bottom: 8px; }
+.executive-ai-financial table { width: 100%; border-collapse: collapse; }
+.executive-ai-financial th,
+.executive-ai-financial td { padding: 7px; text-align: left; border-bottom: 1px solid currentColor; }
+.executive-ai-financial td:first-child,
+.executive-ai-financial td:last-child { white-space: nowrap; }
+.executive-ai-financial-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px; }
+.executive-ai-financial-pages button { padding: 4px 8px; }
+
+/* Tabela de lançamentos dentro da resposta azul: tudo em letra branca, sem fundo claro */
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial summary,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial table,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial thead,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial tbody,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial tr,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial th,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial td,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial-pages,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial-pages * {
+  color: #fff !important;
+  background: transparent !important;
+}
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial th { background: rgba(255,255,255,.14) !important; font-weight: 700; }
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial th,
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial td { border-bottom: 1px solid rgba(255,255,255,.3) !important; }
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial tr:hover td { background: rgba(255,255,255,.08) !important; }
+html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-financial-pages button { border: 1px solid rgba(255,255,255,.5) !important; border-radius: 6px; }
+
+/* Exclusão proposta pela IA */
+.executive-ai-proposal-head.executive-ai-proposal-delete { color: #b42318; }
+.executive-ai-proposal-warnings { margin: 8px 0 0; padding-left: 18px; color: #b54708; font-size: 0.86rem; }
+.executive-ai-proposal-warnings li { margin: 2px 0; }

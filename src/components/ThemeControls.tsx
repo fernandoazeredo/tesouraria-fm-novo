@@ -45,7 +45,9 @@ export function ThemeControls() {
   const label = theme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'
 
   return (
-    <button
+    <div className="fm-header-controls">
+      
+      <button
       type="button"
       className="theme-toggle"
       onClick={() => setTheme(nextTheme)}
@@ -55,5 +57,6 @@ export function ThemeControls() {
       {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
       <span>{theme === 'dark' ? 'Modo claro' : 'Modo escuro'}</span>
     </button>
+    </div>
   )
 }

@@ -16,8 +16,7 @@ service cloud.firestore {
     }
 
     function isDirectorEmail() {
-      return authEmail() == 'flavio.marques@marquesemuller.adv.br'
-        || authEmail() == 'anamuller@marquesemuller.adv.br';
+      return authEmail() == 'flavio.marques@marquesemuller.adv.br';
     }
 
     function isManagerEmail() {
@@ -38,6 +37,14 @@ service cloud.firestore {
 
     function hasRole(roles) {
       return activeUser() && currentUser().data.role in roles;
+    }
+
+    function masterWipeMode() {
+      return isPrimaryAdminEmail()
+        && hasRole(['master'])
+        && exists(/databases/$(database)/documents/systemControl/wipe)
+        && get(/databases/$(database)/documents/systemControl/wipe).data.uid == request.auth.uid
+        && get(/databases/$(database)/documents/systemControl/wipe).data.expiresAt > request.time;
     }
 
     function masterRestoreMode() {
@@ -143,13 +150,13 @@ service cloud.firestore {
           || (isPrimaryAdminEmail() && hasRole(['master']))
         )
         && resource.data.status == 'aguardando_aprovacao'
-        && request.resource.data.status in ['aprovado', 'rejeitado'];
+        && request.resource.data.status in ['aprovado', 'devolvido', 'rejeitado'];
     }
 
     function paymentControlOperationalUpdate() {
       return hasRole(['master', 'tesouraria'])
         && (
-          (resource.data.status == 'rejeitado'
+          (resource.data.status in ['devolvido', 'rejeitado']
             && request.resource.data.status == 'aguardando_aprovacao')
           ||
           (resource.data.status == 'aprovado'
@@ -161,7 +168,8 @@ service cloud.firestore {
     }
 
     function societaryDecisionUser() {
-      return hasRole(['master', 'diretor']);
+      return (isPrimaryAdminEmail() && hasRole(['master']))
+        || (isDirectorEmail() && hasRole(['diretor']));
     }
 
     function societaryCreate(documentId) {
@@ -177,9 +185,9 @@ service cloud.firestore {
             && request.resource.data.status in ['apurado', 'aguardando_aprovacao', 'cancelado'])
           ||
           (resource.data.status == 'aguardando_aprovacao'
-            && request.resource.data.status in ['aprovado', 'rejeitado', 'cancelado'])
+            && request.resource.data.status in ['aprovado', 'devolvido', 'rejeitado', 'cancelado'])
           ||
-          (resource.data.status == 'rejeitado'
+          (resource.data.status in ['devolvido', 'rejeitado']
             && request.resource.data.status in ['apurado', 'aguardando_aprovacao', 'cancelado'])
           ||
           (resource.data.status == 'aprovado'
@@ -196,6 +204,27 @@ service cloud.firestore {
         && request.resource.data.status in ['pago', 'rejeitado'];
     }
 
+    function bankPeriodOpen(periodId) {
+      return periodId != null
+        && (
+          !exists(/databases/$(database)/documents/bankReconciliationPeriods/$(periodId))
+          || get(/databases/$(database)/documents/bankReconciliationPeriods/$(periodId)).data.status != 'fechada'
+        );
+    }
+
+    function canCloseBankPeriod() {
+      return hasRole(['master', 'gerente', 'tesouraria'])
+        && resource.data.status == 'aberta'
+        && request.resource.data.status == 'fechada';
+    }
+
+    function canReopenBankPeriod() {
+      return isPrimaryAdminEmail()
+        && hasRole(['master'])
+        && resource.data.status == 'fechada'
+        && request.resource.data.status == 'aberta';
+    }
+
     match /systemControl/{document=**} {
       allow read, create, update, delete: if isPrimaryAdminEmail();
     }
@@ -209,6 +238,17 @@ service cloud.firestore {
         || masterRestoreMode()
       );
       allow delete: if (hasRole(['master']) && request.auth.uid != userId) || masterRestoreMode();
+    }
+
+    match /userPermissions/{userId} {
+      allow read: if signedIn() && (request.auth.uid == userId
+        || (request.auth.token.email != null && userId == 'email:' + request.auth.token.email.lower())
+        || (isPrimaryAdminEmail() && hasRole(['master'])));
+      allow create, update: if masterRestoreMode() ||
+        (isPrimaryAdminEmail() && hasRole(['master'])
+          && request.resource.data.keys().hasOnly(['schemaVersion', 'modules', 'updatedBy', 'updatedAt'])
+          && request.resource.data.updatedBy == request.auth.uid);
+      allow delete: if isPrimaryAdminEmail() && hasRole(['master']);
     }
 
     match /userInvites/{document=**} {
@@ -272,7 +312,7 @@ service cloud.firestore {
       allow update: if masterRestoreMode()
         || societaryDirectorUpdate()
         || societaryTreasuryUpdate();
-      allow delete: if false;
+      allow delete: if masterWipeMode();
     }
 
     match /fiscalNotes/{document=**} {
@@ -317,6 +357,47 @@ service cloud.firestore {
       allow delete: if masterRestoreMode() || hasRole(['master', 'gerente', 'tesouraria']);
     }
 
+    match /bankTransactions/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create, update: if masterRestoreMode()
+        || (
+          hasRole(['master', 'gerente', 'tesouraria'])
+          && bankPeriodOpen(request.resource.data.reconciliationPeriodId)
+        );
+      allow delete: if masterRestoreMode()
+        || (
+          isPrimaryAdminEmail()
+          && hasRole(['master'])
+          && bankPeriodOpen(resource.data.reconciliationPeriodId)
+        );
+    }
+
+    match /bankReconciliations/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create: if masterRestoreMode()
+        || (
+          hasRole(['master', 'gerente', 'tesouraria'])
+          && bankPeriodOpen(request.resource.data.periodId)
+        );
+      allow delete: if masterRestoreMode()
+        || (
+          hasRole(['master', 'gerente', 'tesouraria'])
+          && bankPeriodOpen(resource.data.periodId)
+        );
+      allow update: if masterRestoreMode();
+    }
+
+    match /bankReconciliationPeriods/{document=**} {
+      allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
+      allow create: if masterRestoreMode()
+        || (
+          hasRole(['master', 'gerente', 'tesouraria'])
+          && request.resource.data.status == 'fechada'
+        );
+      allow update: if masterRestoreMode() || canCloseBankPeriod() || canReopenBankPeriod();
+      allow delete: if masterRestoreMode();
+    }
+
     match /auditLogs/{document=**} {
       allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
       allow create: if masterRestoreMode() || activeUser();
@@ -338,5 +419,48 @@ service cloud.firestore {
       allow read: if activeUser();
       allow write: if masterRestoreMode() || (isPrimaryAdminEmail() && hasRole(['master']));
     }
+    // Metadados de PDF oficial: somente lançamentos finalizados, sem tocar
+    // em valores, parcelas, status, fluxo de aprovação ou dados bancários.
+    function officialPdfMetadataOnly(folder, documentId) {
+      return hasRole(['master', 'diretor', 'gerente', 'tesouraria'])
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['demonstrative', 'demonstrativePath', 'demonstrativeUrl', 'demonstrativeGeneratedAt'])
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['demonstrative', 'demonstrativePath', 'demonstrativeUrl'])
+        && request.resource.data.demonstrative is map
+        && request.resource.data.demonstrativePath is string
+        && request.resource.data.demonstrativePath ==
+           'demonstrativos/' + folder + '/' + documentId + '/' + (folder == 'despesas' ? 'v4' : 'v3') + '/demonstrativo.pdf'
+        && request.resource.data.demonstrative.path == request.resource.data.demonstrativePath
+        && request.resource.data.demonstrativeUrl is string
+        && request.resource.data.demonstrative.url == request.resource.data.demonstrativeUrl
+        && request.resource.data.demonstrativeGeneratedAt is string;
+    }
+
+    match /expenses/{documentId} {
+      allow update: if resource.data.status in ['pago', 'arquivado']
+        && officialPdfMetadataOnly('despesas', documentId);
+    }
+
+    match /receivables/{documentId} {
+      allow update: if resource.data.status in ['recebido_tesouraria', 'encerrado']
+        && officialPdfMetadataOnly('receitas', documentId);
+    }
+
+    match /alvaraTransfers/{documentId} {
+      allow update: if resource.data.status in ['parcialmente_pago', 'pago']
+        && officialPdfMetadataOnly('repasses-alvaras', documentId);
+    }
+
+    match /agentCommissions/{documentId} {
+      allow update: if resource.data.status in ['parcialmente_pago', 'pago']
+        && officialPdfMetadataOnly('comissoes', documentId);
+    }
+
+    match /societaryTransfers/{documentId} {
+      allow update: if resource.data.status == 'pago'
+        && officialPdfMetadataOnly('repasses-societarios', documentId);
+    }
+
   }
 }

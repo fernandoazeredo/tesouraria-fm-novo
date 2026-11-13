@@ -1,8 +1,11 @@
+import { getCurrentInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
 import { CheckCircle2, FileText, Plus, RefreshCw, Search, Send, Trash2, Users, X } from 'lucide-react'
 import { db } from '../lib/firebase'
-import { useAuth } from '../auth/AuthContext'
+import { ensureOfficialDemonstrative } from '../lib/officialDemonstrative'
+import { isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
+import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 import '../agent-commissions-v4.css'
 
 type AnyRecord = { id: string } & DocumentData
@@ -63,11 +66,11 @@ function parseBrazilianNumber(value: string) {
   return Number.isFinite(number) ? number : 0
 }
 
-function MoneyInputBR({ value, onChange, disabled = false, ariaLabel }: { value: number; onChange: (value: number) => void; disabled?: boolean; ariaLabel?: string }) {
+function MoneyInputBR({ value, onChange, disabled = false, ariaLabel, validationKey }: { value: number; onChange: (value: number) => void; disabled?: boolean; ariaLabel?: string; validationKey?: string }) {
   const [focused, setFocused] = useState(false)
   const [text, setText] = useState(value > 0 ? decimalBR.format(value) : '')
   useEffect(() => { if (!focused) setText(value > 0 ? decimalBR.format(value) : '') }, [focused, value])
-  return <input type="text" inputMode="decimal" aria-label={ariaLabel} disabled={disabled} placeholder="0,00" value={text}
+  return <input type="text" inputMode="decimal" aria-label={ariaLabel} data-required-key={validationKey} disabled={disabled} placeholder="0,00" value={text}
     onFocus={(event) => { setFocused(true); event.currentTarget.select() }}
     onChange={(event) => { setText(event.target.value); onChange(Math.max(0, parseBrazilianNumber(event.target.value))) }}
     onBlur={() => { setFocused(false); setText(value > 0 ? decimalBR.format(value) : '') }} />
@@ -126,13 +129,14 @@ function netDue(source: AnyRecord, plan?: AnyRecord) { return plan && (plan.netA
 function nextInstallment(plan?: AnyRecord) { return planInstallments(plan).filter((item) => !item.paid).sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0] }
 function statusLabel(plan?: AnyRecord) {
   if (!plan) return 'Aguardando programação'
-  const labels: Record<string, string> = { aguardando_aprovacao: 'Aguardando aprovação', aprovado: 'Aprovado', rejeitado: 'Rejeitado', parcialmente_pago: 'Parcialmente pago', pago: 'Pago integralmente' }
+  const labels: Record<string, string> = { aguardando_aprovacao: 'Aguardando aprovação', aprovado: 'Aprovado', devolvido: 'Devolvido', rejeitado: 'Rejeitado', parcialmente_pago: 'Parcialmente pago', pago: 'Pago integralmente' }
   return labels[String(plan.status ?? '')] || String(plan.status ?? '')
 }
 function statusClass(plan?: AnyRecord) {
   if (!plan) return 'workflow-neutral'
   if (plan.status === 'pago' || plan.status === 'aprovado') return 'workflow-success'
   if (plan.status === 'rejeitado') return 'workflow-danger'
+  if (plan.status === 'devolvido') return 'workflow-warning'
   if (plan.status === 'aguardando_aprovacao') return 'workflow-warning'
   if (plan.status === 'parcialmente_pago') return 'workflow-info'
   return 'workflow-neutral'
@@ -150,7 +154,7 @@ function openPdfPrint(body: string) {
   if (!reportWindow) { window.alert('O navegador bloqueou a janela do relatório. Libere pop-ups para gerar o PDF.'); return }
   reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Comissões</title><style>
     @page{size:A4 portrait;margin:13mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;font-size:11px}h1{text-align:center;font-size:18px;font-weight:500;margin:0 0 24px}.generated{margin-bottom:22px}.meta{display:grid;grid-template-columns:180px 1fr;gap:8px 14px;margin-bottom:25px}.meta b{font-size:11px}.section{page-break-inside:avoid;margin-bottom:26px}.page-break{page-break-before:always}table{width:100%;border-collapse:collapse}th{background:#24557d;color:#fff;padding:8px;text-align:center}td{padding:8px;border-bottom:1px solid #eee;vertical-align:top}tbody tr:nth-child(odd){background:#f5f5f5}.num{text-align:right;white-space:nowrap}.center{text-align:center}.balance{font-weight:700}.summary{margin-top:18px;font-size:13px}.summary b{font-size:14px}.note{margin-top:8px;color:#555}.company{font-weight:700}.process{font-size:10px;line-height:1.4}.footer{margin-top:26px;border-top:1px solid #bbb;padding-top:7px;color:#666;font-size:9px}
-  </style></head><body>${body}<div class="footer">FLÁVIO MARQUES ADVOGADOS ASSOCIADOS · Controle de Despesas e Receitas · Relatório gerado em ${new Date().toLocaleString('pt-BR')}</div><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`)
+  </style></head><body>${body}<div class="footer">${escapeHtml(getCurrentInstitutionalSettings().razaoSocial)} · Controle de Despesas e Receitas · Relatório gerado em ${new Date().toLocaleString('pt-BR')}</div><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`)
   reportWindow.document.close()
 }
 
@@ -183,9 +187,9 @@ function generatePdf(sources: AnyRecord[], planMap: Map<string, AnyRecord>) {
 function CommissionModal({ source, plan, onClose }: { source: AnyRecord; plan?: AnyRecord; onClose: () => void }) {
   const { profile } = useAuth()
   const canOperate = profile?.role === 'master' || profile?.role === 'tesouraria'
-  const canApprove = profile?.role === 'master' || profile?.role === 'diretor'
+  const canApprove = profile?.role === 'master' || Boolean(profile && isOfficialDirectorEmail(profile.email) && profile.role === 'diretor')
   const gross = sourceGrossCommission(source)
-  const editable = !plan || plan.status === 'rejeitado'
+  const editable = !plan || ['rejeitado', 'devolvido'].includes(String(plan.status))
   const execution = Boolean(plan && ['aprovado', 'parcialmente_pago', 'pago'].includes(String(plan.status)))
   const [accountingAccount, setAccountingAccount] = useState(String(plan?.accountingAccount || ''))
   const [deductions, setDeductions] = useState<Deduction[]>(() => normalizeDeductions(plan))
@@ -215,9 +219,12 @@ function CommissionModal({ source, plan, onClose }: { source: AnyRecord; plan?: 
   async function saveSchedule() {
     if (!profile || !canOperate || !editable) return
     if (totalDeductions >= gross) { window.alert('O total das deduções deve ser menor que a comissão bruta para existir valor líquido a pagar.'); return }
-    if (deductions.some((item) => item.value > 0 && (!item.description.trim() || !item.date))) { window.alert('Informe data e descrição para todas as deduções com valor.'); return }
+    const missingKeys: string[] = []
+    deductions.forEach((item, index) => { if (item.value > 0 && !item.date) missingKeys.push(`commission-deduction-date-${index}`); if (item.value > 0 && !item.description.trim()) missingKeys.push(`commission-deduction-description-${index}`) })
+    installments.forEach((item, index) => { if (item.value <= 0) missingKeys.push(`commission-installment-value-${index}`); if (!item.dueDate) missingKeys.push(`commission-installment-date-${index}`) })
+    if (missingKeys.length) { showRequiredFieldErrors('.commission-v4-modal', missingKeys); return }
+    clearRequiredFieldErrors('.commission-v4-modal')
     if (Math.abs(sumInstallments - netAmount) > 0.02) { window.alert(`A soma das parcelas deve ser igual ao valor líquido após deduções (${money.format(netAmount)}).`); return }
-    if (installments.some((item) => !item.dueDate || item.value <= 0)) { window.alert('Informe valor e data de todas as parcelas.'); return }
     setBusy(true)
     try {
       const cleanDeductions = deductions.filter((item) => item.value > 0).map((item) => ({ ...item, description: item.description.trim() }))
@@ -260,7 +267,10 @@ function CommissionModal({ source, plan, onClose }: { source: AnyRecord; plan?: 
     const nextStatus = paidCount === 0 ? 'aprovado' : paidCount === finalized.length ? 'pago' : 'parcialmente_pago'
     setBusy(true)
     try {
-      await setDoc(doc(db, 'agentCommissions', source.id), { installments: finalized, status: nextStatus, paidValue: finalized.reduce((sum, item) => sum + (item.paid ? item.value : 0), 0), updatedBy: profile.uid, updatedByName: profile.displayName, updatedAt: serverTimestamp() }, { merge: true })
+      const paidValue = finalized.reduce((sum, item) => sum + (item.paid ? item.value : 0), 0)
+      const finalizedPlan = { ...plan, id: source.id, installments: finalized, status: nextStatus, paidValue, updatedBy: profile.uid, updatedByName: profile.displayName }
+      await setDoc(doc(db, 'agentCommissions', source.id), { installments: finalized, status: nextStatus, paidValue, updatedBy: profile.uid, updatedByName: profile.displayName, updatedAt: serverTimestamp() }, { merge: true })
+      if (nextStatus === 'pago') await ensureOfficialDemonstrative('commission', finalizedPlan, { generatedBy: profile.uid })
       for (let index = 0; index < finalized.length; index += 1) if (finalized[index].paid && !previous[index]?.paid) await audit(profile, `Parcela ${finalized[index].number} da comissão paga`, `Processo ${source.processo || '—'} · ${beneficiary(source)} · ${money.format(finalized[index].value)} em ${dateBr(finalized[index].paidDate)}`, source.id)
       await audit(profile, 'Execução da comissão atualizada', `Processo ${source.processo || '—'} · ${paidCount}/${finalized.length} parcela(s) paga(s)`, source.id)
       onClose()
@@ -275,13 +285,13 @@ function CommissionModal({ source, plan, onClose }: { source: AnyRecord; plan?: 
     <section className="commission-deductions-box">
       <div className="commission-section-title"><div><strong>Deduções da comissão</strong><span>Inclua dedução compensatória ou qualquer outro desconto. O valor líquido é recalculado automaticamente.</span></div>{canOperate && editable && <button className="secondary-button" type="button" onClick={addDeduction}><Plus size={15} /> Adicionar dedução</button>}</div>
       <label className="commission-account-field"><span>Conta contábil / referência da comissão (opcional)</span><input value={accountingAccount} disabled={!canOperate || !editable} onChange={(event) => setAccountingAccount(event.target.value)} placeholder="Ex.: 4.02.03.14 - Agente (Participação no Processo - Alvará/Acordo)" /></label>
-      <div className="commission-deduction-table"><div className="commission-deduction-row head"><span>Data</span><span>Histórico / Motivo</span><span>Valor da dedução</span><span></span></div>{deductions.length === 0 ? <div className="commission-no-deduction">Nenhuma dedução lançada.</div> : deductions.map((item, index) => <div className="commission-deduction-row" key={item.id}><input type="date" value={item.date} disabled={!canOperate || !editable} onChange={(event) => patchDeduction(index, { date: event.target.value })} /><input value={item.description} disabled={!canOperate || !editable} onChange={(event) => patchDeduction(index, { description: event.target.value })} placeholder="Ex.: Dedução compensatória" /><MoneyInputBR value={item.value} disabled={!canOperate || !editable} ariaLabel={`Valor da dedução ${index + 1}`} onChange={(value) => patchDeduction(index, { value })} />{canOperate && editable ? <button type="button" className="icon-button deduction-remove" title="Excluir dedução" onClick={() => removeDeduction(index)}><Trash2 size={15} /></button> : <span />}</div>)}</div>
+      <div className="commission-deduction-table"><div className="commission-deduction-row head"><span>Data</span><span>Histórico / Motivo</span><span>Valor da dedução</span><span></span></div>{deductions.length === 0 ? <div className="commission-no-deduction">Nenhuma dedução lançada.</div> : deductions.map((item, index) => <div className="commission-deduction-row" key={item.id}><input data-required-key={`commission-deduction-date-${index}`} type="date" value={item.date} disabled={!canOperate || !editable} onChange={(event) => patchDeduction(index, { date: event.target.value })} /><input data-required-key={`commission-deduction-description-${index}`} value={item.description} disabled={!canOperate || !editable} onChange={(event) => patchDeduction(index, { description: event.target.value })} placeholder="Ex.: Dedução compensatória" /><MoneyInputBR value={item.value} disabled={!canOperate || !editable} ariaLabel={`Valor da dedução ${index + 1}`} onChange={(value) => patchDeduction(index, { value })} />{canOperate && editable ? <button type="button" className="icon-button deduction-remove" title="Excluir dedução" onClick={() => removeDeduction(index)}><Trash2 size={15} /></button> : <span />}</div>)}</div>
       <div className="commission-calculation"><div><span>Comissão bruta</span><strong>{money.format(gross)}</strong></div><div><span>(-) Total de deduções</span><strong>{money.format(totalDeductions)}</strong></div><div className="net"><span>VALOR LÍQUIDO A PAGAR AO AGENTE</span><strong>{money.format(netAmount)}</strong></div></div>
     </section>
 
     {!execution && <div className="obligation-form-grid"><label><span>Forma de pagamento</span><select value={paymentType} disabled={!canOperate || !editable} onChange={(event) => { const value = event.target.value as 'avista' | 'parcelado'; setPaymentType(value); if (value === 'avista') setCount(1) }}><option value="avista">À vista</option><option value="parcelado">Parcelado</option></select></label><label><span>Número de parcelas</span><input type="number" min="1" max="60" value={paymentType === 'avista' ? 1 : count} disabled={!canOperate || !editable || paymentType === 'avista'} onChange={(event) => setCount(Math.max(1, Number(event.target.value)))} /></label><label><span>Primeira data prevista</span><input type="date" value={firstDueDate} disabled={!canOperate || !editable} onChange={(event) => setFirstDueDate(event.target.value)} /></label></div>}
 
-    <div className="obligation-installments"><div className="obligation-installment-head enhanced"><span>Parcela</span><span>Valor líquido</span><span>Data prevista</span><span>Status</span><span>Pago</span><span>Data do pagamento</span></div>{installments.map((item, index) => <div className="obligation-installment-row enhanced" key={item.number}><strong>{index + 1}/{installments.length}</strong><MoneyInputBR value={item.value} disabled={execution || !canOperate || !editable} onChange={(value) => patchInstallment(index, { value })} /><input type="date" value={item.dueDate} disabled={execution || !canOperate || !editable} onChange={(event) => patchInstallment(index, { dueDate: event.target.value })} /><b className={`workflow-status-badge ${installmentClass(item.status)}`}>{installmentLabel(item.status)}</b><label className="obligation-paid-check"><input type="checkbox" checked={Boolean(item.paid)} disabled={!execution || !canOperate || plan?.status === 'pago'} onChange={(event) => patchInstallment(index, { paid: event.target.checked, status: event.target.checked ? 'paga' : 'aprovada', paidDate: event.target.checked ? (item.paidDate || today()) : '' })} /><span>{item.paid ? 'Sim' : 'Não'}</span></label><input type="date" value={item.paidDate || ''} disabled={!execution || !canOperate || !item.paid || plan?.status === 'pago'} onChange={(event) => patchInstallment(index, { paidDate: event.target.value })} /></div>)}<div className="obligation-installment-total enhanced"><span>Total programado</span><strong className={Math.abs(sumInstallments - netAmount) > .02 ? 'expense-text' : ''}>{money.format(sumInstallments)}</strong></div></div>
+    <div className="obligation-installments"><div className="obligation-installment-head enhanced"><span>Parcela</span><span>Valor líquido</span><span>Data prevista</span><span>Status</span><span>Pago</span><span>Data do pagamento</span></div>{installments.map((item, index) => <div className="obligation-installment-row enhanced" key={item.number}><strong>{index + 1}/{installments.length}</strong><MoneyInputBR value={item.value} disabled={execution || !canOperate || !editable} validationKey={`commission-installment-value-${index}`} onChange={(value) => patchInstallment(index, { value })} /><input data-required-key={`commission-installment-date-${index}`} type="date" value={item.dueDate} disabled={execution || !canOperate || !editable} onChange={(event) => patchInstallment(index, { dueDate: event.target.value })} /><b className={`workflow-status-badge ${installmentClass(item.status)}`}>{installmentLabel(item.status)}</b><label className="obligation-paid-check"><input type="checkbox" checked={Boolean(item.paid)} disabled={!execution || !canOperate || plan?.status === 'pago'} onChange={(event) => patchInstallment(index, { paid: event.target.checked, status: event.target.checked ? 'paga' : 'aprovada', paidDate: event.target.checked ? (item.paidDate || today()) : '' })} /><span>{item.paid ? 'Sim' : 'Não'}</span></label><input type="date" value={item.paidDate || ''} disabled={!execution || !canOperate || !item.paid || plan?.status === 'pago'} onChange={(event) => patchInstallment(index, { paidDate: event.target.value })} /></div>)}<div className="obligation-installment-total enhanced"><span>Total programado</span><strong className={Math.abs(sumInstallments - netAmount) > .02 ? 'expense-text' : ''}>{money.format(sumInstallments)}</strong></div></div>
 
     <label className="obligation-notes"><span>Observações</span><textarea rows={3} value={notes} disabled={execution || !canOperate || !editable} onChange={(event) => setNotes(event.target.value)} /></label>
 
@@ -313,7 +323,7 @@ export function AgentCommissionsPageV4() {
   const loading = loadingReceivables || loadingPlans
 
   return <>
-    <div className="page-heading"><div><span className="eyebrow">Controle financeiro separado</span><h1>Comissões de Agentes</h1><p>Controle da comissão bruta, deduções, valor líquido, aprovação e pagamento à vista ou parcelado.</p></div><div className="quick-actions commission-report-actions"><button className="secondary-button commission-report-button" type="button" onClick={() => generatePdf(sources, planMap)}><FileText size={17} /> Gerar PDF do relatório</button></div></div>
+    <div className="page-heading payment-control-heading"><div><span className="eyebrow">Controle financeiro separado</span><h1>Comissões de Agentes</h1><p>Controle da comissão bruta, deduções, valor líquido, aprovação e pagamento à vista ou parcelado.</p></div><div className="quick-actions commission-report-actions"><button className="secondary-button commission-report-button" type="button" onClick={() => generatePdf(sources, planMap)}><FileText size={17} /> Gerar PDF do relatório</button></div></div>
     <div className="commission-v4-metrics"><article><span>Comissões brutas</span><strong>{money.format(totals.gross)}</strong></article><article><span>Deduções</span><strong>{money.format(totals.deductions)}</strong></article><article><span>Líquido a pagar</span><strong>{money.format(totals.net)}</strong></article><article><span>Já pago</span><strong>{money.format(totals.paid)}</strong></article><article><span>Saldo</span><strong>{money.format(totals.pending)}</strong></article><article><span>Aguardando aprovação</span><strong>{totals.approvals}</strong></article></div>
     <section className="page-card module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por processo, agente, reclamante ou reclamada" /></div></div>{loading ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando comissões</strong></div> : sources.length === 0 ? <div className="module-empty"><Users size={34} /><strong>Nenhuma comissão disponível</strong><span>As comissões aparecem depois que a Tesouraria confirma o recebimento do Alvará.</span></div> : <div className="commission-v4-list"><div className="commission-v4-row head"><span>Processo / Agente</span><span>Bruto</span><span>Deduções</span><span>Líquido</span><span>Já pago</span><span>Saldo</span><span>Próxima parcela</span><span>Status</span><span>Ação</span></div>{sources.map((source) => { const plan = planMap.get(source.id); const gross = sourceGrossCommission(source); const deductions = deductionTotal(plan); const net = netDue(source, plan); const paid = paidValue(plan); const next = nextInstallment(plan); return <div className="commission-v4-row" key={source.id}><span><strong>{source.processo || '—'}</strong><small>{beneficiary(source)}</small></span><span><strong>{money.format(gross)}</strong></span><span><strong>{money.format(deductions)}</strong></span><span><strong>{money.format(net)}</strong></span><span><strong>{money.format(paid)}</strong></span><span><strong>{money.format(Math.max(0, net - paid))}</strong></span><span>{next ? <><strong>{money.format(next.value)}</strong><small>{dateBr(next.dueDate)}</small></> : <strong>—</strong>}</span><span><b className={`workflow-status-badge ${statusClass(plan)}`}>{statusLabel(plan)}</b></span><span><button className="small-neutral-button" type="button" onClick={() => setTarget(source)}>{plan ? 'Abrir controle' : 'Programar'}</button></span></div>})}</div>}</section>
     {target && <CommissionModal source={target} plan={planMap.get(target.id)} onClose={() => setTarget(null)} />}

@@ -1,0 +1,355 @@
+import { useEffect, useMemo, useState } from 'react'
+import { collection, onSnapshot, type DocumentData } from 'firebase/firestore'
+import { getDownloadURL, ref as storageRef } from 'firebase/storage'
+import { storage } from '../lib/firebase'
+import { OfficialFinancialDocumentPreviewButton } from '../components/OfficialFinancialDocument'
+import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink, FileText, Paperclip, RefreshCw } from 'lucide-react'
+import { db } from '../lib/firebase'
+import { isEffectiveAlvaraReceivable } from '../lib/receivableClassification'
+import { receivableForFinancialPlan } from '../lib/creditOperations'
+import './FinancialCalendarPage.css'
+
+type AnyRecord = { id: string } & DocumentData
+type Attachment = { name?: string; url?: string; path?: string; size?: number; type?: string }
+
+const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+const dateFormatter = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+const monthFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' })
+
+function useCollectionRecords(name: string) {
+  const [records, setRecords] = useState<AnyRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => onSnapshot(collection(db, name), (snapshot) => {
+    setRecords(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })))
+    setLoading(false)
+  }, () => setLoading(false)), [name])
+  return { records, loading }
+}
+
+function toNumber(value: unknown) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : 0
+}
+
+function attachmentsOf(item: AnyRecord): Attachment[] {
+  return Array.isArray(item.attachments) ? item.attachments as Attachment[] : []
+}
+
+function dateKey(value: unknown) {
+  const raw = String(value ?? '').trim()
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : ''
+}
+
+function localDateFromKey(key: string) {
+  const [year, month, day] = key.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
+function monthKey(year: number, monthZeroBased: number) {
+  return `${year}-${String(monthZeroBased + 1).padStart(2, '0')}`
+}
+
+function fileName(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'demonstrativo'
+}
+
+type DocumentContext = 'expense' | 'revenue' | 'alvaraTransfer' | 'commission' | 'societaryTransfer'
+function DemonstrativeLink({ item, context }: { item: AnyRecord; context: DocumentContext }) {
+  const storedUrl = String(item.demonstrative?.url || item.demonstrativeUrl || '')
+  const path = String(item.demonstrative?.path || item.demonstrativePath || '')
+  const [url, setUrl] = useState(storedUrl)
+  const [readError, setReadError] = useState('')
+  useEffect(() => {
+    setUrl(storedUrl)
+    setReadError('')
+    if (storedUrl || !path) return
+    let alive = true
+    getDownloadURL(storageRef(storage, path)).then((resolved) => {
+      if (alive) setUrl(resolved)
+    }).catch((error) => {
+      console.warn('Demonstrativo do calendário indisponível:', path, error)
+      if (alive) setReadError(String((error as { code?: string })?.code || 'falha de leitura'))
+    })
+    return () => { alive = false }
+  }, [path, storedUrl])
+  if (url) return <a href={url} target="_blank" rel="noreferrer"><FileText size={14} /> Demonstrativo</a>
+
+  const reference = context === 'expense'
+    ? String(item.fornecedor || item.nome || item.id)
+    : String(item.processo || item.sourceSnapshot?.processo || item.beneficiary || item.id)
+  const typeName = {
+    expense: 'Despesa', revenue: 'Receita', alvaraTransfer: 'Repasse de Alvará',
+    commission: 'Comissão', societaryTransfer: 'Repasse Societário',
+  }[context]
+  const status = String(item.status || '')
+  const notPaid = context === 'expense' && status === 'aprovado'
+  const pendingDescription = notPaid
+    ? 'Aguardando pagamento — PDF de baixa ainda não aplicável'
+    : readError
+      ? `Falha ao abrir PDF (${readError})`
+      : context === 'societaryTransfer'
+        ? 'PDF societário ainda não salvo'
+        : 'PDF de lançamento finalizado ainda não salvo'
+  return <span title={`${typeName} · ${reference} · status ${status || 'não informado'} · ${pendingDescription}`}>
+    <FileText size={14} /> {pendingDescription} · {typeName}: {reference}
+  </span>
+}
+
+function AttachmentLink({ file, index }: { file: Attachment; index: number }) {
+  const savedUrl = String(file.url || '')
+  const path = String(file.path || '')
+  const [url, setUrl] = useState(savedUrl)
+  useEffect(() => {
+    setUrl(savedUrl)
+    if (savedUrl || !path) return
+    let mounted = true
+    getDownloadURL(storageRef(storage, path)).then((resolved) => {
+      if (mounted) setUrl(resolved)
+    }).catch((error) => console.warn('Comprovante indisponível no calendário:', path, error))
+    return () => { mounted = false }
+  }, [savedUrl, path])
+  return url
+    ? <a href={url} target="_blank" rel="noreferrer"><Paperclip size={13} /> {file.name || `Documento ${index + 1}`} <ExternalLink size={11} /></a>
+    : <span><Paperclip size={13} /> {file.name || `Documento ${index + 1}`} indisponível</span>
+}
+
+
+type CreditOperation = { source: AnyRecord | null; transfers: AnyRecord[]; commissions: AnyRecord[] }
+
+function FilesForOperation({
+  source, transfers = [], commissions = [], expense, societary,
+}: { source?: AnyRecord | null; transfers?: AnyRecord[]; commissions?: AnyRecord[]; expense?: AnyRecord; societary?: AnyRecord }) {
+  const records: Array<{ kind: DocumentContext; record: AnyRecord; title: string }> = []
+  if (expense) records.push({ kind: 'expense', record: expense, title: '01 · Demonstrativo da despesa' })
+  if (source) records.push({ kind: 'revenue', record: source, title: '01 · Demonstrativo da receita' })
+  transfers.forEach((plan) => records.push({ kind: 'alvaraTransfer', record: plan, title: '02 · Repasse ao cliente' }))
+  commissions.forEach((plan) => records.push({ kind: 'commission', record: plan, title: '03 · Comissão de ' + String(plan.beneficiary || plan.sourceSnapshot?.agentName || 'agente') }))
+  if (societary) records.push({ kind: 'societaryTransfer', record: societary, title: 'Repasse Societário' })
+  const count = records.reduce((sum, item) => sum + attachmentsOf(item.record).length + (item.record.demonstrative?.url || item.record.demonstrativeUrl ? 1 : 0), 0)
+  return <details className="financial-operation-documents">
+    <summary>Documentos da operação · {records.length} demonstrativo(s) · {count} arquivo(s) relacionado(s)</summary>
+    <div className="financial-operation-list">
+      {records.map(({ kind, record, title }) => <section className="financial-operation-group" key={kind + ':' + record.id}>
+        <strong>{title}</strong>
+        <div className="financial-document-row">
+          <DemonstrativeLink item={record} context={kind} />
+          <OfficialFinancialDocumentPreviewButton kind={kind} record={record} />
+          {attachmentsOf(record).map((file, index) =>
+            <AttachmentLink key={file.path || String(index)} file={file} index={index} />)}
+          {attachmentsOf(record).length === 0 && <span>Comprovante não anexado</span>}
+        </div>
+      </section>)}
+    </div>
+  </details>
+}
+
+
+function ExpenseMovement({ item }: { item: AnyRecord }) {
+  return <article className="financial-movement-card expense-movement">
+    <div className="financial-movement-main">
+      <div><strong>{item.fornecedor || item.nome || 'Despesa'}</strong><span>{item.expenseAccountName || item.categoria || item.expenseAccountCode || 'Despesa'}</span></div>
+      <b>{money.format(toNumber(item.valorTotal))}</b>
+    </div>
+    <FilesForOperation expense={item} />
+  </article>
+}
+function RevenueMovement({ item, operation }: { item: AnyRecord; operation?: CreditOperation }) {
+  return <article className="financial-movement-card revenue-movement">
+    <div className="financial-movement-main">
+      <div><strong>{item.processo || item.reclamante || 'Receita'}</strong><span>{item.reclamante || item.origem || item.natureza || 'Recebimento'}</span></div>
+      <b>{money.format(toNumber(item.valorAlvara || item.valorLiquidoCliente))}</b>
+    </div>
+    <FilesForOperation source={operation?.source || item} transfers={operation?.transfers || []} commissions={operation?.commissions || []} />
+  </article>
+}
+
+type PayoutMovement = { id: string; kind: 'Repasse de Alvará' | 'Comissão de Agente' | 'Repasse Societário'; date: string; process: string; beneficiary: string; value: number; record: AnyRecord }
+
+
+function PayoutMovementCard({ item, operation }: { item: PayoutMovement; operation?: CreditOperation }) {
+  return <article className="financial-movement-card payout-movement">
+    <div className="financial-movement-main">
+      <div><strong>{item.kind}</strong><span>{item.process || '—'} · {item.beneficiary || '—'}</span></div>
+      <b>{money.format(item.value)}</b>
+    </div>
+    {item.kind === 'Repasse Societário'
+      ? <FilesForOperation societary={item.record} />
+      : <FilesForOperation source={operation?.source || null}
+        transfers={operation?.transfers || (item.kind === 'Repasse de Alvará' ? [item.record] : [])}
+        commissions={operation?.commissions || (item.kind === 'Comissão de Agente' ? [item.record] : [])} />}
+  </article>
+}
+
+export function FinancialCalendarPage() {
+  const { records: expenses, loading: loadingExpenses } = useCollectionRecords('expenses')
+  const { records: receivables, loading: loadingReceivables } = useCollectionRecords('receivables')
+  const { records: alvaraTransfers, loading: loadingTransfers } = useCollectionRecords('alvaraTransfers')
+  const { records: commissions, loading: loadingCommissions } = useCollectionRecords('agentCommissions')
+  const { records: societaryTransfers, loading: loadingSocietary } = useCollectionRecords('societaryTransfers')
+
+  const creditOperations = useMemo(() => {
+    const operations = new Map<string, CreditOperation>()
+    for (const source of receivables) operations.set(source.id, { source, transfers: [], commissions: [] })
+    for (const plan of alvaraTransfers) {
+      if (!Array.isArray(plan.installments) || !plan.installments.some((row: DocumentData) => row?.paid === true)) continue
+      const source = receivableForFinancialPlan(plan, receivables)
+      const key = source?.id || 'alvara:' + plan.id
+      if (!operations.has(key)) operations.set(key, { source, transfers: [], commissions: [] })
+      operations.get(key)!.transfers.push(plan)
+    }
+    for (const plan of commissions) {
+      if (!Array.isArray(plan.installments) || !plan.installments.some((row: DocumentData) => row?.paid === true)) continue
+      const source = receivableForFinancialPlan(plan, receivables)
+      const key = source?.id || 'commission:' + plan.id
+      if (!operations.has(key)) operations.set(key, { source, transfers: [], commissions: [] })
+      operations.get(key)!.commissions.push(plan)
+    }
+    return operations
+  }, [receivables, alvaraTransfers, commissions])
+  const operationForPlan = (plan: AnyRecord, kind: 'alvara' | 'commission') => {
+    const source = receivableForFinancialPlan(plan, receivables)
+    return creditOperations.get(source?.id || kind + ':' + plan.id)
+  }
+
+  const today = new Date()
+  const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1))
+
+  const year = cursor.getFullYear()
+  const month = cursor.getMonth()
+  const selectedMonth = monthKey(year, month)
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+
+  const expensesByDay = useMemo(() => {
+    const grouped = new Map<string, AnyRecord[]>()
+    expenses
+      .filter((item) => ['aprovado', 'pago', 'arquivado'].includes(String(item.status)))
+      .forEach((item) => {
+        const key = dateKey(item.paymentDate)
+        if (!key || !key.startsWith(selectedMonth)) return
+        grouped.set(key, [...(grouped.get(key) || []), item])
+      })
+    return grouped
+  }, [expenses, selectedMonth])
+
+  const receivablesByDay = useMemo(() => {
+    const grouped = new Map<string, AnyRecord[]>()
+    receivables
+      .filter(isEffectiveAlvaraReceivable)
+      .forEach((item) => {
+        const key = dateKey(item.receiptDate || item.data)
+        if (!key || !key.startsWith(selectedMonth)) return
+        grouped.set(key, [...(grouped.get(key) || []), item])
+      })
+    return grouped
+  }, [receivables, selectedMonth])
+
+  const payoutsByDay = useMemo(() => {
+    const grouped = new Map<string, PayoutMovement[]>()
+    const add = (row: PayoutMovement) => {
+      const key = dateKey(row.date)
+      if (!key || !key.startsWith(selectedMonth)) return
+      grouped.set(key, [...(grouped.get(key) || []), row])
+    }
+    for (const plan of alvaraTransfers) {
+      const installments = Array.isArray(plan.installments) ? plan.installments : []
+      installments.forEach((installment: DocumentData, index: number) => {
+        if (!installment?.paid || !installment?.paidDate) return
+        add({ id: `alvara-${plan.id}-${index}`, kind: 'Repasse de Alvará', date: String(installment.paidDate), process: String(plan.processo || plan.sourceSnapshot?.processo || ''), beneficiary: String(plan.beneficiary || plan.sourceSnapshot?.titular || plan.sourceSnapshot?.reclamante || 'Cliente'), value: toNumber(installment.value), record: plan })
+      })
+    }
+    for (const plan of commissions) {
+      const installments = Array.isArray(plan.installments) ? plan.installments : []
+      installments.forEach((installment: DocumentData, index: number) => {
+        if (!installment?.paid || !installment?.paidDate) return
+        add({ id: `commission-${plan.id}-${index}`, kind: 'Comissão de Agente', date: String(installment.paidDate), process: String(plan.processo || plan.sourceSnapshot?.processo || ''), beneficiary: String(plan.beneficiary || plan.sourceSnapshot?.agentName || 'Agente'), value: toNumber(installment.value), record: plan })
+      })
+    }
+    for (const plan of societaryTransfers) {
+      if (plan.status !== 'pago' || !plan.paymentDate) continue
+      add({ id: `societary-${plan.id}`, kind: 'Repasse Societário', date: String(plan.paymentDate), process: String(plan.processo || ''), beneficiary: String(plan.beneficiary || 'Ana Müller'), value: toNumber(plan.paidValue || plan.transferValue), record: plan })
+    }
+    return grouped
+  }, [alvaraTransfers, commissions, selectedMonth, societaryTransfers])
+
+  const monthExpenses = [...expensesByDay.values()].flat()
+  const monthReceivables = [...receivablesByDay.values()].flat()
+  const expenseTotal = monthExpenses.reduce((sum, item) => sum + toNumber(item.valorTotal), 0)
+  const revenueTotal = monthReceivables.reduce((sum, item) => sum + toNumber(item.valorAlvara || item.valorLiquidoCliente), 0)
+  const resultTotal = revenueTotal - expenseTotal
+  const summaryScale = Math.max(revenueTotal, expenseTotal, Math.abs(resultTotal), 1)
+  const revenueBar = (revenueTotal / summaryScale) * 100
+  const expenseBar = (expenseTotal / summaryScale) * 100
+  const resultBar = (Math.abs(resultTotal) / summaryScale) * 100
+  const resultTone = resultTotal > 0 ? 'positive' : resultTotal < 0 ? 'negative' : 'neutral'
+  const loading = loadingExpenses || loadingReceivables || loadingTransfers || loadingCommissions || loadingSocietary
+
+  return <>
+    <div className="page-heading financial-calendar-heading">
+      <div><span className="eyebrow">Consulta cronológica</span><h1>Calendário Financeiro</h1><p>Despesas e receitas agrupadas pela data efetiva de pagamento e recebimento, com acesso aos demonstrativos e documentos comprobatórios.</p></div>
+    </div>
+
+    <section className="page-card financial-calendar-toolbar">
+      <button type="button" className="secondary-button" onClick={() => setCursor(new Date(year, month - 1, 1))}><ChevronLeft size={17} /> Mês anterior</button>
+      <div><CalendarDays size={22} /><strong>{monthFormatter.format(cursor)}</strong><span>{daysInMonth} dias</span></div>
+      <button type="button" className="secondary-button" onClick={() => setCursor(new Date(year, month + 1, 1))}>Próximo mês <ChevronRight size={17} /></button>
+    </section>
+
+    <section className="financial-calendar-summary">
+      <article>
+        <span>Receitas do mês</span>
+        <strong className="revenue-calendar-value">{money.format(revenueTotal)}</strong>
+        <small>{monthReceivables.length} lançamento(s)</small>
+        <div className="financial-mini-chart" aria-label="Gráfico de receitas do mês"><i className="financial-mini-bar revenue-bar" style={{ width: `${revenueBar}%` }} /></div>
+      </article>
+      <article>
+        <span>Despesas do mês</span>
+        <strong className="expense-calendar-value">{money.format(expenseTotal)}</strong>
+        <small>{monthExpenses.length} lançamento(s)</small>
+        <div className="financial-mini-chart" aria-label="Gráfico de despesas do mês"><i className="financial-mini-bar expense-bar" style={{ width: `${expenseBar}%` }} /></div>
+      </article>
+      <article>
+        <span>Resultado do mês</span>
+        <strong className={`result-calendar-value ${resultTone}`}>{money.format(resultTotal)}</strong>
+        <small>Receitas menos despesas</small>
+        <div className="financial-mini-chart" aria-label={`Gráfico do resultado do mês: ${resultTone === 'positive' ? 'positivo' : resultTone === 'negative' ? 'negativo' : 'zerado'}`}>
+          <i className={`financial-mini-bar result-bar ${resultTone}`} style={{ width: `${resultBar}%` }} />
+        </div>
+      </article>
+    </section>
+
+    {loading ? <section className="page-card module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando calendário financeiro</strong></section> :
+      <section className="financial-calendar-grid">
+        {Array.from({ length: daysInMonth }, (_, index) => {
+          const day = index + 1
+          const key = `${selectedMonth}-${String(day).padStart(2, '0')}`
+          const dayExpenses = expensesByDay.get(key) || []
+          const dayReceivables = receivablesByDay.get(key) || []
+          const dayPayouts = payoutsByDay.get(key) || []
+          const dayExpenseTotal = dayExpenses.reduce((sum, item) => sum + toNumber(item.valorTotal), 0)
+          const dayRevenueTotal = dayReceivables.reduce((sum, item) => sum + toNumber(item.valorAlvara || item.valorLiquidoCliente), 0)
+
+          return <article className="financial-day-card" key={key}>
+            <header><h2>{dateFormatter.format(localDateFromKey(key))}</h2><span>Dia {day}/{daysInMonth}</span></header>
+
+            {dayExpenses.length > 0 && <section className="financial-day-section financial-day-expenses">
+              <div className="financial-day-section-head"><h3>Despesas</h3><strong>{money.format(dayExpenseTotal)}</strong></div>
+              <div className="financial-movement-list">{dayExpenses.map((item) => <ExpenseMovement key={item.id} item={item} />)}</div>
+            </section>}
+
+            {dayReceivables.length > 0 && <section className="financial-day-section financial-day-revenues">
+              <div className="financial-day-section-head"><h3>Receitas</h3><strong>{money.format(dayRevenueTotal)}</strong></div>
+              <div className="financial-movement-list">{dayReceivables.map((item) => <RevenueMovement key={item.id} item={item} operation={creditOperations.get(item.id)} />)}</div>
+            </section>}
+
+            {dayPayouts.length > 0 && <section className="financial-day-section financial-day-payouts">
+              <div className="financial-day-section-head"><h3>Repasses e Comissões Pagos</h3><strong>{money.format(dayPayouts.reduce((sum, item) => sum + item.value, 0))}</strong></div>
+              <div className="financial-movement-list">{dayPayouts.map((item) => <PayoutMovementCard key={item.id} item={item} operation={item.kind === 'Repasse Societário' ? undefined : operationForPlan(item.record, item.kind === 'Comissão de Agente' ? 'commission' : 'alvara')} />)}</div>
+            </section>}
+
+            {dayExpenses.length === 0 && dayReceivables.length === 0 && dayPayouts.length === 0 && <div className="financial-day-empty">Sem movimento</div>}
+          </article>
+        })}
+      </section>}
+  </>
+}
