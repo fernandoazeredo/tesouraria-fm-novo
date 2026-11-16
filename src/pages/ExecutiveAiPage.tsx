@@ -7,7 +7,7 @@ import { AiMarkdown } from './ExecutiveAiMarkdown'
 
 type DiffRow = { field: string; before: unknown; after: unknown }
 type ClassItem = { tipo: string; titulo: string; descricao?: string; competencia?: string | null; unidade?: string; valor: number; antes: string }
-type Proposal = { id: string; kind?: 'campos' | 'classificacao' | 'exclusao'; avisos?: string[]; modulo: string; collection?: string; docId?: string; summary: string; diff?: DiffRow[]; conta?: string; grupo?: string; itens?: Array<ClassItem & { label?: string; value?: string }>; total?: number; expiresAtMs: number }
+type Proposal = { id: string; kind?: 'campos' | 'classificacao' | 'exclusao' | 'criacao'; avisos?: string[]; modulo: string; collection?: string; docId?: string; summary: string; diff?: DiffRow[]; conta?: string; grupo?: string; itens?: Array<ClassItem & { label?: string; value?: string }>; total?: number; expiresAtMs: number }
 type FinancialDetail = { date: string; title: string; unit: string; category: string; value: number }
 type AiResponse = {
   answer: string
@@ -128,6 +128,8 @@ export function ExecutiveAiPage() {
       const typed = window.prompt(`EXCLUSÃO de lançamento em ${proposal.modulo}.\n\nPara confirmar, digite EXCLUIR:`)
       if ((typed ?? '').trim().toUpperCase() !== 'EXCLUIR') { if (typed !== null) setError('Exclusão não confirmada: é preciso digitar EXCLUIR.'); return }
       confirmText = 'EXCLUIR'
+    } else if (kind === 'apply' && proposal.kind === 'criacao') {
+      if (!window.confirm(`Criar este rascunho em ${proposal.modulo}? Ele não será enviado para aprovação.`)) return
     } else if (kind === 'apply' && !window.confirm(proposal.kind === 'classificacao' ? `Confirmar a classificação de ${proposal.itens?.length ?? 0} lançamento(s) em ${proposal.conta}?` : `Confirmar a alteração em ${proposal.modulo}?`)) return
     setBusy(true); setError('')
     try {
@@ -141,6 +143,8 @@ export function ExecutiveAiPage() {
 
   const promptGroups: Array<{ title: string; items: string[] }> = [
     { title: 'Resumo e situação financeira', items: ['Resumo completo de hoje', 'Resumo completo desta semana', 'Resumo completo deste mês', 'O que está pendente?', 'O que está pendente para mim?', 'Pendências da Tesouraria', 'Pendências do Jurídico', 'Faça um resumo geral do escritório', 'Qual a situação financeira de hoje?', 'Qual a situação financeira desta semana?', 'Qual a situação financeira deste mês?', 'O que está pendente de decisão hoje?'] },
+    { title: 'Vencimentos e previsão de caixa', items: ['O que vence nos próximos 7 dias?', 'Quais pagamentos estão atrasados?', 'O que vence hoje?', 'Previsão de caixa dos próximos 30 dias', 'Previsão de caixa dos próximos 60 dias', 'Quanto vamos receber nos próximos 15 dias?'] },
+    { title: 'Preparar lançamentos — cria RASCUNHO com sua confirmação', items: ['Crie um rascunho de despesa: fornecedor X, histórico Y, R$ 100,00, vence em 20/11', 'Crie um rascunho de despesa de conta de luz da Light de R$ 320,00 com vencimento em 25/11', 'Crie um rascunho de alvará: processo 0000000-00.0000.5.01.0000, reclamante X, valor R$ 10.000,00'] },
     { title: 'Gastos e resultado por conta (Plano de Contas / DRE)', items: ['Quanto gastamos com telefone em 2026?', 'Quanto gastamos com energia elétrica em 2026 e 2025?', 'Quais foram as maiores despesas por conta este ano?', 'Quanto gastamos por mês este ano?', 'Quanto gastamos em Despesas Administrativas este ano?', 'Qual o resultado da DRE este ano?', 'Quantos lançamentos estão sem classificação na DRE este ano?'] },
     { title: 'Receitas por tipo e período', items: ['Quanto recebemos de acordos e alvarás trabalhistas em 2026?', 'Quanto recebemos de alvarás trabalhistas em 2026?', 'Quanto recebemos de acordos trabalhistas em 2026?', 'Quanto recebemos por mês este ano?', 'Quanto recebemos de honorários este ano?', 'Quanto recebemos ano passado?'] },
     { title: 'Por dia e por semana', items: ['O que foi pago hoje?', 'O que foi lançado ontem?', 'O que foi recebido esta semana?', 'O que foi pago na semana passada?'] },
@@ -155,14 +159,17 @@ export function ExecutiveAiPage() {
   ]
   return <section className="page-card executive-ai">
     <header className="executive-ai-head"><Sparkles size={27} /><div><span className="eyebrow">Exclusivo do Master principal</span><h1>IA — Assistente Executivo</h1><p>Consulte os módulos e os lançamentos do Tesouraria FM Novo. Para alterar ou classificar lançamentos, peça expressamente (ex.: “classifique as despesas de luz de outubro como Energia Elétrica”) e confirme.</p></div></header>
-    <div className="executive-ai-security"><ShieldCheck size={17} /> Uso privado. Nenhuma alteração é gravada sem a sua confirmação; tudo vai para a Auditoria e pode ser desfeito. Os totais de despesas na DRE e de receitas por recebimento consideram todos os registros que atendem ao pedido. Exclusão de Despesas e Receitas só com pedido expresso, digitando EXCLUIR, com registro na Auditoria e opção de desfazer. Ela não altera usuários, permissões, CPF/CNPJ ou dados bancários.</div>
+    <div className="executive-ai-security"><ShieldCheck size={17} /> Uso privado. Nenhuma alteração é gravada sem a sua confirmação; tudo vai para a Auditoria e pode ser desfeito. Os totais de despesas na DRE e de receitas por recebimento consideram todos os registros que atendem ao pedido. Exclusão de Despesas e Receitas só com pedido expresso, digitando EXCLUIR, com registro na Auditoria e opção de desfazer. Também mostra vencimentos e previsão de caixa e prepara rascunhos de despesa ou de alvará (você confere e envia pela tela). Ela não altera usuários, permissões, CPF/CNPJ ou dados bancários.</div>
     <div className="executive-ai-messages" aria-live="polite">
       {messages.length === 0 && <div className="executive-ai-welcome"><Sparkles size={32} /><strong>O que deseja consultar ou ajustar?</strong><p>Pesquise informações, processos, valores, status, regras e pendências nos módulos do sistema.</p><div className="executive-ai-groups">{promptGroups.map(g => <div key={g.title} className="executive-ai-group"><span>{g.title}</span><div className="executive-ai-prompts">{g.items.map(p => <button key={p} type="button" disabled={busy} onClick={() => setQuestion(p)}>{p}</button>)}</div></div>)}</div></div>}
       {messages.map((msg, i) => <article key={i} className={`executive-ai-bubble ${msg.role}`}>
         <div className="executive-ai-bubble-head"><strong>{msg.role === 'assistant' ? 'IA' : 'Você'}</strong><button type="button" className="executive-ai-copy" title={copied === i ? 'Copiado!' : 'Copiar'} aria-label="Copiar texto" onClick={e => void copyBubble(i, e)}>{copied === i ? <Check size={15} /> : <Copy size={15} />}</button></div><div className="executive-ai-copy-src">{msg.role === 'assistant' ? <AiMarkdown text={msg.text} /> : <p>{msg.text}</p>}</div>
         {!!msg.response?.details?.length && <FinancialDetails rows={msg.response.details} />}
         {msg.response?.proposal && <div className={`executive-ai-proposal ${msg.proposalState}`}>
-          {msg.response.proposal.kind === 'exclusao' ? <>
+          {msg.response.proposal.kind === 'criacao' ? <>
+            <div className="executive-ai-proposal-head"><PencilLine size={16} /> Rascunho proposto · {msg.response.proposal.modulo}</div>
+            <table><tbody>{(msg.response.proposal.itens ?? []).filter(r => r.label !== 'Módulo').map(r => <tr key={r.label}><td>{r.label}</td><td><b>{r.value}</b></td></tr>)}</tbody></table>
+          </> : msg.response.proposal.kind === 'exclusao' ? <>
             <div className="executive-ai-proposal-head executive-ai-proposal-delete"><XCircle size={16} /> Exclusão proposta · {msg.response.proposal.modulo}</div>
             <table><tbody>{(msg.response.proposal.itens ?? []).filter(r => r.label !== 'Módulo').map(r => <tr key={r.label}><td>{r.label}</td><td><b>{r.value}</b></td></tr>)}</tbody></table>
             {!!msg.response.proposal.avisos?.length && <ul className="executive-ai-proposal-warnings">{msg.response.proposal.avisos.map(a => <li key={a}>⚠ {a}</li>)}</ul>}
@@ -174,7 +181,7 @@ export function ExecutiveAiPage() {
             <div className="executive-ai-proposal-head"><PencilLine size={16} /> Alteração proposta · {msg.response.proposal.modulo}</div>
             <table><thead><tr><th>Campo</th><th>Antes</th><th>Depois</th></tr></thead><tbody>{(msg.response.proposal.diff ?? []).map(d => <tr key={d.field}><td>{fieldLabel(d.field)}</td><td>{fmt(d.before)}</td><td><b>{fmt(d.after)}</b></td></tr>)}</tbody></table>
           </>}
-          {msg.proposalState === 'pendente' && <div className="executive-ai-proposal-actions"><button type="button" className="small-success-button" disabled={busy} onClick={() => void act(i, 'apply')}><CheckCircle2 size={15} /> {msg.response.proposal.kind === 'exclusao' ? 'Confirmar exclusão' : msg.response.proposal.kind === 'classificacao' ? 'Confirmar classificação' : 'Confirmar alteração'}</button><button type="button" className="small-neutral-button" disabled={busy} onClick={() => void act(i, 'cancel')}><XCircle size={15} /> Cancelar</button><small>Válida por 15 minutos.</small></div>}
+          {msg.proposalState === 'pendente' && <div className="executive-ai-proposal-actions"><button type="button" className="small-success-button" disabled={busy} onClick={() => void act(i, 'apply')}><CheckCircle2 size={15} /> {msg.response.proposal.kind === 'criacao' ? 'Criar rascunho' : msg.response.proposal.kind === 'exclusao' ? 'Confirmar exclusão' : msg.response.proposal.kind === 'classificacao' ? 'Confirmar classificação' : 'Confirmar alteração'}</button><button type="button" className="small-neutral-button" disabled={busy} onClick={() => void act(i, 'cancel')}><XCircle size={15} /> Cancelar</button><small>Válida por 15 minutos.</small></div>}
           {msg.proposalState === 'aplicada' && <div className="executive-ai-proposal-actions"><span className="status-badge success">Aplicada</span><button type="button" className="small-neutral-button" disabled={busy} onClick={() => void act(i, 'undo')}><Undo2 size={15} /> Desfazer</button></div>}
           {(msg.proposalState === 'cancelada' || msg.proposalState === 'desfeita') && <div className="executive-ai-proposal-actions"><span className="status-badge neutral">{msg.proposalState === 'cancelada' ? 'Cancelada' : 'Desfeita'}</span></div>}
           {msg.note && <small className="executive-ai-note">{msg.note}</small>}
