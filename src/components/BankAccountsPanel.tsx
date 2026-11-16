@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { collection, doc, serverTimestamp, writeBatch } from 'firebase/firestore'
+import { collection, doc, getDocs, limit, query, serverTimestamp, where, writeBatch } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { PRIMARY_ADMIN_EMAIL, useAuth } from '../auth/AuthContext'
-import { useBankAccounts, type BankAccount } from '../data/bankAccounts'
+import { DEFAULT_BANK_ACCOUNT_ID, useBankAccounts, type BankAccount } from '../data/bankAccounts'
 import { UnsavedBadge } from './UnsavedBadge'
 
 type Row = BankAccount & { isNew?: boolean }
@@ -20,7 +20,31 @@ export function BankAccountsPanel() {
 
   const update = (index: number, patch: Partial<Row>) => { setDirty(true); setRows((list) => list.map((row, i) => i === index ? { ...row, ...patch } : row)) }
   const add = () => { setDirty(true); setRows((list) => [...list, { id: 'conta-' + Date.now().toString(36), bank: '', agency: '', account: '', holder: '', holderType: 'PJ', active: true, isNew: true }]) }
-  const remove = (index: number) => { setDirty(true); setRows((list) => list.filter((_, i) => i !== index)) }
+  const LEGACY_IDS: Record<string, string> = { itau: 'itau-pj', bb: 'bb-pf', cef: 'cef-pf' }
+  /** Opção 1+2: conta sem lançamentos é removida; conta já usada fica bloqueada (desmarque Ativa). */
+  const remove = async (index: number) => {
+    const row = rows[index]
+    if (!row) return
+    if (row.isNew) { setDirty(true); setRows((list) => list.filter((_, i) => i !== index)); return }
+    if (row.id === DEFAULT_BANK_ACCOUNT_ID) { setMessage('A conta padrão do escritório não pode ser removida. Para tirá-la dos menus, desmarque Ativa.'); return }
+    setBusy(true); setMessage('Verificando se a conta tem lançamentos…')
+    try {
+      const ids = [row.id, LEGACY_IDS[row.id]].filter(Boolean)
+      const [expenses, receivables] = await Promise.all([
+        getDocs(query(collection(db, 'expenses'), where('paymentBankAccountId', 'in', ids), limit(1))),
+        getDocs(query(collection(db, 'receivables'), where('receivingBankAccountId', 'in', ids), limit(1))),
+      ])
+      if (!expenses.empty || !receivables.empty) {
+        setMessage(`${row.bank} · C/C ${row.account} já tem lançamentos e não pode ser removida. Desmarque Ativa para tirá-la dos menus.`)
+        return
+      }
+      if (!window.confirm(`Remover ${row.bank} · C/C ${row.account}? Ela não tem lançamentos. A remoção vale ao clicar em Salvar.`)) { setMessage(''); return }
+      setDirty(true); setRows((list) => list.filter((_, i) => i !== index))
+      setMessage('Conta removida da lista. Clique em Salvar bancos e contas para confirmar.')
+    } catch (error) {
+      setMessage('Não foi possível verificar os lançamentos: ' + String(error))
+    } finally { setBusy(false) }
+  }
   const cancel = () => { setRows(saved); setDirty(false); setMessage('Alterações descartadas.') }
 
   const save = async () => {
@@ -52,7 +76,7 @@ export function BankAccountsPanel() {
   return <section className="page-card">
     <span className="eyebrow">Dados bancários</span>
     <h2>Bancos e Contas</h2>
-    <p>As contas ativas aparecem nos menus de conta de pagamento (Despesas) e de recebimento (Receitas). Conta inativa sai dos menus, mas continua nos lançamentos antigos.</p>
+    <p>As contas ativas aparecem nos menus de conta de pagamento (Despesas) e de recebimento (Receitas). Conta inativa sai dos menus, mas continua nos lançamentos antigos. Remover só é permitido para conta sem lançamentos.</p>
     <div style={{ overflowX: 'auto', marginTop: 12 }}>
       <table className="cash-flow-table" style={{ minWidth: 760 }}>
         <thead><tr><th>Banco</th><th>Agência</th><th>Conta</th><th>Titular</th><th>Tipo</th><th>Ativa</th><th></th></tr></thead>
@@ -63,7 +87,7 @@ export function BankAccountsPanel() {
           <td><input aria-label="Titular" value={row.holder} placeholder={row.holderType === 'PJ' ? 'Razão Social do escritório' : ''} disabled={disabled} onChange={(e) => update(index, { holder: e.target.value })} /></td>
           <td><select aria-label="Tipo" value={row.holderType} disabled={disabled} onChange={(e) => update(index, { holderType: e.target.value as BankAccount['holderType'] })}><option value="PJ">PJ</option><option value="PF / Sócio">PF / Sócio</option></select></td>
           <td style={{ textAlign: 'center' }}><input aria-label="Ativa" type="checkbox" checked={row.active !== false} disabled={disabled} onChange={(e) => update(index, { active: e.target.checked })} /></td>
-          <td>{row.isNew && !disabled && <button type="button" className="secondary-button" onClick={() => remove(index)}>Remover</button>}</td>
+          <td>{!disabled && <button type="button" className="secondary-button" onClick={() => void remove(index)}>Remover</button>}</td>
         </tr>)}</tbody>
       </table>
     </div>
