@@ -5,6 +5,8 @@ import { getFirestore, FieldValue, FieldPath } from 'firebase-admin/firestore';
 import { isMasterClaim, isAppQuestion, safeRecord, selectedCollections, SCOPES, APPROVAL_SOURCES, APPROVAL_DECIDED, buildApprovalQueue, approvalTotals, dateSP, isChangeRequest, isDeleteRequest, validateProposal, buildDiff, sameValues, redactSensitive, WRITABLE_COLLECTIONS } from './ai-core.js';
 import { SYSTEM_KNOWLEDGE } from './knowledge.js';
 import { proposeDelete, applyDelete, undoDelete } from './delete-actions.js';
+import { isCreateRequest, proposeCreate, applyCreate, undoCreate } from './create-actions.js';
+import { isDueQuestion, isForecastQuestion, buildDueAnswer, buildForecastAnswer } from './planning.js';
 import { modelAccountSelection } from './account-query.js';
 import { financialRequest, readAll } from './financial-query.js';
 import { changeClassification, proposeClassification, readActiveChart, runFinancial } from './financial-actions.js';
@@ -58,6 +60,15 @@ export const executiveAiAsk=onCall({
   if(!intent && !isAppQuestion(question)) throw invalidQuestion();
   const deleting=isDeleteRequest(question);
   if(deleting && !isMasterClaim(token,userSnap.data())) throw new HttpsError('permission-denied','Excluir lançamentos pela IA é exclusivo do Administrador Master principal.');
+  const creating=!deleting && isCreateRequest(question);
+  if(creating) {
+    if(!isMasterClaim(token,userSnap.data())) throw new HttpsError('permission-denied','Preparar lançamentos pela IA é exclusivo do Administrador Master principal.');
+    const key=geminiKey.value();
+    if(!key) throw new HttpsError('failed-precondition','O provedor de IA ainda não está configurado.');
+    return proposeCreate(db,{key,model:MODEL,question,uid:request.auth.uid,chart,todayBR,today:dateSP(new Date().toISOString()),ttlMs:PROPOSAL_TTL_MS});
+  }
+  if(!deleting && intent?.kind!=='classification' && isForecastQuestion(question)) return buildForecastAnswer(db,question);
+  if(!deleting && intent?.kind!=='classification' && isDueQuestion(question) && !isPanoramaQuestion(question)) return buildDueAnswer(db,question);
   if(!deleting && intent?.kind!=='classification' && isPendingQuestion(question) && !isPanoramaQuestion(question)) {
     return buildPendingAnswer(db,question,{uid:request.auth.uid});
   }
@@ -338,6 +349,7 @@ if(p.status!=='pendente') throw new HttpsError('failed-precondition',`Proposta j
 if(Date.now()>p.expiresAtMs) {tx.update(pRef,{status:'expirada'});throw new HttpsError('deadline-exceeded','Proposta expirada (15 min). Peça novamente.');}
 if(p.kind==='classificacao') {await changeClassification(db,tx,pSnap,p,profile,'apply');return null;}
 if(p.kind==='exclusao') return {deleted:await applyDelete(db,tx,pRef,p,request.data?.confirmText),docId:p.docId,collection:p.collection};
+if(p.kind==='criacao') {const c=applyCreate(db,tx,pRef,p,profile,request.auth.uid);return {created:c.detail,docId:c.id,collection:p.collection};}
 if(!WRITABLE_COLLECTIONS.includes(p.collection)) throw new HttpsError('permission-denied','Coleção não permitida.');
 const ref=db.collection(p.collection).doc(p.docId);const cur=await tx.get(ref);
 if(!cur.exists) throw new HttpsError('not-found','Lançamento não existe mais.');
@@ -347,6 +359,7 @@ tx.update(pRef,{status:'aplicada',appliedAt:FieldValue.serverTimestamp()});
 return p;
 });
 if(!result) return {ok:true,message:'Classificação gravada e registrada na Auditoria.'};
+if(result.created){await audit(profile,request.auth.uid,'IA Executiva: rascunho criado',result.created,result.docId,titleOf(result.collection));return {ok:true,message:`Rascunho criado em ${titleOf(result.collection)} e registrado na Auditoria. Abra o módulo para conferir, anexar documentos e enviar.`};}
 if(result.deleted){await audit(profile,request.auth.uid,'IA Executiva: lançamento excluído',result.deleted,result.docId,titleOf(result.collection));return {ok:true,message:'Lançamento excluído e registrado na Auditoria. Use Desfazer se precisar restaurar.'};}
 const detail=`${titleOf(result.collection)} ${result.docId}: ${Object.entries(result.changes).map(([k,v])=>`${k}: ${JSON.stringify(result.before[k]??null)} → ${JSON.stringify(v)}`).join('; ')} · Pedido: ${result.question}`;
 await audit(profile,request.auth.uid,'IA Executiva: alteração aplicada',detail,result.docId,titleOf(result.collection));
@@ -362,6 +375,7 @@ if(!p||p.uid!==request.auth.uid) throw new HttpsError('not-found','Alteração n
 if(p.status!=='aplicada') throw new HttpsError('failed-precondition','Só é possível desfazer alterações aplicadas.');
 if(p.kind==='classificacao') {await changeClassification(db,tx,pSnap,p,profile,'undo');return null;}
 if(p.kind==='exclusao') return {restored:await undoDelete(db,tx,pRef,p),docId:p.docId,collection:p.collection};
+if(p.kind==='criacao') {const c=await undoCreate(db,tx,pRef,p);return {removed:c.detail,docId:c.id,collection:p.collection};}
 const ref=db.collection(p.collection).doc(p.docId);const cur=await tx.get(ref);
 if(!cur.exists||!sameValues(cur.data(),p.changes)) throw new HttpsError('aborted','O lançamento mudou depois da alteração da IA. Desfaça manualmente no módulo.');
 const restore={...p.before};for(const f of p.missing||[]) restore[f]=FieldValue.delete();
@@ -370,6 +384,7 @@ tx.update(pRef,{status:'desfeita',undoneAt:FieldValue.serverTimestamp()});
 return p;
 });
 if(!result) return {ok:true,message:'Classificação desfeita e registrada na Auditoria.'};
+if(result.removed){await audit(profile,request.auth.uid,'IA Executiva: rascunho removido (desfazer)',result.removed,result.docId,titleOf(result.collection));return {ok:true,message:'Rascunho removido e registrado na Auditoria.'};}
 if(result.restored){await audit(profile,request.auth.uid,'IA Executiva: exclusão desfeita',result.restored,result.docId,titleOf(result.collection));return {ok:true,message:'Lançamento restaurado e registrado na Auditoria.'};}
 await audit(profile,request.auth.uid,'IA Executiva: alteração desfeita',`${titleOf(result.collection)} ${result.docId}: valores anteriores restaurados (${Object.keys(result.changes).join(', ')})`,result.docId,titleOf(result.collection));
 return {ok:true,message:'Alteração desfeita e registrada na Auditoria.'};
