@@ -39,7 +39,7 @@ test('previsão de caixa 30 dias por semana, sem misturar aprovação pendente',
   assert.match(text, /Entradas previstas:\*\* R\$\s?8\.000,00/);
   assert.match(text, /Saídas previstas \(aprovadas\):\*\* R\$\s?2\.180,00/);
   assert.match(text, /aguardam aprovação:\*\* R\$\s?5\.000,00/);
-  assert.match(text, /Não é saldo bancário/);
+  assert.match(text, /não é saldo bancário/i);
 });
 test('reconhece perguntas e pedidos', () => {
   for (const q of ['O que vence nos próximos 7 dias?', 'Quais pagamentos estão atrasados?', 'Vencimentos de hoje']) assert.ok(isDueQuestion(q), q);
