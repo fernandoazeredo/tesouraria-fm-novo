@@ -109,7 +109,7 @@ export function renderDue(report, { today, days }) {
   const parts = [`## Vencimentos — referência ${br(today)}`, block('Atrasados', late), block('Vencem hoje', now)];
   if (days > 0) parts.push(block(`Próximos ${days} dias (até ${br(end)})`, next));
   if (undated.length) parts.push(`### Sem data prevista\n- ${undated.length} item(ns) previstos sem data (${brl(sum(undated))}). Informe a data no lançamento para entrarem nos alertas.`);
-  parts.push('_Considera despesas aprovadas ou aguardando aprovação, parcelas de repasses e comissões aprovadas, repasses societários aprovados e receitas aguardando a Tesouraria._');
+  parts.push('Considera despesas aprovadas ou aguardando aprovação, parcelas de repasses e comissões aprovadas, repasses societários aprovados e receitas aguardando a Tesouraria.');
   return parts.join('\n\n');
 }
 
@@ -148,7 +148,7 @@ export function renderForecast(report, { today, days }) {
   if (late.length) lines.push('', `### Atenção — atrasados (fora da previsão)\n- ${late.length} item(ns) com data já vencida: saídas ${brl(sum(late.filter(m => m.direction === 'saida')))} · entradas ${brl(sum(late.filter(m => m.direction === 'entrada')))}. Pergunte "Quais pagamentos estão atrasados?" para ver a lista.`);
   if (undated.length) lines.push('', `### Sem data prevista\n- ${undated.length} item(ns) (${brl(sum(undated))}) não entram na previsão por falta de data.`);
   if (window.length) lines.push('', '### Itens do período', ...window.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 40).map(m => line(m, today)));
-  lines.push('', '_Não é saldo bancário: o app não guarda saldo de conta. Mostra só o que está previsto nos lançamentos. Veja também o [Fluxo de Caixa](/fluxo-caixa)._');
+  lines.push('', '**Atenção:** não é saldo bancário — o app não guarda saldo de conta. Mostra só o que está previsto nos lançamentos. Veja também o [Fluxo de Caixa](/fluxo-caixa).');
   return lines.filter(l => l !== '').join('\n').replace(/\n(#)/g, '\n\n$1');
 }
 

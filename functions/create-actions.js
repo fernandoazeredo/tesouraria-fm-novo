@@ -105,6 +105,7 @@ export async function proposeCreate(db, { key, model, question, uid, chart, toda
     'tipo: despesa (pagamento do escritório), alvara (recebimento de alvará judicial), acordo (acordo trabalhista) ou outra (outras receitas).',
     'Use somente o que está no pedido. Não invente fornecedor, processo, valores ou datas. Campos ausentes ficam vazios.',
     'valor em número com ponto decimal (ex.: 1500.5). Datas no formato AAAA-MM-DD; competência AAAA-MM. Ano não informado = ano atual.',
+    'Alvará: processo = número do processo; reclamante = cliente do escritório; reclamada = empresa/parte contrária (preencha sempre que o pedido citar).',
     'vencimento = data prevista de pagamento (despesa) ou de recebimento (alvará). dataItem = data do histórico da despesa, se informada.',
     'contaCodigo: escolha a conta de despesa mais adequada DA LISTA abaixo somente se o pedido deixar claro (ex.: luz → Energia Elétrica); senão deixe vazio.',
     'answer: uma frase curta em português dizendo o que será criado, sem códigos técnicos.',
