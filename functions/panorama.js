@@ -5,6 +5,7 @@ import { normalizeText, APPROVAL_SOURCES, APPROVAL_DECIDED, buildApprovalQueue, 
 import { periodOf, readAll } from './financial-query.js';
 import { totalOf } from './financial-math.js';
 import { buildPendencias, filterFor, renderPendencias } from './pendencias.js';
+import { loadPlanned, dueAlerts } from './planning.js';
 
 const PANORAMA = /\b(?:resumo (?:completo|geral|do dia|da semana|do mes|de hoje|dos movimentos|financeiro)|panorama|visao (?:geral|completa)|como (?:esta|estamos|ficou|ficamos)(?: o escritorio| o financeiro)?(?: hoje| nesta data| esta semana| este mes)?|tudo de uma (?:unica )?vez|movimentos (?:de hoje|do dia|desta data|nesta data))\b/;
 
@@ -114,6 +115,7 @@ export async function buildPanorama(db, question, { resolveFinancial, runFinanci
   if (unclassified && Number(unclassified[1]) > 0) alertas.push(`${unclassified[1]} despesa(s) aprovada(s) sem classificação na DRE (${unclassified[2]}) — [classificar](/dre-gerencial)`);
   if (approvals.pendentes_quantidade) alertas.push(`${approvals.pendentes_quantidade} item(ns) aguardando aprovação (${brl(approvals.pendentes_valor)}) — [ver fila](/aprovacoes)`);
   if (tesouraria.quantidade) alertas.push(`${tesouraria.quantidade} receita(s) aguardando confirmação da Tesouraria (${brl(tesouraria.valor)}) — [confirmar](/tesouraria)`);
+  try { alertas.push(...dueAlerts(await loadPlanned(db), today)); } catch (error) { console.warn('Vencimentos indisponíveis', error?.name); }
   const entradas = { total: totalOf(revenue) };
   const saidas = { total: totalOf(expenses) };
   const { answer } = renderPanorama({ label, entradas, saidas, approvals, tesouraria, alertas });

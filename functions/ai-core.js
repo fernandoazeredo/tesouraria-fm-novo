@@ -50,7 +50,7 @@ export function isAppQuestion(q) {
   const n=normalizeText(q);
   if (n.length<5 || n.length>500) return false;
   const outside=/\b(clima|temperatura|futebol|receita culinaria|politica partidaria|horoscopo|poema|traduza ingles|cotacao bitcoin)\b/i;
-  return !outside.test(n) && (inScope(q).length>0 || isChangeRequest(q) || isDeleteRequest(q) || /tesouraria|aplicativo|sistema|modulo|regra|financeiro|caixa|calendario|lancamento|resumo|situacao financeira|panorama|visao geral|pendencia/.test(n));
+  return !outside.test(n) && (inScope(q).length>0 || isChangeRequest(q) || isDeleteRequest(q) || /tesouraria|aplicativo|sistema|modulo|regra|financeiro|caixa|calendario|lancamento|resumo|situacao financeira|panorama|visao geral|pendencia|vence|vencimento|atrasad|previsao|rascunho|alvara|despesa|receita/.test(n));
 }
 export function redactSensitive(value) {
   return String(value).replace(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g,'[CPF oculto]')
