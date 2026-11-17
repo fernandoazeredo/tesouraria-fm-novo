@@ -37,6 +37,7 @@ import './other-revenue.css'
 import './brand-mm.css'
 import './agreement-installments-actions.css'
 import './login-footer-kill.css'
+import './mobile-fixes.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

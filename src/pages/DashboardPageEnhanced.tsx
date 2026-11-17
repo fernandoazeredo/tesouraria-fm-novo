@@ -26,7 +26,7 @@ function toNumber(value: unknown) {
 }
 
 function readPeriod(): Period {
-  try { const v = localStorage.getItem('dashboard-period'); if (v === 'mes' || v === 'trimestre' || v === 'ano' || v === 'tudo') return v } catch { /* sem armazenamento */ }
+  try { const v = localStorage.getItem('dashboard-period'); if (v === 'mes' || v === 'trimestre' || v === 'semestre' || v === 'ano' || v === 'tudo') return v } catch { /* sem armazenamento */ }
   return 'ano'
 }
 
@@ -73,7 +73,7 @@ export function DashboardPageEnhanced() {
     <div className="dash-period" role="group" aria-label="Período">
       <span>Período:</span>
       {(Object.keys(PERIOD_LABELS) as Period[]).map((key) => <button key={key} type="button" className={period === key ? 'active' : ''} aria-pressed={period === key} onClick={() => setPeriod(key)}>{PERIOD_LABELS[key]}</button>)}
-      <small>Receitas, Despesas, Saldo, gráfico e contas: {periodHint}. Vencimentos, previsão e repasses: sempre a partir de hoje.</small>
+      <small>O período ({periodHint}) vale para Receitas, Despesas, Saldo, o gráfico e as contas. “A pagar 7 dias”, “Previsão 30 dias” e “Repasses pendentes” não mudam com o período: mostram o que vence de hoje em diante.</small>
     </div>
 
     <div className="metrics-grid">

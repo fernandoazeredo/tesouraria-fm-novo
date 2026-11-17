@@ -6,11 +6,14 @@ const today = new Date(2026, 10, 17) // 17/11/2026
 test('períodos', () => {
   assert.deepEqual(periodRange('mes', today), { start: '2026-11-01', end: '2026-11-30' })
   assert.deepEqual(periodRange('trimestre', today), { start: '2026-10-01', end: '2026-12-31' })
+  assert.deepEqual(periodRange('semestre', today), { start: '2026-07-01', end: '2026-12-31' })
+  assert.deepEqual(periodRange('semestre', new Date(2026, 2, 5)), { start: '2026-01-01', end: '2026-06-30' })
   assert.deepEqual(periodRange('ano', today), { start: '2026-01-01', end: '2026-12-31' })
   assert.equal(inRange('2020-01-01', periodRange('tudo', today)), true)
 })
 test('meses do gráfico', () => {
   assert.deepEqual(chartMonths('mes', today), ['2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11'])
+  assert.deepEqual(chartMonths('semestre', today), ['2026-07', '2026-08', '2026-09', '2026-10', '2026-11', '2026-12'])
   assert.equal(chartMonths('ano', today).length, 12)
   assert.equal(chartMonths('tudo', today)[0], '2025-12')
 })
