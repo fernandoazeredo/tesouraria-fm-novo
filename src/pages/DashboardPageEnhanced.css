@@ -10,9 +10,9 @@
 .dash-cards-3 .metric em { display: block; font-style: normal; font-size: 12px; margin-top: 6px; color: var(--muted, #5b6b7f); }
 .dash-cards-3 .metric em.dash-late { color: var(--expense, #c62828); font-weight: 800; }
 .dash-cards-3 .metric em.dash-ok { color: #1f7a4d; }
-.dash-due { border-left: 4px solid #e08a00; }
-.dash-forecast { border-left: 4px solid #1f7a4d; }
-.dash-transfers { border-left: 4px solid #6b4fbb; }
+.dash-cards-3 .metric.dash-due::before { background: #e08a00; }
+.dash-cards-3 .metric.dash-forecast::before { background: #1f7a4d; }
+.dash-cards-3 .metric.dash-transfers::before { background: #6b4fbb; }
 .dash-forecast .in { color: var(--revenue, #1677c8); font-weight: 700; }
 .dash-forecast .out { color: var(--expense, #c62828); font-weight: 700; }
 .dash-forecast strong.negative-text { color: var(--expense, #c62828); }
