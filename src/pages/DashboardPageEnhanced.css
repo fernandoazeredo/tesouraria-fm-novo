@@ -1,0 +1,37 @@
+/* Dashboard Financeira — filtro de período, cards de previsão e gráficos */
+.dash-period { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; }
+.dash-period > span { font-weight: 700; color: var(--muted, #5b6b7f); font-size: 13px; }
+.dash-period button { border: 1px solid var(--line, #d7dee8); background: var(--surface, #fff); color: inherit; border-radius: 999px; padding: 6px 14px; font-weight: 700; font-size: 13px; cursor: pointer; }
+.dash-period button.active { background: #17324d; border-color: #17324d; color: #fff; }
+.dash-period small { color: var(--muted, #5b6b7f); font-size: 12px; flex-basis: 100%; }
+@media (min-width: 900px) { .dash-period small { flex-basis: auto; margin-left: 6px; } }
+
+.dash-cards-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+.dash-cards-3 .metric em { display: block; font-style: normal; font-size: 12px; margin-top: 6px; color: var(--muted, #5b6b7f); }
+.dash-cards-3 .metric em.dash-late { color: var(--expense, #c62828); font-weight: 800; }
+.dash-cards-3 .metric em.dash-ok { color: #1f7a4d; }
+.dash-cards-3 .metric.dash-due::before { background: #e08a00; }
+.dash-cards-3 .metric.dash-forecast::before { background: #1f7a4d; }
+.dash-cards-3 .metric.dash-transfers::before { background: #6b4fbb; }
+.dash-forecast .in { color: var(--revenue, #1677c8); font-weight: 700; }
+.dash-forecast .out { color: var(--expense, #c62828); font-weight: 700; }
+.dash-forecast strong.negative-text { color: var(--expense, #c62828); }
+.dash-transfer-list { display: grid; gap: 2px; }
+
+.dash-chart { display: flex; align-items: flex-end; gap: 6px; height: 190px; padding-top: 10px; border-bottom: 1px solid var(--line, #d7dee8); }
+.dash-chart-col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; flex-direction: column; align-items: center; }
+.dash-chart-bars { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 3px; }
+.dash-chart-bars b { display: block; width: min(16px, 40%); border-radius: 4px 4px 0 0; }
+.dash-chart-col > span { font-size: 11px; color: var(--muted, #5b6b7f); padding: 6px 0 4px; white-space: nowrap; }
+.dash-chart-scale { margin: 8px 0 0; font-size: 12px; color: var(--muted, #5b6b7f); }
+
+.dash-second-row { margin-top: 18px; }
+.dash-accounts { display: grid; gap: 12px; margin-top: 8px; }
+.dash-account-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: baseline; font-size: 14px; }
+.dash-account-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-account-row > b { grid-column: 1 / -1; height: 8px; border-radius: 6px; display: block; }
+.dash-empty { color: var(--muted, #5b6b7f); margin: 10px 0 0; }
+
+@media (max-width: 900px) { .dash-cards-3 { grid-template-columns: 1fr; } }
+html[data-theme='dark'] .dash-period button { background: transparent; }
+html[data-theme='dark'] .dash-period button.active { background: #e8eef6; color: #10202f; border-color: #e8eef6; }
