@@ -1,8 +1,8 @@
 /** Cálculos puros da Dashboard Financeira (sem Firebase). */
 import type { Movement, RecordRow } from './cashFlowMovements'
 
-export type Period = 'mes' | 'trimestre' | 'ano' | 'tudo'
-export const PERIOD_LABELS: Record<Period, string> = { mes: 'Mês', trimestre: 'Trimestre', ano: 'Ano', tudo: 'Tudo' }
+export type Period = 'mes' | 'trimestre' | 'semestre' | 'ano' | 'tudo'
+export const PERIOD_LABELS: Record<Period, string> = { mes: 'Mês', trimestre: 'Trimestre', semestre: 'Semestre', ano: 'Ano', tudo: 'Tudo' }
 
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 const dateOf = (raw: unknown) => { const v = typeof raw === 'string' ? raw.slice(0, 10) : ''; return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '' }
@@ -21,6 +21,7 @@ export function periodRange(period: Period, today = new Date()): { start: string
   const y = today.getFullYear(), m = today.getMonth()
   if (period === 'mes') return { start: iso(new Date(y, m, 1)), end: iso(new Date(y, m + 1, 0)) }
   if (period === 'trimestre') { const q = Math.floor(m / 3) * 3; return { start: iso(new Date(y, q, 1)), end: iso(new Date(y, q + 3, 0)) } }
+  if (period === 'semestre') { const h = m < 6 ? 0 : 6; return { start: iso(new Date(y, h, 1)), end: iso(new Date(y, h + 6, 0)) } }
   if (period === 'ano') return { start: `${y}-01-01`, end: `${y}-12-31` }
   return { start: '0000-01-01', end: '9999-12-31' }
 }
@@ -31,10 +32,11 @@ export const revenueDate = (item: RecordRow) => dateOf(item.receiptDate) || date
 /** Data da despesa efetiva: pagamento; sem pagamento, a competência. */
 export const expenseDate = (item: RecordRow) => dateOf(item.paymentDate) || monthOf(item.competencia) || tsDate(item.createdAt)
 
-/** Meses exibidos no gráfico: 6 (mês/trimestre) ou 12 (ano/tudo), terminando no mês atual — no "Ano", de janeiro a dezembro. */
+/** Meses do gráfico: últimos 6 (mês/trimestre), os 6 do semestre, jan–dez (ano) ou últimos 12 (tudo). */
 export function chartMonths(period: Period, today = new Date()) {
   const y = today.getFullYear(), m = today.getMonth()
   const list: string[] = []
+  if (period === 'semestre') { const h = m < 6 ? 0 : 6; for (let i = h; i < h + 6; i++) list.push(`${y}-${String(i + 1).padStart(2, '0')}`); return list }
   if (period === 'ano') { for (let i = 0; i < 12; i++) list.push(`${y}-${String(i + 1).padStart(2, '0')}`); return list }
   const count = period === 'tudo' ? 12 : 6
   for (let i = count - 1; i >= 0; i--) { const d = new Date(y, m - i, 1); list.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`) }
