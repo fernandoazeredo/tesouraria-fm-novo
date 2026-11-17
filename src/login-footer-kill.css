@@ -38,6 +38,8 @@
 @media (min-width: 900px) {
   .page-heading:has(> .quick-actions .expense-button) > div:first-child { flex: 1 1 auto; min-width: 0; }
   .page-heading:has(> .quick-actions .expense-button) h1 { white-space: nowrap; }
+  /* botões encostados à direita, alinhados com os cards (ocupam o espaço reservado ao Modo escuro, que fica acima) */
+  .page-heading > .quick-actions:has(.expense-button):has(.revenue-button) { margin-right: -150px; }
 }
 @media (max-width: 899px) {
   .page-heading > .quick-actions:has(.expense-button):has(.revenue-button) { top: 0; }
