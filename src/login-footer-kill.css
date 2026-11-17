@@ -15,3 +15,30 @@
   overflow: hidden !important;
   pointer-events: none !important;
 }
+
+/* Dashboard: + Despesa e + Receita lado a lado, mesmo tamanho */
+.page-heading > .quick-actions:has(.expense-button):has(.revenue-button) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  flex-wrap: nowrap;
+  gap: 10px;
+  align-items: stretch;
+  align-self: flex-end;
+  flex: 0 0 auto;
+  position: relative;
+  top: 10px;
+}
+.page-heading > .quick-actions:has(.expense-button):has(.revenue-button) > .button-link {
+  width: 100%;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+/* Dashboard: título em uma linha; botões na linha do texto descritivo */
+@media (min-width: 900px) {
+  .page-heading:has(> .quick-actions .expense-button) > div:first-child { flex: 1 1 auto; min-width: 0; }
+  .page-heading:has(> .quick-actions .expense-button) h1 { white-space: nowrap; }
+}
+@media (max-width: 899px) {
+  .page-heading > .quick-actions:has(.expense-button):has(.revenue-button) { top: 0; }
+}
