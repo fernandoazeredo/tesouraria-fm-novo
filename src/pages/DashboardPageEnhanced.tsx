@@ -26,7 +26,7 @@ function toNumber(value: unknown) {
 }
 
 function readPeriod(): Period {
-  try { const v = localStorage.getItem('dashboard-period'); if (v === 'mes' || v === 'trimestre' || v === 'ano' || v === 'tudo') return v } catch { /* sem armazenamento */ }
+  try { const v = localStorage.getItem('dashboard-period'); if (v === 'mes' || v === 'trimestre' || v === 'semestre' || v === 'ano' || v === 'tudo') return v } catch { /* sem armazenamento */ }
   return 'ano'
 }
 
