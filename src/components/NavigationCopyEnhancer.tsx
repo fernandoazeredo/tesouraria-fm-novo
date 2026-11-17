@@ -44,11 +44,11 @@ export function NavigationCopyEnhancer() {
       scheduled = true
       window.requestAnimationFrame(() => {
         scheduled = false
-        applyNavigationCopy(location.pathname)
+        applyNavigationCopy(window.location.pathname)
       })
     }
 
-    applyNavigationCopy(location.pathname)
+    applyNavigationCopy(window.location.pathname)
     const observer = new MutationObserver(apply)
     observer.observe(document.body, { childList: true, subtree: true })
 
