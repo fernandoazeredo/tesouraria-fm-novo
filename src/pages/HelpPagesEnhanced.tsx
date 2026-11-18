@@ -71,6 +71,8 @@ export function TipsPageEnhanced() {
       <h2>O que fazer em cada situação</h2>
       <div className="help-situation-list">
         <div><AlertTriangle /><span><strong>Despesa devolvida:</strong> Despesas → Corrigir e reenviar → ajuste o solicitado → Reenviar para Aprovação.</span></div>
+        <div><AlertTriangle /><span><strong>Comissão ou Repasse de Alvarás devolvido:</strong> abra o menu → Abrir controle → leia o Motivo no topo → Anexar documentos → Reenviar para aprovação.</span></div>
+        <div><AlertTriangle /><span><strong>Receita devolvida pela Tesouraria:</strong> Receitas → Corrigir e reenviar → o motivo aparece no topo → ajuste ou anexe → Reenviar à Tesouraria.</span></div>
         <div><WalletCards /><span><strong>Despesa aprovada:</strong> abra Despesas → painel Baixa Financeira → informe a data → Marcar como Pago. Depois da baixa, use Arquivar para concluir o fluxo.</span></div>
         <div><BarChart3 /><span><strong>Lançamento ainda não aparece na DRE:</strong> abra DRE Gerencial → Classificação de Lançamentos, confirme a conta sugerida e confira competência, unidade, status financeiro e se a conta está habilitada para aparecer na DRE.</span></div>
         <div><BadgeCheck /><span><strong>Alvará recebido:</strong> confirme o crédito em Tesouraria / Receitas. Depois da confirmação, Repasse, Nota Fiscal e Comissão são alimentados conforme os dados do demonstrativo.</span></div>

@@ -538,11 +538,16 @@ export function TreasuryPage() {
 
   async function changeStatus(item: AnyRecord, status: string) {
     const treasuryByName = profile?.displayName ?? profile?.email ?? null
-    await updateDoc(doc(db, 'receivables', item.id), { status, updatedAt: serverTimestamp(), treasuryBy: profile?.uid, treasuryByName, treasuryAt: serverTimestamp() })
+    let returnNote: string | null = null
+    if (status === 'devolvido') {
+      returnNote = (window.prompt('Informe o motivo da devolução (o que precisa ser corrigido ou anexado):') || '').trim()
+      if (!returnNote) { window.alert('A devolução precisa de um motivo para quem lançou a receita saber o que corrigir.'); return }
+    }
+    await updateDoc(doc(db, 'receivables', item.id), { status, updatedAt: serverTimestamp(), treasuryBy: profile?.uid, treasuryByName, treasuryAt: serverTimestamp(), ...(status === 'devolvido' ? { treasuryReturnNote: returnNote, treasuryReturnedByName: treasuryByName } : {}) })
     if (status === 'recebido_tesouraria') {
       await ensureOfficialDemonstrative('revenue', { ...item, status, treasuryBy: profile?.uid, treasuryByName }, { generatedBy: profile?.uid ?? null })
     }
-    await writeAudit(profile, `Recebimento atualizado: ${receivableStatusLabels[status] ?? status}`, 'Tesouraria — Recebimentos', `Processo ${item.processo ?? item.id}`, item.id)
+    await writeAudit(profile, `Recebimento atualizado: ${receivableStatusLabels[status] ?? status}`, 'Tesouraria — Recebimentos', `Processo ${item.processo ?? item.id}${returnNote ? ` · Motivo: ${returnNote}` : ''}`, item.id)
   }
 
   return (
