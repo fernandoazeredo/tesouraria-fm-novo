@@ -1,4 +1,3 @@
-import { getCurrentInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
 import { CheckCircle2, FileText, Plus, RefreshCw, Search, Send, Trash2, Users, X } from 'lucide-react'
@@ -7,6 +6,7 @@ import { ensureOfficialDemonstrative } from '../lib/officialDemonstrative'
 import { isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
 import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 import { DecisionReason, PaymentAttachments, readAttachments, type PaymentAttachment } from '../components/PaymentAttachments'
+import { COMMISSION_REPORT_TITLE, buildCommissionReport } from '../lib/commissionReport'
 import '../agent-commissions-v4.css'
 
 type AnyRecord = { id: string } & DocumentData
@@ -154,33 +154,32 @@ function openPdfPrint(body: string) {
   const reportWindow = window.open('', '_blank', 'width=1120,height=820')
   if (!reportWindow) { window.alert('O navegador bloqueou a janela do relatório. Libere pop-ups para gerar o PDF.'); return }
   reportWindow.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório de Comissões</title><style>
-    @page{size:A4 portrait;margin:13mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;font-size:11px}h1{text-align:center;font-size:18px;font-weight:500;margin:0 0 24px}.generated{margin-bottom:22px}.meta{display:grid;grid-template-columns:180px 1fr;gap:8px 14px;margin-bottom:25px}.meta b{font-size:11px}.section{page-break-inside:avoid;margin-bottom:26px}.page-break{page-break-before:always}table{width:100%;border-collapse:collapse}th{background:#24557d;color:#fff;padding:8px;text-align:center}td{padding:8px;border-bottom:1px solid #eee;vertical-align:top}tbody tr:nth-child(odd){background:#f5f5f5}.num{text-align:right;white-space:nowrap}.center{text-align:center}.balance{font-weight:700}.summary{margin-top:18px;font-size:13px}.summary b{font-size:14px}.note{margin-top:8px;color:#555}.company{font-weight:700}.process{font-size:10px;line-height:1.4}.footer{margin-top:26px;border-top:1px solid #bbb;padding-top:7px;color:#666;font-size:9px}
-  </style></head><body>${body}<div class="footer">${escapeHtml(getCurrentInstitutionalSettings().razaoSocial)} · Controle de Despesas e Receitas · Relatório gerado em ${new Date().toLocaleString('pt-BR')}</div><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`)
+    @page{size:A4 portrait;margin:13mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;font-size:11px}h1{text-align:center;font-size:18px;font-weight:500;margin:0 0 24px}.generated{margin-bottom:22px}.meta{display:grid;grid-template-columns:180px 1fr;gap:8px 14px;margin-bottom:25px}.meta b{font-size:11px}.section{page-break-inside:avoid;margin-bottom:26px}.page-break{page-break-before:always}table{width:100%;border-collapse:collapse}th{background:#24557d;color:#fff;padding:8px;text-align:center}td{padding:8px;border-bottom:1px solid #eee;vertical-align:top}tbody tr:nth-child(odd){background:#f5f5f5}.num{text-align:right;white-space:nowrap}.center{text-align:center}.balance{font-weight:700}.summary{margin-top:18px;font-size:13px}.summary b{font-size:14px}.note{margin-top:8px;color:#555}.company{font-weight:700}.process{font-size:10px;line-height:1.4}.final{margin-top:28px;font-weight:700;font-size:12px}.footer{margin-top:26px;border-top:1px solid #bbb;padding-top:7px;color:#666;font-size:9px}
+  </style></head><body>${body}<script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`)
   reportWindow.document.close()
 }
 
 function generatePdf(sources: AnyRecord[], planMap: Map<string, AnyRecord>) {
   if (!sources.length) { window.alert('Não há comissões no filtro atual.'); return }
-  const sections = sources.map((source, sectionIndex) => {
+  const groups = buildCommissionReport(sources.map((source) => {
     const plan = planMap.get(source.id)
-    const gross = sourceGrossCommission(source)
-    const deductions = normalizeDeductions(plan)
-    const installments = planInstallments(plan).filter((item) => item.paid)
-    const account = String(plan?.accountingAccount || '—')
-    let balance = 0
-    const rows: string[] = []
-    balance += gross
-    rows.push(`<tr><td class="center">${escapeHtml(dateBr(source.data))}</td><td><div class="process">REF. RECEBIMENTO DE HONORÁRIOS<br>PROCESSO Nº ${escapeHtml(source.processo || '—')} · Autor: ${escapeHtml(source.reclamante || '—')} x ${escapeHtml(source.reclamada || '—')}</div></td><td class="num">${money.format(0)}</td><td class="num">${money.format(gross)}</td><td class="num balance">${money.format(balance)}</td></tr>`)
-    for (const deduction of deductions) {
-      balance -= deduction.value
-      rows.push(`<tr><td class="center">${escapeHtml(dateBr(deduction.date))}</td><td>REF. ${escapeHtml((deduction.description || 'DEDUÇÃO').toUpperCase())} · PROCESSO Nº ${escapeHtml(source.processo || '—')}</td><td class="num">${escapeHtml(money.format(deduction.value))}</td><td class="num">${money.format(0)}</td><td class="num balance">${escapeHtml(money.format(balance))}</td></tr>`)
+    return {
+      agent: String(source.agentName || beneficiary(source) || ''),
+      accountOverride: String(plan?.accountingAccount || ''),
+      date: String(source.data || '').slice(0, 10),
+      processo: String(source.processo || ''),
+      reclamante: String(source.reclamante || ''),
+      reclamada: String(source.reclamada || ''),
+      gross: sourceGrossCommission(source),
+      deduction: deductionTotal(plan),
+      payments: planInstallments(plan).filter((item) => item.paid).map((item) => ({ date: item.paidDate, value: item.value })),
     }
-    for (const installment of installments) {
-      balance -= installment.value
-      rows.push(`<tr><td class="center">${escapeHtml(dateBr(installment.paidDate))}</td><td>REF. PAGAMENTO PARTICIPAÇÃO · PARCELA ${installment.number}</td><td class="num">${escapeHtml(money.format(installment.value))}</td><td class="num">${money.format(0)}</td><td class="num balance">${escapeHtml(money.format(balance))}</td></tr>`)
-    }
-    const monthText = source.data ? new Date(`${String(source.data).slice(0, 10)}T12:00:00`).toLocaleDateString('pt-BR', { month: 'long' }).toUpperCase() : '—'
-    return `<section class="section${sectionIndex ? ' page-break' : ''}"><h1>Relatório de Comissões - Flávio Marques Advogados Associados</h1><div class="generated">Documento gerado em ${new Date().toLocaleString('pt-BR')}</div><div class="meta"><b>Relatório:</b><span>${escapeHtml(beneficiary(source))}</span><b>Conta Contábil:</b><span>${escapeHtml(account)}</span><b>Mês:</b><span>${escapeHtml(monthText)}</span><b>Ano:</b><span>${escapeHtml(String(source.data || '').slice(0,4) || '—')}</span><b>Saldo Anterior:</b><span>${money.format(0)}</span></div><table><thead><tr><th>Data</th><th>Histórico</th><th>Débito</th><th>Crédito</th><th>Saldo</th></tr></thead><tbody>${rows.join('')}</tbody></table><div class="summary">SALDO FINAL <b>${escapeHtml(money.format(Math.max(0, balance)))}</b></div><div class="note">Comissão bruta: ${escapeHtml(money.format(gross))} · Deduções: ${escapeHtml(money.format(deductions.reduce((sum, item) => sum + item.value, 0)))} · Líquido programável: ${escapeHtml(money.format(netDue(source, plan)))}</div></section>`
+  }))
+  const now = new Date()
+  const generated = `${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+  const sections = groups.map((group, index) => {
+    const rows = group.lines.map((line) => `<tr><td class="center">${escapeHtml(line.date ? dateBr(line.date) : '')}</td><td><div class="process">${escapeHtml(line.history)}</div></td><td class="num">${money.format(line.debit)}</td><td class="num">${money.format(line.credit)}</td><td class="num balance">${money.format(line.balance)}</td></tr>`).join('')
+    return `<section class="section${index ? ' page-break' : ''}"><h1>${escapeHtml(COMMISSION_REPORT_TITLE)}</h1><div class="generated">Documento gerado em ${escapeHtml(generated)}</div><div class="meta"><b>Relatório:</b><span>${escapeHtml(group.agent)}</span><b>Conta Contábil:</b><span>${escapeHtml(group.account)}</span><b>Mês:</b><span>${escapeHtml(group.month)}</span><b>Ano:</b><span>${escapeHtml(group.year)}</span><b>Saldo Anterior:</b><span>${money.format(group.previousBalance)}</span></div><table><thead><tr><th>Data</th><th>Histórico</th><th>Débito</th><th>Crédito</th><th>Saldo</th></tr></thead><tbody>${rows}</tbody></table><div class="final">SALDO FINAL ${money.format(group.finalBalance)}</div></section>`
   }).join('')
   openPdfPrint(sections)
 }
