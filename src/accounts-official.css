@@ -37,3 +37,7 @@
 .account-row-actions button { display: inline-flex; align-items: center; gap: 4px; }
 .account-editor-grid { margin-top: 8px; }
 .account-editor-hint { font-size: 12px; color: var(--muted, #5b6b7f); margin: 10px 0 0; }
+/* Código alinhado à margem esquerda, todos no mesmo ponto (sem recuo por nível) */
+.official-account-row .account-code { padding-left: 0 !important; text-align: left; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.official-account-row.official-account-head > span:first-child { text-align: left; }
+.official-account-row.with-actions { grid-template-columns: 96px minmax(0, 1.7fr) 96px minmax(0, 1fr) 132px; column-gap: 18px; }
