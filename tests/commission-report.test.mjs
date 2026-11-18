@@ -1,13 +1,18 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { resolveAgent, buildCommissionReport } from '../src/lib/commissionReport.ts'
+import { officialChartOfAccounts } from '../functions/chart-of-accounts.js'
+const chart = officialChartOfAccounts.map((a) => ({ code: a.code, name: a.name }))
 
 test('nome e conta do agente', () => {
-  assert.deepEqual(resolveAgent('COMISSÃO / WALTER'), { name: 'Walter Brajowicht', account: '4.02.03.21 - Walter Brajowi (Participação no Processo - Alvará/Acordo)' })
-  assert.equal(resolveAgent('LEO JUN').name, 'Leonardo Jun')
-  assert.equal(resolveAgent('WILIAM').account.startsWith('4.02.03.20 - W. Larangeira'), true)
-  assert.equal(resolveAgent('RÔMULO').name, 'Romulo Pimentel')
-  assert.deepEqual(resolveAgent('MAURICIO'), { name: 'MAURICIO', account: '—' })
+  assert.deepEqual(resolveAgent('COMISSÃO / WALTER', chart), { name: 'Walter Brajowicht', account: '4.02.03.21 - Walter Brajowi (Participação no Processo - Alvará/Acordo)' })
+  assert.equal(resolveAgent('LEO JUN', chart).name, 'Leonardo Jun')
+  assert.equal(resolveAgent('WILIAM', chart).account, '4.02.03.20 - W. Larangeira (Participação no Processo - Alvará/Acordo)')
+  assert.equal(resolveAgent('LEO JUN', chart).account, '4.02.03.11 - Comissão Leonardo Jun')
+  assert.deepEqual(resolveAgent('MICHAEL', [{ code: '4.02.03.24', name: 'Michael (Participação no Processo - Alvará/Acordo)' }]).name, 'Michael')
+  assert.equal(resolveAgent('SOLANGE NOVA', [{ code: '4.02.03.99', name: 'Zeca Novo (Participação)' }, { code: '4.02.03.23', name: 'Solange (Participação no Processo - Alvará/Acordo)' }]).name, 'Solange')
+  assert.equal(resolveAgent('RÔMULO', chart).name, 'Romulo Pimentel')
+  assert.deepEqual(resolveAgent('MAURICIO', chart), { name: 'Mauricio', account: '' })
 })
 
 test('um relatório por agente e mês, com saldo anterior e pagamento único', () => {
@@ -16,7 +21,7 @@ test('um relatório por agente e mês, com saldo anterior e pagamento único', (
     { agent: 'WALTER', date: '2026-10-19', processo: 'P2', reclamante: 'ANDERSON', reclamada: 'REDECARD', gross: 19469.17, deduction: 2920.38, payments: [{ date: '2026-11-19', value: 16548.79 }] },
     { agent: 'WALTER', date: '2026-11-05', processo: 'P3', reclamante: 'BRUNO', reclamada: 'TERRAS', gross: 100, deduction: 0, payments: [] },
     { agent: 'COMISSÃO / WALTER', date: '2026-09-02', processo: 'P0', reclamante: 'ZECA', reclamada: 'X', gross: 50, deduction: 0, payments: [] },
-  ])
+  ], chart)
   assert.equal(groups.length, 3)
   const [set, out, nov] = groups
   assert.equal(set.month, 'SETEMBRO'); assert.equal(set.finalBalance, 50)
