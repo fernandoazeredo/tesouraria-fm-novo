@@ -23,3 +23,9 @@ html[data-theme='dark'] .decision-reason.rejeitado { background: rgba(198, 40, 4
 .commission-v4-row > span:nth-child(7),
 .commission-v4-row > span:nth-child(8),
 .commission-v4-row > span:nth-child(9) { position: static !important; box-shadow: none !important; background: transparent !important; }
+
+/* Aprovações: links dos documentos */
+.approval-docs { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; font-size: 13px; }
+.approval-docs span { color: var(--muted, #5b6b7f); font-weight: 700; }
+.approval-docs a { font-weight: 700; text-decoration: underline; overflow-wrap: anywhere; }
+.approval-docs.empty { color: var(--muted, #5b6b7f); font-style: italic; }
