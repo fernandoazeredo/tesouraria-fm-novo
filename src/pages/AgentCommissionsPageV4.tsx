@@ -6,7 +6,8 @@ import { ensureOfficialDemonstrative } from '../lib/officialDemonstrative'
 import { isOfficialDirectorEmail, useAuth } from '../auth/AuthContext'
 import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
 import { DecisionReason, PaymentAttachments, readAttachments, type PaymentAttachment } from '../components/PaymentAttachments'
-import { COMMISSION_REPORT_TITLE, buildCommissionReport } from '../lib/commissionReport'
+import { COMMISSION_REPORT_TITLE, buildCommissionReport, type ChartAccount } from '../lib/commissionReport'
+import { officialChartOfAccounts } from '../data/chartOfAccounts'
 import '../agent-commissions-v4.css'
 
 type AnyRecord = { id: string } & DocumentData
@@ -159,7 +160,7 @@ function openPdfPrint(body: string) {
   reportWindow.document.close()
 }
 
-function generatePdf(sources: AnyRecord[], planMap: Map<string, AnyRecord>) {
+function generatePdf(sources: AnyRecord[], planMap: Map<string, AnyRecord>, chart: ChartAccount[]) {
   if (!sources.length) { window.alert('Não há comissões no filtro atual.'); return }
   const groups = buildCommissionReport(sources.map((source) => {
     const plan = planMap.get(source.id)
@@ -174,7 +175,7 @@ function generatePdf(sources: AnyRecord[], planMap: Map<string, AnyRecord>) {
       deduction: deductionTotal(plan),
       payments: planInstallments(plan).filter((item) => item.paid).map((item) => ({ date: item.paidDate, value: item.value })),
     }
-  }))
+  }), chart)
   const now = new Date()
   const generated = `${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
   const sections = groups.map((group, index) => {
@@ -313,6 +314,8 @@ function CommissionModal({ source, plan, onClose }: { source: AnyRecord; plan?: 
 export function AgentCommissionsPageV4() {
   const { records: receivables, loading: loadingReceivables } = useCollectionRecords('receivables')
   const { records: plans, loading: loadingPlans } = useCollectionRecords('agentCommissions')
+  const { records: storedChart } = useCollectionRecords('chartOfAccounts')
+  const chart = useMemo<ChartAccount[]>(() => { const stored = storedChart.map((item) => ({ code: String(item.code || '').trim(), name: String(item.name || '').trim() })).filter((item) => item.code && item.name); return stored.length ? stored : officialChartOfAccounts.map((item) => ({ code: item.code, name: item.name })) }, [storedChart])
   const [search, setSearch] = useState('')
   const [target, setTarget] = useState<AnyRecord | null>(null)
   const planMap = useMemo(() => new Map(plans.map((item) => [String(item.sourceReceivableId || item.id), item])), [plans])
@@ -329,7 +332,7 @@ export function AgentCommissionsPageV4() {
   const loading = loadingReceivables || loadingPlans
 
   return <>
-    <div className="page-heading payment-control-heading"><div><span className="eyebrow">Controle financeiro separado</span><h1>Comissões de Agentes</h1><p>Controle da comissão bruta, deduções, valor líquido, aprovação e pagamento à vista ou parcelado.</p></div><div className="quick-actions commission-report-actions"><button className="secondary-button commission-report-button" type="button" onClick={() => generatePdf(sources, planMap)}><FileText size={17} /> Gerar PDF do relatório</button></div></div>
+    <div className="page-heading payment-control-heading"><div><span className="eyebrow">Controle financeiro separado</span><h1>Comissões de Agentes</h1><p>Controle da comissão bruta, deduções, valor líquido, aprovação e pagamento à vista ou parcelado.</p></div><div className="quick-actions commission-report-actions"><button className="secondary-button commission-report-button" type="button" onClick={() => generatePdf(sources, planMap, chart)}><FileText size={17} /> Gerar PDF do relatório</button></div></div>
     <div className="commission-v4-metrics"><article><span>Comissões brutas</span><strong>{money.format(totals.gross)}</strong></article><article><span>Deduções</span><strong>{money.format(totals.deductions)}</strong></article><article><span>Líquido a pagar</span><strong>{money.format(totals.net)}</strong></article><article><span>Já pago</span><strong>{money.format(totals.paid)}</strong></article><article><span>Saldo</span><strong>{money.format(totals.pending)}</strong></article><article><span>Aguardando aprovação</span><strong>{totals.approvals}</strong></article></div>
     <section className="page-card module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por processo, agente, reclamante ou reclamada" /></div></div>{loading ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando comissões</strong></div> : sources.length === 0 ? <div className="module-empty"><Users size={34} /><strong>Nenhuma comissão disponível</strong><span>As comissões aparecem depois que a Tesouraria confirma o recebimento do Alvará.</span></div> : <div className="commission-v4-list"><div className="commission-v4-row head"><span>Processo / Agente</span><span>Bruto</span><span>Deduções</span><span>Líquido</span><span>Já pago</span><span>Saldo</span><span>Próxima parcela</span><span>Status</span><span>Ação</span></div>{sources.map((source) => { const plan = planMap.get(source.id); const gross = sourceGrossCommission(source); const deductions = deductionTotal(plan); const net = netDue(source, plan); const paid = paidValue(plan); const next = nextInstallment(plan); return <div className="commission-v4-row" key={source.id}><span><strong>{source.processo || '—'}</strong><small>{beneficiary(source)}</small></span><span><strong>{money.format(gross)}</strong></span><span><strong>{money.format(deductions)}</strong></span><span><strong>{money.format(net)}</strong></span><span><strong>{money.format(paid)}</strong></span><span><strong>{money.format(Math.max(0, net - paid))}</strong></span><span>{next ? <><strong>{money.format(next.value)}</strong><small>{dateBr(next.dueDate)}</small></> : <strong>—</strong>}</span><span><b className={`workflow-status-badge ${statusClass(plan)}`}>{statusLabel(plan)}</b>{plan?.approvalNote && ['devolvido', 'rejeitado'].includes(String(plan.status)) && <small className="decision-reason-inline" title={String(plan.approvalNote)}>Motivo: {String(plan.approvalNote)}</small>}{readAttachments(plan).length > 0 && <small>📎 {readAttachments(plan).length} anexo(s)</small>}</span><span><button className="small-neutral-button" type="button" onClick={() => setTarget(source)}>{plan ? 'Abrir controle' : 'Programar'}</button></span></div>})}</div>}</section>
     {target && <CommissionModal source={target} plan={planMap.get(target.id)} onClose={() => setTarget(null)} />}
