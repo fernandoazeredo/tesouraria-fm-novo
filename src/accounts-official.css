@@ -46,3 +46,14 @@ html:not([data-theme='dark']) .account-category { font-weight: 800; border: 1px 
 html:not([data-theme='dark']) .account-category.account-revenue { background: #d6e9fb; color: #0b4f8a; border-color: #9cc6ee; }
 html:not([data-theme='dark']) .account-category.account-expense { background: #fbdcdf; color: #9e1b26; border-color: #f0a3aa; }
 html:not([data-theme='dark']) .account-category.account-patrimonial { background: #e7dff7; color: #4b2f7a; border-color: #c4b3e6; }
+/* Títulos e subtítulos (grupos 3.01, 3.02, 4.01…) com cor da categoria */
+html:not([data-theme='dark']) .official-group-row:has(.account-revenue) { background: #e3f0fc; box-shadow: inset 4px 0 0 #1677c8; }
+html:not([data-theme='dark']) .official-group-row:has(.account-expense) { background: #fde8ea; box-shadow: inset 4px 0 0 #c9363d; }
+html:not([data-theme='dark']) .official-group-row:has(.account-patrimonial) { background: #efe9fa; box-shadow: inset 4px 0 0 #654990; }
+html:not([data-theme='dark']) .official-group-row:has(.account-revenue) .account-code,
+html:not([data-theme='dark']) .official-group-row:has(.account-revenue) > span:nth-child(2) strong { color: #0b4f8a; }
+html:not([data-theme='dark']) .official-group-row:has(.account-expense) .account-code,
+html:not([data-theme='dark']) .official-group-row:has(.account-expense) > span:nth-child(2) strong { color: #9e1b26; }
+html:not([data-theme='dark']) .official-group-row:has(.account-patrimonial) .account-code,
+html:not([data-theme='dark']) .official-group-row:has(.account-patrimonial) > span:nth-child(2) strong { color: #4b2f7a; }
+.official-group-row .account-code, .official-group-row > span:nth-child(2) strong { font-weight: 800; font-size: 14px; }
