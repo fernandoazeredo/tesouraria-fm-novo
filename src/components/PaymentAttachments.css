@@ -1,0 +1,25 @@
+/* Documentos do pagamento e motivo da devolução */
+.payment-attachments { border: 1px dashed var(--border, #d7dee8); border-radius: 12px; padding: 14px 16px; margin: 14px 0; background: var(--surface, #fff); }
+.payment-attachments-head { display: flex; gap: 10px; align-items: flex-start; }
+.payment-attachments-head > div { display: grid; gap: 2px; }
+.payment-attachments-head span { font-size: 12px; color: var(--muted, #5b6b7f); }
+.payment-attachments ul { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 6px; }
+.payment-attachments li { display: flex; align-items: center; gap: 10px; font-size: 13px; min-width: 0; }
+.payment-attachments li a, .payment-attachments li > span { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.payment-attachments li small { color: var(--muted, #5b6b7f); white-space: nowrap; }
+.payment-attachments li.error small { color: var(--expense, #c62828); }
+.payment-attachments-empty { margin: 10px 0; font-size: 13px; color: var(--muted, #5b6b7f); }
+.payment-attachments-pick { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+
+.decision-reason { display: grid; gap: 4px; margin: 0 0 14px; padding: 12px 14px; border-radius: 10px; border-left: 4px solid #e08a00; background: #fff6e5; color: #6b4300; }
+.decision-reason.rejeitado { border-left-color: var(--expense, #c62828); background: #fdecec; color: #7a1c1c; }
+.decision-reason span { font-size: 14px; }
+.decision-reason-inline { display: block; margin-top: 4px; color: #a15c00; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-theme='dark'] .decision-reason { background: rgba(224, 138, 0, .14); color: #ffd99a; }
+html[data-theme='dark'] .decision-reason.rejeitado { background: rgba(198, 40, 40, .16); color: #ffc4c4; }
+
+/* Comissões de Agentes: colunas sem sobreposição */
+.commission-v4-list .commission-v4-row { min-width: 1080px; grid-template-columns: minmax(200px, 1.6fr) repeat(5, minmax(90px, 1fr)) 140px 150px 120px; gap: 10px; }
+.commission-v4-row > span:nth-child(7),
+.commission-v4-row > span:nth-child(8),
+.commission-v4-row > span:nth-child(9) { position: static !important; box-shadow: none !important; background: transparent !important; }
