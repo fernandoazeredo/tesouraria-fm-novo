@@ -8,7 +8,7 @@ test('nome e conta do agente', () => {
   assert.deepEqual(resolveAgent('COMISSÃO / WALTER', chart), { name: 'Walter Brajowicht', account: '4.02.03.21 - Walter Brajowi (Participação no Processo - Alvará/Acordo)' })
   assert.equal(resolveAgent('LEO JUN', chart).name, 'Leonardo Jun')
   assert.equal(resolveAgent('WILIAM', chart).account, '4.02.03.20 - W. Larangeira (Participação no Processo - Alvará/Acordo)')
-  assert.equal(resolveAgent('LEO JUN', chart).account, '4.02.03.11 - Comissão Leonardo Jun')
+  assert.equal(resolveAgent('LEO JUN', chart).account, '4.02.03.11 - Leonardo Jun')
   assert.deepEqual(resolveAgent('MICHAEL', [{ code: '4.02.03.24', name: 'Michael (Participação no Processo - Alvará/Acordo)' }]).name, 'Michael')
   assert.equal(resolveAgent('SOLANGE NOVA', [{ code: '4.02.03.99', name: 'Zeca Novo (Participação)' }, { code: '4.02.03.23', name: 'Solange (Participação no Processo - Alvará/Acordo)' }]).name, 'Solange')
   assert.equal(resolveAgent('RÔMULO', chart).name, 'Romulo Pimentel')
