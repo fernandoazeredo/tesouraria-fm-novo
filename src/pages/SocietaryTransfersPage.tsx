@@ -414,12 +414,16 @@ export function SocietaryTransfersPage() {
     const transfer = toNumber(item.transferValue)
     const paid = toNumber(item.paidValue)
     acc.office += toNumber(item.officeFees)
+    if (item.calculationVersion === 'net-1133-60-40-v1') {
+      acc.taxes += toNumber(item.taxesValue)
+      acc.net += toNumber(item.netOfficeFees)
+    } else acc.legacy += 1
     acc.apurado += transfer
     acc.paid += paid
     acc.balance += Math.max(0, transfer - paid)
     if (item.status === 'aguardando_aprovacao') acc.awaiting += transfer
     return acc
-  }, { office: 0, apurado: 0, paid: 0, balance: 0, awaiting: 0 }), [rows])
+  }, { office: 0, taxes: 0, net: 0, legacy: 0, apurado: 0, paid: 0, balance: 0, awaiting: 0 }), [rows])
 
   function draftFor(item: AnyRecord): Draft {
     return drafts[item.id] ?? {
@@ -683,6 +687,8 @@ export function SocietaryTransfersPage() {
 
     <div className="soc-metrics">
       <article><span>Honorários do Escritório</span><strong>{money.format(totals.office)}</strong><small>Base integral dos alvarás filtrados</small></article>
+      <article><span>Impostos 11,33%</span><strong>{money.format(totals.taxes)}</strong><small>Descontados dos honorários{totals.legacy ? ` · ${totals.legacy} cálculo(s) anterior(es) sem detalhamento` : ''}</small></article>
+      <article><span>Honorários Líquidos</span><strong>{money.format(totals.net)}</strong><small>Base do repasse: 60% Flávio · 40% Ana</small></article>
       <article><span>Repasse Apurado</span><strong>{money.format(totals.apurado)}</strong><small>Percentual aplicado linha a linha</small></article>
       <article><span>Saldo a Pagar</span><strong>{money.format(totals.balance)}</strong><small>Apurado menos valores pagos</small></article>
       <article><span>Aguardando Aprovação</span><strong>{money.format(totals.awaiting)}</strong><small>Linhas enviadas para aprovação</small></article>
@@ -721,7 +727,7 @@ export function SocietaryTransfersPage() {
       {canDecide && selected.size > 0 && <div className="soc-batchbar"><strong>{selected.size} selecionado(s)</strong><button className="small-success-button" onClick={() => void approveSelected()}><BadgeCheck size={15} /> Aprovar selecionados</button><button className="small-revenue-button" onClick={() => void sendSelected()}><Send size={15} /> Enviar aprovados à Tesouraria</button></div>}
 
       {loading ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando extrato societário</strong></div> : rows.length === 0 ? <div className="module-empty"><Handshake size={32} /><strong>Nenhum repasse societário encontrado</strong><span>Os alvarás elegíveis passam a aparecer automaticamente após a confirmação do recebimento pela Tesouraria.</span></div> : <div className="soc-table-wrap"><table className="soc-table">
-        <thead><tr><th><input type="checkbox" checked={rows.length > 0 && rows.every((item) => selected.has(item.id))} onChange={toggleAll} /></th><th>Data</th><th>Processo</th><th>Reclamante / Reclamada</th><th>Honorários do Escritório</th><th>% Repasse</th><th>Valor do Repasse</th><th>Valor Pago</th><th>Saldo Linha</th><th>Aprovação</th><th>Status</th><th>Data Pagamento</th><th>Saldo Acumulado</th><th>Ações</th></tr></thead>
+        <thead><tr><th><input type="checkbox" checked={rows.length > 0 && rows.every((item) => selected.has(item.id))} onChange={toggleAll} /></th><th>Data</th><th>Processo</th><th>Reclamante / Reclamada</th><th>Honorários do Escritório</th><th className="numeric">Impostos 11,33%</th><th className="numeric">Honorários Líquidos</th><th>% Repasse</th><th>Valor do Repasse</th><th>Valor Pago</th><th>Saldo Linha</th><th>Aprovação</th><th>Status</th><th>Data Pagamento</th><th>Saldo Acumulado</th><th>Ações</th></tr></thead>
         <tbody>{rows.map((item) => {
           const draft = draftFor(item)
           const editable = canDecide && item.calculationVersion !== 'net-1133-60-40-v1' && ['apurado', 'devolvido', 'rejeitado'].includes(String(item.status ?? ''))
@@ -733,6 +739,8 @@ export function SocietaryTransfersPage() {
             <td><strong>{item.processo || '—'}</strong></td>
             <td><strong>{item.reclamante || '—'}</strong><small>{item.reclamada || '—'}</small></td>
             <td className="numeric"><strong>{money.format(toNumber(item.officeFees))}</strong></td>
+            <td className="numeric">{item.calculationVersion === 'net-1133-60-40-v1' ? <>− {money.format(toNumber(item.taxesValue))}</> : <small>Não disponível</small>}</td>
+            <td className="numeric">{item.calculationVersion === 'net-1133-60-40-v1' ? <strong>{money.format(toNumber(item.netOfficeFees))}</strong> : <small>Não disponível</small>}</td>
             <td className="soc-edit-cell"><input type="number" min="0" max="100" step="0.01" disabled={!editable} value={draft.percent} onChange={(event) => changePercent(item, event.target.value)} /><span>%</span></td>
             <td className="soc-edit-cell money-edit"><span>R$</span><input inputMode="decimal" disabled={!editable} value={draft.value} onChange={(event) => changeValue(item, event.target.value)} /></td>
             <td className="numeric">{money.format(toNumber(item.paidValue))}</td>
@@ -754,7 +762,7 @@ export function SocietaryTransfersPage() {
             </div></td>
           </tr>
         })}</tbody>
-        <tfoot><tr><td colSpan={4}><strong>TOTAIS DO EXTRATO</strong></td><td className="numeric"><strong>{money.format(totals.office)}</strong></td><td></td><td className="numeric"><strong>{money.format(totals.apurado)}</strong></td><td className="numeric"><strong>{money.format(totals.paid)}</strong></td><td className="numeric"><strong>{money.format(totals.balance)}</strong></td><td colSpan={3}></td><td className="numeric"><strong>{money.format(totals.balance)}</strong></td><td></td></tr></tfoot>
+        <tfoot><tr><td colSpan={4}><strong>TOTAIS DO EXTRATO</strong></td><td className="numeric"><strong>{money.format(totals.office)}</strong></td><td className="numeric"><strong>− {money.format(totals.taxes)}</strong></td><td className="numeric"><strong>{money.format(totals.net)}</strong></td><td></td><td className="numeric"><strong>{money.format(totals.apurado)}</strong></td><td className="numeric"><strong>{money.format(totals.paid)}</strong></td><td className="numeric"><strong>{money.format(totals.balance)}</strong></td><td colSpan={3}></td><td className="numeric"><strong>{money.format(totals.balance)}</strong></td><td></td></tr></tfoot>
       </table></div>}
     </section>
   </>
