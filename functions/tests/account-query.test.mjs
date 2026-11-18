@@ -19,8 +19,8 @@ function dbFor(rows) {
   return { collection: name => query(rows[name] ?? []) };
 }
 
-test('localiza cada um dos 202 códigos oficiais no catálogo e identifica contas e grupos', async () => {
-  assert.equal(chart.length, 202);
+test('localiza cada um dos 203 códigos oficiais no catálogo e identifica contas e grupos', async () => {
+  assert.equal(chart.length, 203);
   for (const account of chart) {
     const request = financialRequest('Qual é a conta ' + account.code + '?', today, chart);
     assert.equal(request.kind, 'plan', account.code);
@@ -34,9 +34,9 @@ test('localiza cada um dos 202 códigos oficiais no catálogo e identifica conta
     }
   }
   const all = financialRequest('Liste todas as contas do plano de contas', today, chart);
-  assert.equal(all.selection.entries.length, 202);
+  assert.equal(all.selection.entries.length, 203);
   const result = await runFinancial(dbFor({}), all);
-  assert.equal(result.answer.split('\n').filter(line => /^- \*\*\d/.test(line)).length, 202);
+  assert.equal(result.answer.split('\n').filter(line => /^- \*\*\d/.test(line)).length, 203);
   const group = selectAccounts('conta 4.07', chart);
   assert.ok(selectedLeaves(chart, group.entries).some(entry => entry.code === '4.07.05'));
 });
@@ -94,8 +94,8 @@ test('orienta a classificação e informa os totais do cadastro por natureza', a
   const guidance = await ask('Qual conta uso para classificar um gasto com conta de luz?');
   assert.match(guidance.answer, /4\.07\.05 — Energia Elétrica.*Despesas Administrativas/);
   const count = await ask('Quantas contas tem o Plano de Contas?');
-  assert.match(count.answer, /202 códigos.*19 grupos e 183 contas finais/);
-  assert.match(count.answer, /Receita: 22.*Despesa: 137.*Patrimonial \/ Dívida: 24/);
+  assert.match(count.answer, /203 códigos.*19 grupos e 184 contas finais/);
+  assert.match(count.answer, /Receita: 22.*Despesa: 138.*Patrimonial \/ Dívida: 24/);
 });
 
 test('reconhece conta no singular quando o plano está no plural', async () => {
