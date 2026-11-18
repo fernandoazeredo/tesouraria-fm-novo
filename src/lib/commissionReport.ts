@@ -36,7 +36,8 @@ export type ChartAccount = { code: string; name: string }
 /** Conta contábil "código - nome" lida do Plano de Contas (ex.: 4.02.03.21 - Walter Brajowi (Participação…)). */
 function accountText(code: string, chart: ChartAccount[]) {
   const found = chart.find((item) => item.code === code)
-  return found ? `${found.code} - ${found.name}` : code
+  // No relatório o nome sai sem o prefixo "Comissão" (ex.: 4.02.03.11 - Leonardo Jun), como no modelo.
+  return found ? `${found.code} - ${found.name.replace(/^Comiss[aã]o\s+/i, '')}` : code
 }
 
 /** "COMISSÃO / WALTER" → Walter Brajowicht + conta do Plano de Contas. Sem correspondência, mantém o texto. */
@@ -49,7 +50,7 @@ export function resolveAgent(raw: unknown, chart: ChartAccount[] = []): { name: 
   if (found) return { name: found.name, account: accountText(found.code, chart) }
   // Agente novo: procura no Plano de Contas (4.02.03.xx) pelo primeiro nome.
   const fromChart = chart.find((item) => item.code.startsWith('4.02.03.') && plain(item.name).replace(/^COMISSAO\s+/, '').split(' ')[0] === first)
-  if (fromChart) return { name: fromChart.name.replace(/\s*\(.*\)\s*$/, '').replace(/^Comiss[aã]o\s+/i, ''), account: `${fromChart.code} - ${fromChart.name}` }
+  if (fromChart) return { name: fromChart.name.replace(/\s*\(.*\)\s*$/, '').replace(/^Comiss[aã]o\s+/i, ''), account: `${fromChart.code} - ${fromChart.name.replace(/^Comiss[aã]o\s+/i, '')}` }
   const clean = String(raw ?? '').replace(/^\s*comiss[aã]o\s*\/\s*/i, '').trim()
   const titled = clean === clean.toUpperCase() ? clean.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase()) : clean
   return { name: titled || '—', account: '' }
