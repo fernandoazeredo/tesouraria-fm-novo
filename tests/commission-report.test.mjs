@@ -12,7 +12,8 @@ test('nome e conta do agente', () => {
   assert.deepEqual(resolveAgent('MICHAEL', [{ code: '4.02.03.24', name: 'Michael (Participação no Processo - Alvará/Acordo)' }]).name, 'Michael')
   assert.equal(resolveAgent('SOLANGE NOVA', [{ code: '4.02.03.99', name: 'Zeca Novo (Participação)' }, { code: '4.02.03.23', name: 'Solange (Participação no Processo - Alvará/Acordo)' }]).name, 'Solange')
   assert.equal(resolveAgent('RÔMULO', chart).name, 'Romulo Pimentel')
-  assert.deepEqual(resolveAgent('MAURICIO', chart), { name: 'Mauricio', account: '' })
+  assert.deepEqual(resolveAgent('MAURICIO', chart), { name: 'Mauricio', account: '4.02.03.25 - Mauricio (Participação no Processo - Alvará/Acordo)' })
+  assert.deepEqual(resolveAgent('FULANO', chart), { name: 'Fulano', account: '' })
 })
 
 test('um relatório por agente e mês, com saldo anterior e pagamento único', () => {
