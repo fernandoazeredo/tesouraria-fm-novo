@@ -60,6 +60,7 @@ export const officialChartOfAccounts = [
   { code: "4.02.03.22", name: "Tais (Participação no Processo - Alvará/Acordo)", dre: "Comissões Sobre Vendas", parentCode: "4.02.03", level: 4, kind: "account", category: "Despesa" },
   { code: "4.02.03.23", name: "Solange (Participação no Processo - Alvará/Acordo)", dre: "Comissões Sobre Vendas", parentCode: "4.02.03", level: 4, kind: "account", category: "Despesa" },
   { code: "4.02.03.24", name: "Michael (Participação no Processo - Alvará/Acordo)", dre: "Comissões Sobre Vendas", parentCode: "4.02.03", level: 4, kind: "account", category: "Despesa" },
+  { code: "4.02.03.25", name: "Mauricio (Participação no Processo - Alvará/Acordo)", dre: "Comissões Sobre Vendas", parentCode: "4.02.03", level: 4, kind: "account", category: "Despesa" },
   { code: "4.02.04", name: "Materiais Aplicados na Prestação de Serviços", dre: "Custo dos Serviços Prestados", parentCode: "4.02", level: 3, kind: "account", category: "Despesa" },
   { code: "4.02.05", name: "Materiais para Revenda", dre: "Não mostrar no DRE Gerencial", parentCode: "4.02", level: 3, kind: "account", category: "Despesa" },
   { code: "4.03", name: "Despesas com Salários e Encargos", dre: null, parentCode: null, level: 2, kind: "group", category: "Despesa" },
