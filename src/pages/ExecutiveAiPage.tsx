@@ -106,6 +106,7 @@ export function ExecutiveAiPage() {
     setMessages(prev => prev.map((m, i) => i === index ? { ...m, ...data } : m))
   }
 
+  const [showPrompts, setShowPrompts] = useState(true)
   async function submit(event: FormEvent) {
     event.preventDefault()
     const q = question.trim()
@@ -191,6 +192,10 @@ export function ExecutiveAiPage() {
       {busy && <div className="executive-ai-loading"><LoaderCircle className="spin" size={18} /> Lendo os lançamentos e calculando… pode levar alguns segundos.</div>}
     </div>
     {error && <div role="alert" className="executive-ai-error">{error}</div>}
+    {messages.length > 0 && <div className="executive-ai-quick">
+      <button type="button" className="executive-ai-quick-toggle" aria-expanded={showPrompts} onClick={() => setShowPrompts(v => !v)}><Sparkles size={15} /> Perguntas prontas {showPrompts ? '▴ ocultar' : '▾ mostrar'}</button>
+      {showPrompts && <div className="executive-ai-groups executive-ai-quick-list">{promptGroups.map(g => <div key={g.title} className="executive-ai-group"><span>{g.title}</span><div className="executive-ai-prompts">{g.items.map(p => <button key={p} type="button" disabled={busy} onClick={() => setQuestion(p)}>{p}</button>)}</div></div>)}</div>}
+    </div>}
     <form onSubmit={submit} className="executive-ai-form"><label htmlFor="executive-ai-question">Sua pergunta ou solicitação</label><textarea id="executive-ai-question" value={question} onChange={e => setQuestion(e.target.value)} onKeyDown={onKeyDown} maxLength={500} rows={3} placeholder="Ex.: Quais comissões estão pendentes? · Altere o valor da despesa TESTE IA para 200" disabled={busy} /><div><small>{question.length}/500 caracteres · Enter envia, Shift+Enter quebra linha</small><span className="executive-ai-form-actions"><button className="secondary-button executive-ai-clear" type="button" disabled={busy} title="Colar" onClick={() => void pasteQuestion()}><ClipboardPaste size={16} /> Colar</button>{messages.length > 0 && <button className="secondary-button executive-ai-clear" type="button" disabled={busy} onClick={() => { setMessages([]); setError(''); setQuestion('') }}><Eraser size={16} /> Limpar conversa</button>}<button className="revenue-button" type="submit" disabled={busy || question.trim().length < 5}><Send size={16} /> Enviar</button></span></div></form>
   </section>
 }

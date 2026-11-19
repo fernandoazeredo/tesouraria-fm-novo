@@ -98,3 +98,9 @@ html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-fina
 .executive-ai-proposal-head.executive-ai-proposal-delete { color: #b42318; }
 .executive-ai-proposal-warnings { margin: 8px 0 0; padding-left: 18px; color: #b54708; font-size: 0.86rem; }
 .executive-ai-proposal-warnings li { margin: 2px 0; }
+
+/* Perguntas prontas sempre visíveis durante a conversa */
+.executive-ai-quick{margin-top:12px;border:1px solid var(--border,#d7dee8);border-radius:12px;padding:8px 12px;background:var(--surface,#fff)}
+.executive-ai-quick-toggle{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;color:inherit;font-weight:700;font-size:13px;cursor:pointer;padding:4px 0}
+.executive-ai-quick-list{max-height:190px;overflow-y:auto;margin-top:6px;padding-right:4px}
+.executive-ai-quick-list .executive-ai-prompts button{padding:6px 10px;font-size:13px}
