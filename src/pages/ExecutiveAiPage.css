@@ -105,3 +105,5 @@ html[data-theme] .executive-ai .executive-ai-bubble.assistant .executive-ai-fina
 .executive-ai-prompts-card .executive-ai-welcome{margin:0 auto}
 .executive-ai-prompts-card .executive-ai-welcome strong{margin:6px}
 @media(max-width:600px){.executive-ai-prompts-card{max-height:240px;padding:11px}}
+.executive-ai-messages:has(.executive-ai-empty){min-height:90px}
+.executive-ai-empty{margin:auto;color:#9eb1c2;text-align:center}
