@@ -12,6 +12,7 @@ import { financialRequest, readAll } from './financial-query.js';
 import { changeClassification, proposeClassification, readActiveChart, runFinancial } from './financial-actions.js';
 import { isArithmeticQuestion, normalizePlan, renderArithmetic, totalOf } from './financial-math.js';
 import { buildPanorama, buildPendingAnswer, isPanoramaQuestion, isPendingQuestion } from './panorama.js';
+import { buildAnalysisAnswer, isAnalysisQuestion } from './analysis.js';
 
 initializeApp();
 const db=getFirestore();
@@ -55,6 +56,12 @@ export const executiveAiAsk=onCall({
   const invalidQuestion=()=>new HttpsError('invalid-argument','Pergunte apenas sobre os módulos, lançamentos e regras do Tesouraria FM Novo (5 a 500 caracteres).');
   if(question.length<5 || question.length>500) throw invalidQuestion();
   await rateLimit(request.auth.uid);
+  if(isAnalysisQuestion(question) && !isDeleteRequest(question) && !isChangeRequest(question)) {
+    const key=geminiKey.value();
+    if(!key) throw new HttpsError('failed-precondition','O provedor de IA ainda não está configurado.');
+    try { return await buildAnalysisAnswer(db,question,{key,model:MODEL}); }
+    catch(error) { console.error('Análise gerencial',error?.message); throw new HttpsError('unavailable','Não foi possível gerar a análise agora. Tente de novo em instantes.'); }
+  }
   const chart=await readActiveChart(db);
   const intent=financialRequest(question,undefined,chart);
   if(!intent && !isAppQuestion(question)) throw invalidQuestion();
