@@ -20,3 +20,9 @@
   .dash-chart-col > span { font-size: 10px; }
   .dash-account-row { font-size: 13px; }
 }
+
+/* Repasse de Alvarás / Comissões: valores cabem no card, em uma linha */
+.obligation-metrics.enhanced > *,
+.commission-v4-metrics > article { container-type: inline-size; }
+.obligation-metrics.enhanced > * strong,
+.commission-v4-metrics > article strong { font-size: clamp(13px, 14.8cqi, 17px) !important; white-space: nowrap; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
