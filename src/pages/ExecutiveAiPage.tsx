@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { Sparkles, Send, ShieldCheck, LoaderCircle, ExternalLink, CheckCircle2, XCircle, Undo2, PencilLine, Eraser, Copy, Check, ClipboardPaste } from 'lucide-react'
 import { firebaseApp } from '../lib/firebase'
@@ -106,7 +106,16 @@ export function ExecutiveAiPage() {
     setMessages(prev => prev.map((m, i) => i === index ? { ...m, ...data } : m))
   }
 
-  const [showPrompts, setShowPrompts] = useState(true)
+  const messagesRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const box = messagesRef.current
+    if (!box || !messages.length) return
+    const bubbles = box.querySelectorAll<HTMLElement>('.executive-ai-bubble')
+    // Mostra a pergunta recém-enviada (ou a resposta que chegou) logo abaixo das perguntas prontas.
+    const target = busy ? bubbles[bubbles.length - 1] : bubbles[bubbles.length - 1]?.previousElementSibling as HTMLElement | null ?? bubbles[bubbles.length - 1]
+    if (target) box.scrollTo({ top: box.scrollTop + target.getBoundingClientRect().top - box.getBoundingClientRect().top - 8, behavior: 'smooth' })
+  }, [messages.length, busy])
+
   async function submit(event: FormEvent) {
     event.preventDefault()
     const q = question.trim()
@@ -143,6 +152,7 @@ export function ExecutiveAiPage() {
   }
 
   const promptGroups: Array<{ title: string; items: string[] }> = [
+    { title: 'Análise financeira gerencial (IA pensa e interpreta)', items: ['Faça uma análise financeira gerencial do escritório', 'Faça um diagnóstico da saúde financeira do escritório', 'Analise as despesas e onde posso economizar', 'Analise o resultado e a margem dos últimos meses'] },
     { title: 'Resumo e situação financeira', items: ['Resumo completo de hoje', 'Resumo completo desta semana', 'Resumo completo deste mês', 'O que está pendente?', 'O que está pendente para mim?', 'Pendências da Tesouraria', 'Pendências do Jurídico', 'Faça um resumo geral do escritório', 'Qual a situação financeira de hoje?', 'Qual a situação financeira desta semana?', 'Qual a situação financeira deste mês?', 'O que está pendente de decisão hoje?'] },
     { title: 'Vencimentos e previsão de caixa', items: ['O que vence nos próximos 7 dias?', 'Quais pagamentos estão atrasados?', 'O que vence hoje?', 'Previsão de caixa dos próximos 30 dias', 'Previsão de caixa dos próximos 60 dias', 'Quanto vamos receber nos próximos 15 dias?'] },
     { title: 'Preparar lançamentos — cria RASCUNHO com sua confirmação', items: ['Crie um rascunho de despesa: fornecedor X, histórico Y, R$ 100,00, vence em 20/11', 'Crie um rascunho de despesa de conta de luz da Light de R$ 320,00 com vencimento em 25/11', 'Crie um rascunho de alvará: processo 0000000-00.0000.5.01.0000, reclamante X, valor R$ 10.000,00'] },
@@ -161,8 +171,8 @@ export function ExecutiveAiPage() {
   return <section className="page-card executive-ai">
     <header className="executive-ai-head"><Sparkles size={27} /><div><span className="eyebrow">Exclusivo do Master principal</span><h1>IA — Assistente Executivo</h1><p>Consulte os módulos e os lançamentos do Tesouraria FM Novo. Para alterar ou classificar lançamentos, peça expressamente (ex.: “classifique as despesas de luz de outubro como Energia Elétrica”) e confirme.</p></div></header>
     <div className="executive-ai-security"><ShieldCheck size={17} /> Uso privado. Nenhuma alteração é gravada sem a sua confirmação; tudo vai para a Auditoria e pode ser desfeito. Os totais de despesas na DRE e de receitas por recebimento consideram todos os registros que atendem ao pedido. Exclusão de Despesas e Receitas só com pedido expresso, digitando EXCLUIR, com registro na Auditoria e opção de desfazer. Também mostra vencimentos e previsão de caixa e prepara rascunhos de despesa ou de alvará (você confere e envia pela tela). Ela não altera usuários, permissões, CPF/CNPJ ou dados bancários.</div>
-    <div className="executive-ai-messages" aria-live="polite">
-      {messages.length === 0 && <div className="executive-ai-welcome"><Sparkles size={32} /><strong>O que deseja consultar ou ajustar?</strong><p>Pesquise informações, processos, valores, status, regras e pendências nos módulos do sistema.</p><div className="executive-ai-groups">{promptGroups.map(g => <div key={g.title} className="executive-ai-group"><span>{g.title}</span><div className="executive-ai-prompts">{g.items.map(p => <button key={p} type="button" disabled={busy} onClick={() => setQuestion(p)}>{p}</button>)}</div></div>)}</div></div>}
+    <div className="executive-ai-messages" aria-live="polite" ref={messagesRef}>
+      {<div className="executive-ai-welcome"><Sparkles size={32} /><strong>O que deseja consultar ou ajustar?</strong><p>Pesquise informações, processos, valores, status, regras e pendências nos módulos do sistema.</p><div className="executive-ai-groups">{promptGroups.map(g => <div key={g.title} className="executive-ai-group"><span>{g.title}</span><div className="executive-ai-prompts">{g.items.map(p => <button key={p} type="button" disabled={busy} onClick={() => setQuestion(p)}>{p}</button>)}</div></div>)}</div></div>}
       {messages.map((msg, i) => <article key={i} className={`executive-ai-bubble ${msg.role}`}>
         <div className="executive-ai-bubble-head"><strong>{msg.role === 'assistant' ? 'IA' : 'Você'}</strong><button type="button" className="executive-ai-copy" title={copied === i ? 'Copiado!' : 'Copiar'} aria-label="Copiar texto" onClick={e => void copyBubble(i, e)}>{copied === i ? <Check size={15} /> : <Copy size={15} />}</button></div><div className="executive-ai-copy-src">{msg.role === 'assistant' ? <AiMarkdown text={msg.text} /> : <p>{msg.text}</p>}</div>
         {!!msg.response?.details?.length && <FinancialDetails rows={msg.response.details} />}
@@ -192,10 +202,6 @@ export function ExecutiveAiPage() {
       {busy && <div className="executive-ai-loading"><LoaderCircle className="spin" size={18} /> Lendo os lançamentos e calculando… pode levar alguns segundos.</div>}
     </div>
     {error && <div role="alert" className="executive-ai-error">{error}</div>}
-    {messages.length > 0 && <div className="executive-ai-quick">
-      <button type="button" className="executive-ai-quick-toggle" aria-expanded={showPrompts} onClick={() => setShowPrompts(v => !v)}><Sparkles size={15} /> Perguntas prontas {showPrompts ? '▴ ocultar' : '▾ mostrar'}</button>
-      {showPrompts && <div className="executive-ai-groups executive-ai-quick-list">{promptGroups.map(g => <div key={g.title} className="executive-ai-group"><span>{g.title}</span><div className="executive-ai-prompts">{g.items.map(p => <button key={p} type="button" disabled={busy} onClick={() => setQuestion(p)}>{p}</button>)}</div></div>)}</div>}
-    </div>}
     <form onSubmit={submit} className="executive-ai-form"><label htmlFor="executive-ai-question">Sua pergunta ou solicitação</label><textarea id="executive-ai-question" value={question} onChange={e => setQuestion(e.target.value)} onKeyDown={onKeyDown} maxLength={500} rows={3} placeholder="Ex.: Quais comissões estão pendentes? · Altere o valor da despesa TESTE IA para 200" disabled={busy} /><div><small>{question.length}/500 caracteres · Enter envia, Shift+Enter quebra linha</small><span className="executive-ai-form-actions"><button className="secondary-button executive-ai-clear" type="button" disabled={busy} title="Colar" onClick={() => void pasteQuestion()}><ClipboardPaste size={16} /> Colar</button>{messages.length > 0 && <button className="secondary-button executive-ai-clear" type="button" disabled={busy} onClick={() => { setMessages([]); setError(''); setQuestion('') }}><Eraser size={16} /> Limpar conversa</button>}<button className="revenue-button" type="submit" disabled={busy || question.trim().length < 5}><Send size={16} /> Enviar</button></span></div></form>
   </section>
 }
