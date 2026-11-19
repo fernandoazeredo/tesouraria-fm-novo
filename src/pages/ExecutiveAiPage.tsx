@@ -112,7 +112,8 @@ export function ExecutiveAiPage() {
     if (!box || !messages.length) return
     const bubbles = box.querySelectorAll<HTMLElement>('.executive-ai-bubble')
     // Mostra a pergunta recém-enviada (ou a resposta que chegou) logo abaixo das perguntas prontas.
-    const target = busy ? bubbles[bubbles.length - 1] : bubbles[bubbles.length - 1]?.previousElementSibling as HTMLElement | null ?? bubbles[bubbles.length - 1]
+    const target = busy ? bubbles[bubbles.length - 1] : (bubbles[bubbles.length - 1]?.previousElementSibling as HTMLElement | null) ?? bubbles[bubbles.length - 1]
+    box.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     if (target) box.scrollTo({ top: box.scrollTop + target.getBoundingClientRect().top - box.getBoundingClientRect().top - 8, behavior: 'smooth' })
   }, [messages.length, busy])
 
@@ -171,8 +172,9 @@ export function ExecutiveAiPage() {
   return <section className="page-card executive-ai">
     <header className="executive-ai-head"><Sparkles size={27} /><div><span className="eyebrow">Exclusivo do Master principal</span><h1>IA — Assistente Executivo</h1><p>Consulte os módulos e os lançamentos do Tesouraria FM Novo. Para alterar ou classificar lançamentos, peça expressamente (ex.: “classifique as despesas de luz de outubro como Energia Elétrica”) e confirme.</p></div></header>
     <div className="executive-ai-security"><ShieldCheck size={17} /> Uso privado. Nenhuma alteração é gravada sem a sua confirmação; tudo vai para a Auditoria e pode ser desfeito. Os totais de despesas na DRE e de receitas por recebimento consideram todos os registros que atendem ao pedido. Exclusão de Despesas e Receitas só com pedido expresso, digitando EXCLUIR, com registro na Auditoria e opção de desfazer. Também mostra vencimentos e previsão de caixa e prepara rascunhos de despesa ou de alvará (você confere e envia pela tela). Ela não altera usuários, permissões, CPF/CNPJ ou dados bancários.</div>
+    <div className="executive-ai-prompts-card"><div className="executive-ai-welcome"><Sparkles size={32} /><strong>O que deseja consultar ou ajustar?</strong><p>Pesquise informações, processos, valores, status, regras e pendências nos módulos do sistema.</p><div className="executive-ai-groups">{promptGroups.map(g => <div key={g.title} className="executive-ai-group"><span>{g.title}</span><div className="executive-ai-prompts">{g.items.map(p => <button key={p} type="button" disabled={busy} onClick={() => setQuestion(p)}>{p}</button>)}</div></div>)}</div></div></div>
     <div className="executive-ai-messages" aria-live="polite" ref={messagesRef}>
-      {<div className="executive-ai-welcome"><Sparkles size={32} /><strong>O que deseja consultar ou ajustar?</strong><p>Pesquise informações, processos, valores, status, regras e pendências nos módulos do sistema.</p><div className="executive-ai-groups">{promptGroups.map(g => <div key={g.title} className="executive-ai-group"><span>{g.title}</span><div className="executive-ai-prompts">{g.items.map(p => <button key={p} type="button" disabled={busy} onClick={() => setQuestion(p)}>{p}</button>)}</div></div>)}</div></div>}
+      {messages.length === 0 && !busy && <p className="executive-ai-empty">Suas perguntas e as respostas da IA aparecem aqui.</p>}
       {messages.map((msg, i) => <article key={i} className={`executive-ai-bubble ${msg.role}`}>
         <div className="executive-ai-bubble-head"><strong>{msg.role === 'assistant' ? 'IA' : 'Você'}</strong><button type="button" className="executive-ai-copy" title={copied === i ? 'Copiado!' : 'Copiar'} aria-label="Copiar texto" onClick={e => void copyBubble(i, e)}>{copied === i ? <Check size={15} /> : <Copy size={15} />}</button></div><div className="executive-ai-copy-src">{msg.role === 'assistant' ? <AiMarkdown text={msg.text} /> : <p>{msg.text}</p>}</div>
         {!!msg.response?.details?.length && <FinancialDetails rows={msg.response.details} />}
