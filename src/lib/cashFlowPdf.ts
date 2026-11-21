@@ -1,4 +1,3 @@
-import { jsPDF } from 'jspdf'
 import { getCurrentInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import type { Movement } from './cashFlowMovements'
 
@@ -20,7 +19,9 @@ type Report = {
 }
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const dateBR = (s: string) => s ? s.split('-').reverse().join('/') : 'Sem data'
-export function downloadCashFlowPdf(r: Report) {
+// jsPDF é carregado sob demanda para não pesar na abertura do app.
+export async function downloadCashFlowPdf(r: Report) {
+  const { jsPDF } = await import('jspdf')
   const pdf = new jsPDF({ format: 'a4', unit: 'mm', orientation: 'portrait', compress: true })
   const pw = 210, ph = 297, margin = 14, right = pw - margin, content = right - margin
   let y = 15

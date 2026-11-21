@@ -11,8 +11,40 @@ service cloud.firestore {
         : '';
     }
 
+    function emailVerified() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+
+    // O Master principal só é reconhecido com e-mail verificado (login Google).
     function isPrimaryAdminEmail() {
-      return authEmail() == 'fernandoazeredo64@gmail.com';
+      return emailVerified() && authEmail() == 'fernandoazeredo64@gmail.com';
+    }
+
+    // Campos que não podem mudar fora do rascunho/devolução.
+    function unchanged(keys) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(keys);
+    }
+
+    function sameInstallmentCount() {
+      return !('installments' in resource.data)
+        || (request.resource.data.installments is list
+          && request.resource.data.installments.size() == resource.data.installments.size());
+    }
+
+    function expenseValuesLocked() {
+      return unchanged(['valorTotal', 'items', 'fornecedor', 'documento', 'nome', 'unidade',
+        'competencia', 'createdBy', 'createdAt']);
+    }
+
+    function receivableValuesLocked() {
+      return unchanged(['valorAlvara', 'baseCalculo', 'valorLiquidoCliente', 'totalDeducoes',
+        'components', 'agentCommissionValue', 'invoiceValue', 'createdBy', 'createdAt']);
+    }
+
+    function paymentControlValuesLocked() {
+      return unchanged(['amountDue', 'amountReceived', 'grossAmount', 'deductions', 'deductionTotal',
+          'netAmountDue', 'sourceReceivableId', 'beneficiary', 'installmentCount', 'createdBy', 'createdAt'])
+        && sameInstallmentCount();
     }
 
     function isDirectorEmail() {
@@ -64,15 +96,15 @@ service cloud.firestore {
             && request.resource.data.role == 'master'
             && request.resource.data.status == 'active')
           ||
-          (isDirectorEmail()
+          (isDirectorEmail() && emailVerified()
             && request.resource.data.role == 'diretor'
             && request.resource.data.status == 'pending')
           ||
-          (isManagerEmail()
+          (isManagerEmail() && emailVerified()
             && request.resource.data.role == 'gerente'
             && request.resource.data.status == 'pending')
           ||
-          (isTreasuryEmail()
+          (isTreasuryEmail() && emailVerified()
             && request.resource.data.role == 'tesouraria'
             && request.resource.data.status == 'pending')
           ||
@@ -96,12 +128,14 @@ service cloud.firestore {
           || (isPrimaryAdminEmail() && hasRole(['master']))
         )
         && resource.data.status in ['enviado_aprovacao', 'em_analise']
-        && request.resource.data.status in ['aprovado', 'devolvido', 'rejeitado'];
+        && request.resource.data.status in ['aprovado', 'devolvido', 'rejeitado']
+        && expenseValuesLocked();
     }
 
     function operationalExpenseUpdate() {
       return hasRole(['master', 'gerente', 'tesouraria', 'operador'])
         && (hasRole(['master']) || resource.data.createdBy == request.auth.uid)
+        && unchanged(['createdBy', 'createdAt'])
         && (
           (resource.data.status == 'rascunho'
             && request.resource.data.status in ['rascunho', 'enviado_aprovacao'])
@@ -119,11 +153,15 @@ service cloud.firestore {
           ||
           (resource.data.status == 'pago'
             && request.resource.data.status in ['pago', 'arquivado'])
-        );
+        )
+        && expenseValuesLocked();
     }
 
+    // Operador só altera a própria receita; Master e Gerente revisam qualquer uma.
     function originReceivableUpdate() {
       return hasRole(['master', 'gerente', 'operador'])
+        && (hasRole(['master', 'gerente']) || resource.data.createdBy == request.auth.uid)
+        && unchanged(['createdBy', 'createdAt'])
         && (
           (resource.data.status == 'rascunho'
             && request.resource.data.status in ['rascunho', 'enviado_tesouraria'])
@@ -141,7 +179,8 @@ service cloud.firestore {
           ||
           (resource.data.status == 'recebido_tesouraria'
             && request.resource.data.status in ['recebido_tesouraria', 'encerrado'])
-        );
+        )
+        && receivableValuesLocked();
     }
 
     function paymentControlDecision() {
@@ -150,7 +189,8 @@ service cloud.firestore {
           || (isPrimaryAdminEmail() && hasRole(['master']))
         )
         && resource.data.status == 'aguardando_aprovacao'
-        && request.resource.data.status in ['aprovado', 'devolvido', 'rejeitado'];
+        && request.resource.data.status in ['aprovado', 'devolvido', 'rejeitado']
+        && paymentControlValuesLocked();
     }
 
     function paymentControlOperationalUpdate() {
@@ -160,10 +200,12 @@ service cloud.firestore {
             && request.resource.data.status == 'aguardando_aprovacao')
           ||
           (resource.data.status == 'aprovado'
-            && request.resource.data.status in ['aprovado', 'parcialmente_pago', 'pago'])
+            && request.resource.data.status in ['aprovado', 'parcialmente_pago', 'pago']
+            && paymentControlValuesLocked())
           ||
           (resource.data.status == 'parcialmente_pago'
-            && request.resource.data.status in ['parcialmente_pago', 'pago'])
+            && request.resource.data.status in ['parcialmente_pago', 'pago']
+            && paymentControlValuesLocked())
         );
     }
 
@@ -201,7 +243,13 @@ service cloud.firestore {
     function societaryTreasuryUpdate() {
       return hasRole(['master', 'tesouraria'])
         && resource.data.status == 'enviado_tesouraria'
-        && request.resource.data.status in ['pago', 'rejeitado'];
+        && request.resource.data.status in ['pago', 'rejeitado']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'paidValue', 'paymentDate', 'paymentGroupId', 'paymentReference',
+          'paidBy', 'paidByName', 'paidAt', 'updatedAt', 'rejectionReason',
+          'returnedByTreasury', 'returnedByTreasuryName', 'returnedAt'])
+        && (request.resource.data.status != 'pago'
+          || request.resource.data.paidValue == resource.data.transferValue);
     }
 
     function bankPeriodOpen(periodId) {
@@ -260,6 +308,7 @@ service cloud.firestore {
       allow create: if masterRestoreMode() || (
         hasRole(['master', 'gerente', 'tesouraria', 'operador'])
         && request.resource.data.status in ['rascunho', 'enviado_aprovacao']
+        && request.resource.data.createdBy == request.auth.uid
       );
       allow update: if masterRestoreMode()
         || directorExpenseDecision()
@@ -277,6 +326,7 @@ service cloud.firestore {
       allow create: if masterRestoreMode() || (
         hasRole(['master', 'gerente', 'operador'])
         && request.resource.data.status in ['rascunho', 'enviado_tesouraria']
+        && request.resource.data.createdBy == request.auth.uid
       );
       allow update: if masterRestoreMode() || originReceivableUpdate() || treasuryReceivableUpdate();
       allow delete: if masterRestoreMode() || hasRole(['master']);
@@ -400,9 +450,11 @@ service cloud.firestore {
 
     match /auditLogs/{document=**} {
       allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
-      allow create: if masterRestoreMode() || activeUser();
+      // Cada registro precisa identificar o próprio autor; logs só saem na limpeza/restauração controlada.
+      allow create: if masterRestoreMode()
+        || (activeUser() && request.resource.data.userId == request.auth.uid);
       allow update: if masterRestoreMode();
-      allow delete: if masterRestoreMode() || (isPrimaryAdminEmail() && hasRole(['master']));
+      allow delete: if masterRestoreMode() || masterWipeMode();
     }
 
     match /settings/{document=**} {
