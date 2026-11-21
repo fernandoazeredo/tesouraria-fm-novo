@@ -1,4 +1,3 @@
-import { jsPDF } from 'jspdf'
 import { getCurrentInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import { groupByProcess } from './societaryGrouping'
 export type RepassePdfRow = {
@@ -13,7 +12,9 @@ const name=(v:unknown)=>String(v||'Não informado')
 const dateBR=(v:unknown)=>{const t=String(v||'');return /^\d{4}-\d{2}-\d{2}$/.test(t)?t.slice(8,10)+'/'+t.slice(5,7)+'/'+t.slice(0,4):name(v)}
 const competenceBR=(v:unknown)=>{const t=String(v||'');return /^\d{4}-\d{2}$/.test(t)?t.slice(5,7)+'/'+t.slice(0,4):name(v)}
 const statusBR:Record<string,string>={apurado:'Apurado',aguardando_aprovacao:'Aguardando aprovação',devolvido:'Devolvido',rejeitado:'Rejeitado',aprovado:'Aprovado',enviado_tesouraria:'Enviado à Tesouraria',pago:'Pago',cancelado:'Cancelado'}
-export function saveRepassePdf(rows:RepassePdfRow[],userName:string,label:string,fileName:string) {
+// jsPDF é carregado sob demanda para não pesar na abertura do app.
+export async function saveRepassePdf(rows:RepassePdfRow[],userName:string,label:string,fileName:string) {
+  const { jsPDF } = await import('jspdf')
   const pdf=new jsPDF({unit:'mm',format:'a4'})
   const w=pdf.internal.pageSize.width, h=pdf.internal.pageSize.height, margin=15
   let y=19

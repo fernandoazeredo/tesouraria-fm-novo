@@ -24,9 +24,11 @@ export function receivableEditMode(status: unknown): ReceivableEditMode | null {
   return null
 }
 
-export function canEditReceivable(record: Record<string, unknown> | null | undefined, role: unknown): boolean {
+export function canEditReceivable(record: Record<string, unknown> | null | undefined, role: unknown, uid?: unknown): boolean {
   if (!record) return false
   if (!RECEIVABLE_EDITOR_ROLES.includes(String(role ?? '') as typeof RECEIVABLE_EDITOR_ROLES[number])) return false
+  // Espelha firestore.rules: o operador só edita a receita que ele mesmo lançou.
+  if (role === 'operador' && uid !== undefined && record.createdBy !== uid) return false
   // Acordos trabalhistas e outras receitas (tipoRecebimento preenchido) possuem
   // formulários próprios; este editor atende somente o Demonstrativo de Alvarás.
   if (record.tipoRecebimento) return false

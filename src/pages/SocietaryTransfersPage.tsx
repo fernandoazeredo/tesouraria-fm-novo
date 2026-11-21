@@ -635,7 +635,7 @@ export function SocietaryTransfersPage() {
   async function exportRepassePdf(items: AnyRecord[], all: boolean) {
     if (!profile || items.length===0) return
     try {
-      saveRepassePdf(items as RepassePdfRow[], profile.displayName||profile.email||'', all?'Extrato Geral do Repasse Societário':'Repasse Societário — Memória de Cálculo', all?'Extrato_Geral_Repasse_Societario.pdf':'Memoria_Repasse_'+String(items[0].processo||items[0].id).replace(/[^0-9A-Za-z.-]/g,'_')+'.pdf')
+      await saveRepassePdf(items as RepassePdfRow[], profile.displayName||profile.email||'', all?'Extrato Geral do Repasse Societário':'Repasse Societário — Memória de Cálculo', all?'Extrato_Geral_Repasse_Societario.pdf':'Memoria_Repasse_'+String(items[0].processo||items[0].id).replace(/[^0-9A-Za-z.-]/g,'_')+'.pdf')
       await audit(profile, all?'Extrato geral do Repasse Societário gerado':'PDF individual do Repasse Societário gerado', (all?'Registros: '+items.length:'CNJ: '+String(items[0].processo||'não informado')), all?undefined:items[0].id)
     } catch (error) {
       window.alert('Não foi possível concluir a emissão do PDF e seu registro: '+String(error))

@@ -1,8 +1,6 @@
 import { createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { flushSync } from 'react-dom'
-import html2canvas from 'html2canvas'
-import { jsPDF } from 'jspdf'
 import { OfficialFinancialDocument, type OfficialDocumentKind, type FinancialDocumentRecord } from '../components/OfficialFinancialDocument'
 
 /**
@@ -10,6 +8,8 @@ import { OfficialFinancialDocument, type OfficialDocumentKind, type FinancialDoc
  * Faz captura do HTML real, sem recriar o documento via comandos PDF de texto.
  */
 export async function renderFinancialDocumentPdf(kind: OfficialDocumentKind, record: FinancialDocumentRecord, emittedAt: string): Promise<Uint8Array> {
+  // Bibliotecas de PDF carregadas sob demanda.
+  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')])
   const host = document.createElement('div')
   host.setAttribute('data-official-financial-pdf', 'true')
   host.style.cssText = 'position:fixed;left:0;top:0;width:794px;z-index:-10;pointer-events:none;'

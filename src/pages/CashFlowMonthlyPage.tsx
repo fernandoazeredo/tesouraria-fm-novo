@@ -47,7 +47,7 @@ export function CashFlowMonthlyPage() {
     setPdfBusy(true)
     setPdfError('')
     try {
-      downloadCashFlowPdf({
+      await downloadCashFlowPdf({
         month, monthTitle: monthLabel(month), account: accountLabels[scope],
         user: profile.displayName || profile.email, issuedAt: new Date(),
         actualIn, actualOut, plannedIn, plannedOut, pending,
