@@ -127,7 +127,7 @@ function printExpenseExtract(records: AnyRecord[], classificationMap: Map<string
 }
 
 function Header({ onNew, onExtract }: { onNew: () => void; onExtract: () => void }) {
-  return <div className="page-heading"><div><span className="eyebrow">Tesouraria</span><h1>Despesas</h1><p>Criação, documentos, movimentação financeira, correção e acompanhamento do demonstrativo.</p></div><div className="quick-actions"><button className="outline-expense-button" type="button" onClick={onExtract}><FileText size={18} /> Extrato de Despesas</button><button className="expense-button" type="button" onClick={onNew}><Plus size={18} /> Nova Despesa</button></div></div>
+  return <div className="page-heading"><div><span className="eyebrow">Tesouraria</span><h1>Despesas</h1><p>A Tesouraria registra e processa as despesas, faz o upload no sistema de toda a documentação comprobatória, informa a conta em que o pagamento será realizado e encaminha o lançamento para aprovação. Após a autorização, efetua e registra o pagamento. Os documentos devem permanecer anexados no sistema, evitando o envio e a circulação de documentos em papel.</p></div><div className="quick-actions"><button className="outline-expense-button" type="button" onClick={onExtract}><FileText size={18} /> Extrato de Despesas</button><button className="expense-button" type="button" onClick={onNew}><Plus size={18} /> Nova Despesa</button></div></div>
 }
 
 function ExpenseModal({ record, onClose }: { record?: AnyRecord | null; onClose: () => void }) {
