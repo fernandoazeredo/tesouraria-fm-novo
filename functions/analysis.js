@@ -1,5 +1,6 @@
 // Análise financeira gerencial: os números são calculados aqui, a partir dos lançamentos do app;
 // a IA só interpreta (não inventa valores). Somente leitura.
+import { applyWindow } from './time-window.js';
 import { FieldPath } from 'firebase-admin/firestore';
 import { normalizeText, dateSP } from './ai-core.js';
 import { readAll } from './financial-query.js';
@@ -83,8 +84,13 @@ const INSTRUCTIONS = [
 export async function buildAnalysisAnswer(db, question, { key, model, now = new Date() }) {
   const today = dateSP(now.toISOString());
   const all = name => readAll(db.collection(name).orderBy(FieldPath.documentId())).then(docs => docs.map(d => ({ id: d.id, ...d.data() })));
-  const [receivables, expenses, classifications, alvaraTransfers, agentCommissions, societaryTransfers] = await Promise.all(
+  const loaded = await Promise.all(
     ['receivables', 'expenses', 'managerialClassifications', 'alvaraTransfers', 'agentCommissions', 'societaryTransfers'].map(all));
+  // Janela padrão de 12 meses; classificações (managerialClassifications) não são filtradas.
+  const win = list => applyWindow(list, question, { now });
+  const [receivables, expenses, alvaraTransfers, agentCommissions, societaryTransfers] = [loaded[0], loaded[1], loaded[3], loaded[4], loaded[5]].map(list => win(list).items);
+  const classifications = loaded[2];
+  const fullHistory = win([]).full;
   const metrics = analysisMetrics({ receivables, expenses, classifications, alvaraTransfers, agentCommissions, societaryTransfers }, today);
   let caixa = null;
   try {
@@ -93,7 +99,7 @@ export async function buildAnalysisAnswer(db, question, { key, model, now = new 
     const d = dueReport(moves, { today, days: 7 });
     caixa = { previsao_30_dias: f, vencimentos_7_dias: d };
   } catch (error) { console.warn('Previsão indisponível', error?.name); }
-  const payload = { hoje: today, pergunta: question, ...metrics, caixa };
+  const payload = { hoje: today, pergunta: question, janela: fullHistory ? 'histórico completo' : 'últimos 12 meses + lançamentos em aberto (cite o ano para incluir períodos anteriores)', ...metrics, caixa };
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
