@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { collection, onSnapshot, type DocumentData } from 'firebase/firestore'
 import { CalendarDays, Landmark } from 'lucide-react'
 import { db } from '../lib/firebase'
@@ -173,12 +172,12 @@ function laborAgreementRows(record: AnyRecord, regime: Regime, group: string): D
   return rows
 }
 
-export function DreRegimeViewEnhancer() {
+/** DRE gerencial com visão Competência/Caixa, renderizada pela própria página da DRE. */
+export function DreRegimeView() {
   const savedRange = useMemo(initialRange, [])
   const [expenses, setExpenses] = useState<AnyRecord[]>([])
   const [revenues, setRevenues] = useState<AnyRecord[]>([])
   const [classifications, setClassifications] = useState<AnyRecord[]>([])
-  const [target, setTarget] = useState<HTMLElement | null>(null)
   const [regime, setRegime] = useState<Regime>('competencia')
   const [startDate, setStartDate] = useState(savedRange.start)
   const [endDate, setEndDate] = useState(savedRange.end)
@@ -196,28 +195,6 @@ export function DreRegimeViewEnhancer() {
     return () => { offExpenses(); offRevenues(); offClassifications() }
   }, [])
 
-  useEffect(() => {
-    const sync = () => {
-      const original = document.querySelector<HTMLElement>('.dre-report-card:not(.dre-regime-card)')
-      if (!original) { setTarget(null); return }
-      original.style.display = 'none'
-      let mount = document.getElementById('dre-regime-view-root')
-      if (!mount) {
-        mount = document.createElement('div')
-        mount.id = 'dre-regime-view-root'
-        original.parentElement?.insertBefore(mount, original)
-      }
-      setTarget(mount)
-    }
-    sync()
-    const observer = new MutationObserver(sync)
-    observer.observe(document.body, { childList: true, subtree: true })
-    return () => {
-      observer.disconnect()
-      document.querySelector<HTMLElement>('.dre-report-card:not(.dre-regime-card)')?.style.removeProperty('display')
-      document.getElementById('dre-regime-view-root')?.remove()
-    }
-  }, [])
 
   const classificationMap = useMemo(() => new Map(classifications.map((item) => [item.id, item])), [classifications])
 
@@ -309,9 +286,7 @@ export function DreRegimeViewEnhancer() {
     applyRange(availableRange)
   }
 
-  if (!target) return null
-
-  return createPortal(
+  return (
     <section className="page-card dre-report-card dre-regime-card">
       <div className="dre-section-heading"><div><span className="eyebrow">Demonstrativo Gerencial</span><h2>Resultado do Período</h2><p>Alterne entre competência econômica e movimentação efetiva de caixa e consulte qualquer intervalo de datas.</p></div></div>
 
@@ -345,7 +320,6 @@ export function DreRegimeViewEnhancer() {
         const net = values.revenue - values.expense
         return <div className={`dre-statement-row ${isExpense ? 'expense' : 'revenue'}`} key={label}><span>{label}</span><span>{values.count}</span><strong>{isExpense ? `(${money.format(values.expense)})` : money.format(net)}</strong></div>
       })}<div className="dre-statement-row total"><span>RESULTADO {regime === 'caixa' ? 'DE CAIXA' : 'GERENCIAL'}</span><span>{rows.length}</span><strong>{money.format(balance)}</strong></div></div>
-    </section>,
-    target,
+    </section>
   )
 }
