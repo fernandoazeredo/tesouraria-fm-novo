@@ -1,0 +1,36 @@
+// Massa fictícia da Dashboard Financeira (hoje = 23/11/2026). Usada no teste de cálculos do emulador.
+const alvara = (id, status, valorAlvara, extra) => ({ id, status, valorAlvara, origem: 'Alvará', processo: `TESTE-${id}`, reclamante: 'CLIENTE FICTÍCIO', ...extra })
+export const DASHBOARD_SEED = {
+  receivables: [
+    alvara('r1', 'recebido_tesouraria', 50000, { receiptDate: '2026-11-10' }),
+    alvara('r2', 'recebido_tesouraria', 30000, { receiptDate: '2026-11-03' }),
+    alvara('r3', 'encerrado', 40000, { receiptDate: '2026-10-15' }),
+    alvara('r4', 'recebido_tesouraria', 20000, { receiptDate: '2026-09-12' }),
+    { id: 'r5', status: 'recebido_tesouraria', tipoRecebimento: 'outras_receitas', origem: 'Outras receitas', valorAlvara: 5000, receiptDate: '2026-11-05', descricao: 'Outra receita' },
+    alvara('r6', 'enviado_tesouraria', 9900, { dataPrevista: '2026-11-18' }),
+    alvara('r7', 'enviado_tesouraria', 22000, { dataPrevista: '2026-11-26' }),
+    alvara('r8', 'enviado_tesouraria', 18500, { dataPrevista: '2026-12-04' }),
+    alvara('r9', 'enviado_tesouraria', 7000, { dataPrevista: '2027-01-10' }),
+    { id: 'r10', status: 'enviado_tesouraria', tipoRecebimento: 'acordo_trabalhista', processo: 'TESTE-ACORDO', reclamante: 'CLIENTE FICTÍCIO', parcelas: [{ valorParcela: 3000, dataPrevista: '2026-12-20' }] },
+  ],
+  expenses: [
+    { id: 'e1', status: 'pago', valorTotal: 12000, paymentDate: '2026-11-05', expenseAccountCode: '4.1', expenseAccountName: 'Folha' },
+    { id: 'e2', status: 'pago', valorTotal: 6500, paymentDate: '2026-11-06', expenseAccountCode: '4.2', expenseAccountName: 'Aluguel' },
+    { id: 'e3', status: 'arquivado', valorTotal: 3500, paymentDate: '2026-11-08', expenseAccountCode: '4.1', expenseAccountName: 'Folha' },
+    { id: 'e4', status: 'aprovado', valorTotal: 2000, paymentDate: '2026-11-20', expenseAccountCode: '4.3', expenseAccountName: 'Impostos', fornecedor: 'DARF' },
+    { id: 'e5', status: 'aprovado', valorTotal: 1500, paymentDate: '2026-11-27', expenseAccountCode: '4.4', expenseAccountName: 'Sistemas', fornecedor: 'Sistemas' },
+    { id: 'e6', status: 'aprovado', valorTotal: 800, paymentDate: '2026-12-10', fornecedor: 'Material' },
+    { id: 'e7', status: 'pago', valorTotal: 10000, paymentDate: '2026-10-05', expenseAccountCode: '4.1', expenseAccountName: 'Folha' },
+    { id: 'e8', status: 'pago', valorTotal: 4000, paymentDate: '2026-10-07', expenseAccountCode: '4.2', expenseAccountName: 'Aluguel' },
+    { id: 'e9', status: 'rejeitado', valorTotal: 700 },
+    { id: 'e10', status: 'rascunho', valorTotal: 100 },
+    { id: 'e11', status: 'em_analise', valorTotal: 300 },
+    { id: 'e12', status: 'enviado_aprovacao', valorTotal: 400 },
+    { id: 'e13', status: 'devolvido', valorTotal: 50 },
+    { id: 'e14', status: 'pago', valorTotal: 5000, paymentDate: '2026-09-10' },
+  ],
+  alvaraTransfers: [{ id: 't1', status: 'aprovado', processo: 'TESTE-REPASSE', installments: [{ value: 4200, dueDate: '2026-11-28' }, { value: 1000, paid: true, paidDate: '2026-11-01' }] }],
+  agentCommissions: [{ id: 'c1', status: 'aguardando_aprovacao', installments: [{ value: 900, dueDate: '2026-11-25' }] }],
+  societaryTransfers: [{ id: 's1', status: 'aprovado', processo: 'TESTE-SOCIETARIO', transferValue: 3000, paidValue: 1000, dueDate: '2026-12-15' }],
+  managerialClassifications: [{ id: 'placeholder', note: 'vazio' }],
+}

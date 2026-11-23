@@ -93,3 +93,49 @@ export function pendingTransfers(all: Movement[]) {
   })
   return { rows, total: rows.reduce((s, r) => s + r.value, 0) }
 }
+
+/** Intervalo equivalente imediatamente anterior (para comparação). "tudo" não tem anterior. */
+export function previousRange(period: Period, today = new Date()): { start: string; end: string } | null {
+  const y = today.getFullYear(), m = today.getMonth()
+  if (period === 'mes') return { start: iso(new Date(y, m - 1, 1)), end: iso(new Date(y, m, 0)) }
+  if (period === 'trimestre') { const q = Math.floor(m / 3) * 3; return { start: iso(new Date(y, q - 3, 1)), end: iso(new Date(y, q, 0)) } }
+  if (period === 'semestre') { const h = m < 6 ? 0 : 6; return { start: iso(new Date(y, h - 6, 1)), end: iso(new Date(y, h, 0)) } }
+  if (period === 'ano') return { start: `${y - 1}-01-01`, end: `${y - 1}-12-31` }
+  return null
+}
+
+/** Variação percentual; null quando não há base de comparação. */
+export const pctChange = (current: number, previous: number) => previous > 0 ? ((current - previous) / previous) * 100 : null
+
+/** Saldo acumulado mês a mês da série do gráfico. */
+export function cumulativeBalance(series: { receitas: number; despesas: number }[]) {
+  let acc = 0
+  return series.map((row) => (acc += row.receitas - row.despesas))
+}
+
+const daysBetween = (from: string, to: string) => Math.round((Date.UTC(+to.slice(0, 4), +to.slice(5, 7) - 1, +to.slice(8, 10)) - Date.UTC(+from.slice(0, 4), +from.slice(5, 7) - 1, +from.slice(8, 10))) / 86400000)
+
+/** Próximas saídas previstas (atrasadas primeiro), para a lista de vencimentos. */
+export function upcomingPayments(all: Movement[], today = new Date(), limit = 4) {
+  const t = iso(today)
+  return all.filter((m) => m.stage === 'previsto' && m.direction === 'saida' && m.date)
+    .sort((a, b) => a.date.localeCompare(b.date)).slice(0, limit)
+    .map((m) => ({ ...m, late: m.date < t }))
+}
+
+/** Entradas previstas: atrasadas + próximos 30 dias, semanas, recebido no mês e lista. */
+export function receivablesOutlook(all: Movement[], today = new Date(), limit = 3) {
+  const t = iso(today), limit30 = iso(addDays(today, 30)), monthStart = t.slice(0, 7) + '-01'
+  const planned = all.filter((m) => m.stage === 'previsto' && m.direction === 'entrada' && m.date && m.date <= limit30)
+    .sort((a, b) => a.date.localeCompare(b.date))
+  const late = planned.filter((m) => m.date < t)
+  const next = planned.filter((m) => m.date >= t)
+  const sum = (list: Movement[]) => list.reduce((s, m) => s + m.value, 0)
+  const weeks = [0, 0, 0, 0]
+  for (const m of next) weeks[Math.min(3, Math.floor(daysBetween(t, m.date) / 8))] += m.value
+  const received = sum(all.filter((m) => m.stage === 'realizado' && m.direction === 'entrada' && m.date >= monthStart && m.date <= t))
+  return {
+    total: sum(planned), count: planned.length, lateValue: sum(late), lateCount: late.length, nextValue: sum(next), received, weeks,
+    items: planned.slice(0, limit).map((m) => ({ ...m, days: daysBetween(t, m.date) })),
+  }
+}
