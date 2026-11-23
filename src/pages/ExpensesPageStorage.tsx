@@ -9,6 +9,7 @@ import { useAuth } from '../auth/AuthContext'
 import { ExpenseManagementDashboard } from '../components/ExpenseManagementDashboard'
 import { FinancialMovementCard } from '../components/FinancialMovementCard'
 import { WorkflowStatusBadge } from '../components/WorkflowStatusBadge'
+import { ExpenseFiltersPopover, type ExpenseFilterState } from '../components/ExpenseFiltersPanel'
 import { DEFAULT_BANK_ACCOUNT_ID, getBankAccount, type BankAccount } from '../data/bankAccounts'
 import type { ChartOfAccount } from '../data/chartOfAccounts'
 import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
@@ -392,6 +393,9 @@ export function ExpensesPageStorage() {
   const [attachmentTarget, setAttachmentTarget] = useState<AnyRecord | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [search, setSearch] = useState('')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [filters, setFilters] = useState<ExpenseFilterState>({ status: '', competence: '' })
+  const activeFilterCount = Number(Boolean(filters.status)) + Number(Boolean(filters.competence))
   const [managerialClassifications, setManagerialClassifications] = useState<AnyRecord[]>([])
   const { records, loading } = useExpenses()
 
@@ -408,7 +412,12 @@ export function ExpensesPageStorage() {
     }
   }, [params])
 
-  const filtered = records.filter((item) => `${item.nome ?? ''} ${item.fornecedor ?? ''} ${item.competencia ?? ''} ${item.categoria ?? ''} ${item.expenseAccountCode ?? ''} ${item.expenseAccountName ?? ''}`.toLowerCase().includes(search.toLowerCase()))
+  const searched = records.filter((item) => `${item.nome ?? ''} ${item.fornecedor ?? ''} ${item.competencia ?? ''} ${item.categoria ?? ''} ${item.expenseAccountCode ?? ''} ${item.expenseAccountName ?? ''}`.toLowerCase().includes(search.toLowerCase()))
+  const filterCompetences = Array.from(new Set(searched.map((item) => String(item.competencia ?? '')).filter((value) => /^\d{4}-\d{2}$/.test(value)))).sort((a, b) => b.localeCompare(a))
+  const filtered = searched.filter((item) => {
+    const statusLabel = String(expenseStatusLabels[item.status] || item.status || '—')
+    return (!filters.status || statusLabel === filters.status) && (!filters.competence || String(item.competencia ?? '') === filters.competence)
+  })
   const close = () => { setOpen(false); setEditing(null); setParams({}) }
 
   async function confirmDeleteDraft() {
@@ -438,7 +447,7 @@ export function ExpensesPageStorage() {
   return <>
     <Header onNew={() => { setEditing(null); setOpen(true) }} onExtract={() => printExpenseExtract(records, managerialClassificationMap)} />
     <ExpenseManagementDashboard records={records} loading={loading} />
-    <section className="page-card module-card expense-module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por responsável, fornecedor, competência, código ou conta" /></div><button className="secondary-button"><Filter size={17} /> Filtros</button></div>
+    <section className="page-card module-card expense-module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por responsável, fornecedor, competência, código ou conta" /></div><button className={`secondary-button${activeFilterCount > 0 ? ' filter-button-active' : ''}`} type="button" title={activeFilterCount > 0 ? `${activeFilterCount} filtro(s) ativo(s)` : 'Filtrar despesas'} onClick={() => setFiltersOpen((current) => !current)}><Filter size={17} /> Filtros</button>{filtersOpen && <ExpenseFiltersPopover filters={filters} onChange={setFilters} onClose={() => setFiltersOpen(false)} competences={filterCompetences} visibleCount={filtered.length} />}</div>
       {loading ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando despesas</strong></div> : filtered.length === 0 ? <div className="module-empty"><ReceiptText size={34} /><strong>Nenhuma despesa encontrada</strong><span>Clique em Nova Despesa para preencher o primeiro demonstrativo.</span></div> : <div className="data-table review-expenses-table"><div className="data-row data-head"><span>Competência</span><span>Fornecedor / Favorecido</span><span>Plano de Contas</span><span>Status</span><span className="numeric">Valor</span><span>Ações</span></div>{filtered.map((item) => {
         const isDraft = item.status === 'rascunho'
         const canEdit = profile?.role === 'master' || item.createdBy === profile?.uid
