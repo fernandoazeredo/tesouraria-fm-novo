@@ -42,7 +42,8 @@ async function iaGranted(uid,token,profile){
 }
 export const executiveAiAsk=onCall({
   region:'southamerica-east1', memory:'512MiB', timeoutSeconds:150, maxInstances:3,
-  enforceAppCheck:false, secrets:[geminiKey],
+  // Exige App Check: só o app publicado (reCAPTCHA Enterprise) chama a IA.
+  enforceAppCheck:true, secrets:[geminiKey],
 },async request=>{
   const action=String(request.data?.action||'ask');
   if(action==='apply') return applyHandler(request);
