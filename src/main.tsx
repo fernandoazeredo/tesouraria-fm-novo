@@ -4,7 +4,6 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './auth/AuthContext'
 import { DreRegimeViewEnhancer } from './components/DreRegimeViewEnhancer'
-import { DynamicAgreementInstallmentsEnhancer } from './components/DynamicAgreementInstallmentsEnhancer'
 import { ExpenseFiltersPanel } from './components/ExpenseFiltersPanel'
 import { ExpenseSettlementPanel } from './components/ExpenseSettlementPanel'
 import { SocietaryRouteAccessGuard } from './components/SocietaryRouteAccessGuard'
@@ -37,7 +36,6 @@ createRoot(document.getElementById('root')!).render(
         <ThemeControls />
         <SocietaryRouteAccessGuard />
         <DreRegimeViewEnhancer />
-        <DynamicAgreementInstallmentsEnhancer />
         <App />
         <ExpenseFiltersPanel />
         <ExpenseSettlementPanel />
