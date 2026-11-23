@@ -49,3 +49,26 @@ jobs:
           npm install --no-save --no-package-lock firebase-tools @firebase/rules-unit-testing
       - name: Executar testes de regras com emulador Firestore
         run: npx firebase emulators:exec --only firestore --project demo-tesouraria-fm "node --experimental-strip-types --test --test-concurrency=1 tests/emulator/*.emulator.test.mjs"
+
+  emulador-storage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Java para emulador Firestore
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Instalar dependencias e emuladores
+        run: |
+          npm install --no-package-lock
+          npm install --no-save --no-package-lock firebase-tools @firebase/rules-unit-testing
+      - name: Executar testes de permissoes no emulador Storage + Firestore
+        run: npx firebase emulators:exec --only firestore,storage --project demo-tesouraria-fm-storage "node --experimental-strip-types --test --test-concurrency=1 tests/emulator/storage-permissions.emulator.test.mjs"
