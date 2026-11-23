@@ -96,6 +96,7 @@ service firebase.storage {
     match /demonstrativos/{allPaths=**} {
       allow read: if demonstrativeAuthorizedUser();
       allow create: if demonstrativeAuthorizedUser()
+        && resource == null
         && validAttachmentSize()
         && request.resource.contentType == 'application/pdf';
       allow update: if false;
