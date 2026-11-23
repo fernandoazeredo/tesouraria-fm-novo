@@ -63,6 +63,30 @@ test('comissão aprovada: pagamento permitido, troca de valor devido negada', as
   await assertSucceeds(updateDoc(doc(db, 'agentCommissions', 'c1'), { installments: [{ value: 250, paid: true }, { value: 250, paid: false }], status: 'parcialmente_pago', paidValue: 250 }))
 })
 
+test('comissão aprovada: tesouraria não altera o valor de uma parcela ao pagar', async () => {
+  const plan = { status: 'aprovado', amountDue: 500, installments: [{ value: 250, paid: false }, { value: 250, paid: false }] }
+  await seed('agentCommissions', 'c2', plan)
+  const db = dbAs(users.tesouraria)
+  await assertFails(updateDoc(doc(db, 'agentCommissions', 'c2'), { installments: [{ value: 400, paid: true }, { value: 100, paid: false }], status: 'parcialmente_pago' }))
+  await assertFails(updateDoc(doc(db, 'agentCommissions', 'c2'), { installments: [{ value: 250, paid: true }, { value: 999, paid: false }], status: 'parcialmente_pago' }))
+})
+
+test('comissão com 12 parcelas: paga a 1ª sem mudar valores; alterar a 10ª é negado', async () => {
+  const installments = Array.from({ length: 12 }, () => ({ value: 100, paid: false }))
+  await seed('agentCommissions', 'c12', { status: 'aprovado', amountDue: 1200, installments })
+  const db = dbAs(users.tesouraria)
+  const paidFirst = installments.map((item, index) => index === 0 ? { ...item, paid: true } : item)
+  const changedTenth = paidFirst.map((item, index) => index === 9 ? { ...item, value: 1 } : item)
+  await assertFails(updateDoc(doc(db, 'agentCommissions', 'c12'), { installments: changedTenth, status: 'parcialmente_pago' }))
+  await assertSucceeds(updateDoc(doc(db, 'agentCommissions', 'c12'), { installments: paidFirst, status: 'parcialmente_pago' }))
+})
+
+test('repasse de alvará: plano devolvido pode ser replanejado com novos valores', async () => {
+  const plan = { status: 'devolvido', amountDue: 500, installments: [{ value: 500, paid: false }] }
+  await seed('alvaraTransfers', 't1', plan)
+  await assertSucceeds(updateDoc(doc(dbAs(users.tesouraria), 'alvaraTransfers', 't1'), { status: 'aguardando_aprovacao', installments: [{ value: 200, paid: false }, { value: 300, paid: false }] }))
+})
+
 test('operador não edita rascunho de receita de outro operador; gerente pode', async () => {
   await seed('receivables', 'r1', { status: 'rascunho', valorAlvara: 100, createdBy: 'op2' })
   await assertFails(updateDoc(doc(dbAs(users.operador), 'receivables', 'r1'), { valorAlvara: 200 }))

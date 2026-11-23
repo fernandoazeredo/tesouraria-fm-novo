@@ -41,10 +41,163 @@ service cloud.firestore {
         'components', 'agentCommissionValue', 'invoiceValue', 'createdBy', 'createdAt']);
     }
 
+    // Valor de cada parcela (até 60, limite da tela) não muda após o envio para aprovação.
+    // Regras não têm laço: cada posição é conferida explicitamente, em faixas
+    // (4/8/16/32/60) para avaliar só o necessário e ficar longe do limite de 1000 operações.
+    function installmentValuesLocked() {
+      return !('installments' in resource.data)
+        || installmentsInBucket(request.resource.data.installments, resource.data.installments,
+          resource.data.installments.size());
+    }
+
+    function installmentsInBucket(a, b, n) {
+      return n <= 4 ? installmentsUpTo4(a, b, n)
+        : n <= 8 ? installmentsUpTo8(a, b, n)
+        : n <= 16 ? installmentsUpTo16(a, b, n)
+        : n <= 32 ? installmentsUpTo32(a, b, n)
+        : n <= 60 && installmentsUpTo60(a, b, n);
+    }
+
+    function installmentsUpTo4(a, b, n) {
+      return (n <= 0 || a[0].value == b[0].value)
+        && (n <= 1 || a[1].value == b[1].value)
+        && (n <= 2 || a[2].value == b[2].value)
+        && (n <= 3 || a[3].value == b[3].value);
+    }
+
+    function installmentsUpTo8(a, b, n) {
+      return (n <= 0 || a[0].value == b[0].value)
+        && (n <= 1 || a[1].value == b[1].value)
+        && (n <= 2 || a[2].value == b[2].value)
+        && (n <= 3 || a[3].value == b[3].value)
+        && (n <= 4 || a[4].value == b[4].value)
+        && (n <= 5 || a[5].value == b[5].value)
+        && (n <= 6 || a[6].value == b[6].value)
+        && (n <= 7 || a[7].value == b[7].value);
+    }
+
+    function installmentsUpTo16(a, b, n) {
+      return (n <= 0 || a[0].value == b[0].value)
+        && (n <= 1 || a[1].value == b[1].value)
+        && (n <= 2 || a[2].value == b[2].value)
+        && (n <= 3 || a[3].value == b[3].value)
+        && (n <= 4 || a[4].value == b[4].value)
+        && (n <= 5 || a[5].value == b[5].value)
+        && (n <= 6 || a[6].value == b[6].value)
+        && (n <= 7 || a[7].value == b[7].value)
+        && (n <= 8 || a[8].value == b[8].value)
+        && (n <= 9 || a[9].value == b[9].value)
+        && (n <= 10 || a[10].value == b[10].value)
+        && (n <= 11 || a[11].value == b[11].value)
+        && (n <= 12 || a[12].value == b[12].value)
+        && (n <= 13 || a[13].value == b[13].value)
+        && (n <= 14 || a[14].value == b[14].value)
+        && (n <= 15 || a[15].value == b[15].value);
+    }
+
+    function installmentsUpTo32(a, b, n) {
+      return (n <= 0 || a[0].value == b[0].value)
+        && (n <= 1 || a[1].value == b[1].value)
+        && (n <= 2 || a[2].value == b[2].value)
+        && (n <= 3 || a[3].value == b[3].value)
+        && (n <= 4 || a[4].value == b[4].value)
+        && (n <= 5 || a[5].value == b[5].value)
+        && (n <= 6 || a[6].value == b[6].value)
+        && (n <= 7 || a[7].value == b[7].value)
+        && (n <= 8 || a[8].value == b[8].value)
+        && (n <= 9 || a[9].value == b[9].value)
+        && (n <= 10 || a[10].value == b[10].value)
+        && (n <= 11 || a[11].value == b[11].value)
+        && (n <= 12 || a[12].value == b[12].value)
+        && (n <= 13 || a[13].value == b[13].value)
+        && (n <= 14 || a[14].value == b[14].value)
+        && (n <= 15 || a[15].value == b[15].value)
+        && (n <= 16 || a[16].value == b[16].value)
+        && (n <= 17 || a[17].value == b[17].value)
+        && (n <= 18 || a[18].value == b[18].value)
+        && (n <= 19 || a[19].value == b[19].value)
+        && (n <= 20 || a[20].value == b[20].value)
+        && (n <= 21 || a[21].value == b[21].value)
+        && (n <= 22 || a[22].value == b[22].value)
+        && (n <= 23 || a[23].value == b[23].value)
+        && (n <= 24 || a[24].value == b[24].value)
+        && (n <= 25 || a[25].value == b[25].value)
+        && (n <= 26 || a[26].value == b[26].value)
+        && (n <= 27 || a[27].value == b[27].value)
+        && (n <= 28 || a[28].value == b[28].value)
+        && (n <= 29 || a[29].value == b[29].value)
+        && (n <= 30 || a[30].value == b[30].value)
+        && (n <= 31 || a[31].value == b[31].value);
+    }
+
+    function installmentsUpTo60(a, b, n) {
+      return (n <= 0 || a[0].value == b[0].value)
+        && (n <= 1 || a[1].value == b[1].value)
+        && (n <= 2 || a[2].value == b[2].value)
+        && (n <= 3 || a[3].value == b[3].value)
+        && (n <= 4 || a[4].value == b[4].value)
+        && (n <= 5 || a[5].value == b[5].value)
+        && (n <= 6 || a[6].value == b[6].value)
+        && (n <= 7 || a[7].value == b[7].value)
+        && (n <= 8 || a[8].value == b[8].value)
+        && (n <= 9 || a[9].value == b[9].value)
+        && (n <= 10 || a[10].value == b[10].value)
+        && (n <= 11 || a[11].value == b[11].value)
+        && (n <= 12 || a[12].value == b[12].value)
+        && (n <= 13 || a[13].value == b[13].value)
+        && (n <= 14 || a[14].value == b[14].value)
+        && (n <= 15 || a[15].value == b[15].value)
+        && (n <= 16 || a[16].value == b[16].value)
+        && (n <= 17 || a[17].value == b[17].value)
+        && (n <= 18 || a[18].value == b[18].value)
+        && (n <= 19 || a[19].value == b[19].value)
+        && (n <= 20 || a[20].value == b[20].value)
+        && (n <= 21 || a[21].value == b[21].value)
+        && (n <= 22 || a[22].value == b[22].value)
+        && (n <= 23 || a[23].value == b[23].value)
+        && (n <= 24 || a[24].value == b[24].value)
+        && (n <= 25 || a[25].value == b[25].value)
+        && (n <= 26 || a[26].value == b[26].value)
+        && (n <= 27 || a[27].value == b[27].value)
+        && (n <= 28 || a[28].value == b[28].value)
+        && (n <= 29 || a[29].value == b[29].value)
+        && (n <= 30 || a[30].value == b[30].value)
+        && (n <= 31 || a[31].value == b[31].value)
+        && (n <= 32 || a[32].value == b[32].value)
+        && (n <= 33 || a[33].value == b[33].value)
+        && (n <= 34 || a[34].value == b[34].value)
+        && (n <= 35 || a[35].value == b[35].value)
+        && (n <= 36 || a[36].value == b[36].value)
+        && (n <= 37 || a[37].value == b[37].value)
+        && (n <= 38 || a[38].value == b[38].value)
+        && (n <= 39 || a[39].value == b[39].value)
+        && (n <= 40 || a[40].value == b[40].value)
+        && (n <= 41 || a[41].value == b[41].value)
+        && (n <= 42 || a[42].value == b[42].value)
+        && (n <= 43 || a[43].value == b[43].value)
+        && (n <= 44 || a[44].value == b[44].value)
+        && (n <= 45 || a[45].value == b[45].value)
+        && (n <= 46 || a[46].value == b[46].value)
+        && (n <= 47 || a[47].value == b[47].value)
+        && (n <= 48 || a[48].value == b[48].value)
+        && (n <= 49 || a[49].value == b[49].value)
+        && (n <= 50 || a[50].value == b[50].value)
+        && (n <= 51 || a[51].value == b[51].value)
+        && (n <= 52 || a[52].value == b[52].value)
+        && (n <= 53 || a[53].value == b[53].value)
+        && (n <= 54 || a[54].value == b[54].value)
+        && (n <= 55 || a[55].value == b[55].value)
+        && (n <= 56 || a[56].value == b[56].value)
+        && (n <= 57 || a[57].value == b[57].value)
+        && (n <= 58 || a[58].value == b[58].value)
+        && (n <= 59 || a[59].value == b[59].value);
+    }
+
     function paymentControlValuesLocked() {
       return unchanged(['amountDue', 'amountReceived', 'grossAmount', 'deductions', 'deductionTotal',
           'netAmountDue', 'sourceReceivableId', 'beneficiary', 'installmentCount', 'createdBy', 'createdAt'])
-        && sameInstallmentCount();
+        && sameInstallmentCount()
+        && installmentValuesLocked();
     }
 
     function isDirectorEmail() {
