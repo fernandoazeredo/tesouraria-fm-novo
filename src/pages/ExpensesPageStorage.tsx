@@ -3,6 +3,7 @@ import { addDoc, collection, deleteDoc, doc, onSnapshot, serverTimestamp, setDoc
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytesResumable, type UploadTask } from 'firebase/storage'
 import { AlertTriangle, CheckCircle2, ExternalLink, FileText, Filter, Paperclip, Pencil, Plus, ReceiptText, RefreshCw, Search, Send, Trash2, Upload, X } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
+import { useInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import { db, storage } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
 import { ExpenseManagementDashboard } from '../components/ExpenseManagementDashboard'
@@ -140,7 +141,11 @@ function ExpenseModal({ record, onClose }: { record?: AnyRecord | null; onClose:
   const savedRef = useRef(false)
   const [busy, setBusy] = useState(false)
   const [unidade, setUnidade] = useState<'RJ' | 'SP'>((record?.unidade as 'RJ' | 'SP') || 'RJ')
-  const [nome, setNome] = useState(String(record?.nome ?? ''))
+  const institutional = useInstitutionalSettings()
+  const companyName = institutional.razaoSocial
+  // O campo "Nome da Empresa" é sempre a razão social configurada (somente leitura).
+  const [nome, setNome] = useState(companyName)
+  useEffect(() => { setNome(companyName) }, [companyName])
   const [competencia, setCompetencia] = useState(String(record?.competencia ?? new Date().toISOString().slice(0, 7)))
   const [fornecedor, setFornecedor] = useState(String(record?.fornecedor ?? ''))
   const [documento, setDocumento] = useState(String(record?.documento ?? ''))
@@ -337,10 +342,10 @@ function ExpenseModal({ record, onClose }: { record?: AnyRecord | null; onClose:
 
   return <div className="modal-backdrop"><section className="modal-sheet legacy-sheet expense-sheet" role="dialog" aria-modal="true">
     <div className="modal-toolbar"><div><span className="eyebrow expense-text">Tesouraria</span><h2>{modalTitle}</h2></div><button className="icon-button" type="button" onClick={() => void closeWithoutSave()}><X size={20} /></button></div>
-    <div className="legacy-title-block"><strong>FLÁVIO MARQUES ADVOGADOS ASSOCIADOS</strong><span>DEMONSTRATIVO DE DESPESAS</span></div>
+    <div className="legacy-title-block"><strong>{companyName}</strong><span>DEMONSTRATIVO DE DESPESAS</span></div>
     {isReturned && <div className="return-note"><div><strong>Devolvido para correção</strong><span>{record?.approvalNote || 'A Diretoria solicitou correção deste demonstrativo.'}</span></div></div>}
 
-    <div className="form-grid compact-grid"><label><span>Unidade</span><select value={unidade} onChange={(e) => setUnidade(e.target.value as 'RJ' | 'SP')}><option>RJ</option><option>SP</option></select></label><label className="span-2"><span>Nome / Responsável</span><input data-required-key="expense-name" value={nome} onChange={(e) => setNome(e.target.value)} /></label><label><span>Competência</span><input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} /></label><label className="span-2"><span>Fornecedor / Favorecido</span><input data-required-key="expense-supplier" value={fornecedor} onChange={(e) => setFornecedor(e.target.value)} /></label><label><span>CPF / CNPJ</span><input value={documento} onChange={(e) => setDocumento(e.target.value)} /></label></div>
+    <div className="form-grid compact-grid"><label><span>Unidade</span><select value={unidade} onChange={(e) => setUnidade(e.target.value as 'RJ' | 'SP')}><option>RJ</option><option>SP</option></select></label><label className="span-2"><span>Nome da Empresa</span><input data-required-key="expense-name" value={nome} readOnly aria-readonly="true" className="institutional-readonly-field" /></label><label><span>Competência</span><input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} /></label><label className="span-2"><span>Nome do Fornecedor / Favorecido</span><input data-required-key="expense-supplier" value={fornecedor} onChange={(e) => setFornecedor(e.target.value)} /></label><label><span>CPF do Favorecido / CNPJ do Fornecedor</span><input value={documento} onChange={(e) => setDocumento(e.target.value)} /></label></div>
 
     <div className="legacy-table expense-table"><div className="legacy-row legacy-head"><span>DATA</span><span>HISTÓRICO</span><span>VALOR</span><span></span></div>{items.map((item, index) => <div className="legacy-row" key={index}><input type="date" value={item.data} onChange={(e) => updateItem(index, 'data', e.target.value)} /><input data-required-key={`expense-history-${index}`} value={item.historico} onChange={(e) => updateItem(index, 'historico', e.target.value)} /><div className="money-input-with-preview"><input data-required-key={`expense-value-${index}`} inputMode="decimal" value={item.valor} onChange={(e) => updateItem(index, 'valor', normalizeCurrencyEntry(e.target.value))} onBlur={(e) => updateItem(index, 'valor', formatCurrencyEntry(e.target.value))} placeholder="0,00" /><small>{money.format(parseBRL(item.valor))}</small></div><button type="button" className="row-remove" onClick={() => setItems((current) => current.length > 1 ? current.filter((_, i) => i !== index) : current)}><Trash2 size={15} /></button></div>)}</div>
     <button type="button" className="add-row-button expense-text" onClick={() => setItems((current) => [...current, { data: '', historico: '', valor: '' }])}><Plus size={16} /> Adicionar linha</button>
@@ -366,6 +371,7 @@ function ExpenseModal({ record, onClose }: { record?: AnyRecord | null; onClose:
 }
 
 export function ExpensesPageStorage() {
+  const companyName = useInstitutionalSettings().razaoSocial
   const { profile } = useAuth()
   const [params, setParams] = useSearchParams()
   const [open, setOpen] = useState(params.get('novo') === '1')
@@ -421,13 +427,13 @@ export function ExpensesPageStorage() {
     <Header onNew={() => { setEditing(null); setOpen(true) }} onExtract={() => printExpenseExtract(records, managerialClassificationMap)} />
     <ExpenseManagementDashboard records={records} loading={loading} />
     <section className="page-card module-card expense-module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por responsável, fornecedor, competência, código ou conta" /></div><button className="secondary-button"><Filter size={17} /> Filtros</button></div>
-      {loading ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando despesas</strong></div> : filtered.length === 0 ? <div className="module-empty"><ReceiptText size={34} /><strong>Nenhuma despesa encontrada</strong><span>Clique em Nova Despesa para preencher o primeiro demonstrativo.</span></div> : <div className="data-table review-expenses-table"><div className="data-row data-head"><span>Competência</span><span>Responsável / Favorecido</span><span>Plano de Contas</span><span>Status</span><span className="numeric">Valor</span><span>Ações</span></div>{filtered.map((item) => {
+      {loading ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando despesas</strong></div> : filtered.length === 0 ? <div className="module-empty"><ReceiptText size={34} /><strong>Nenhuma despesa encontrada</strong><span>Clique em Nova Despesa para preencher o primeiro demonstrativo.</span></div> : <div className="data-table review-expenses-table"><div className="data-row data-head"><span>Competência</span><span>Fornecedor / Favorecido</span><span>Plano de Contas</span><span>Status</span><span className="numeric">Valor</span><span>Ações</span></div>{filtered.map((item) => {
         const isDraft = item.status === 'rascunho'
         const canEdit = profile?.role === 'master' || item.createdBy === profile?.uid
         const canDelete = isDraft && canEdit
         const attachments = existingAttachments(item)
         const count = toNumber(item.attachmentCount) || attachments.length
-        return <div className="data-row" key={item.id}><span>{item.competencia || '—'}</span><span><strong>{item.nome || 'Sem nome'}</strong><small>{item.fornecedor || ''}</small></span><span><strong>{item.expenseAccountCode || item.classificacaoContabil || '—'}</strong><small>{item.expenseAccountName || item.categoria || 'Não classificada'}</small></span><span><WorkflowStatusBadge status={item.status} label={expenseStatusLabels[item.status] || item.status || '—'} /></span><span className="numeric expense-text"><strong>{money.format(toNumber(item.valorTotal))}</strong>{count > 0 ? <button className="attachment-count-button" type="button" onClick={() => setAttachmentTarget(item)} title="Abrir anexos"><Paperclip size={14} /><b>{count}</b></button> : <small>Sem anexos</small>}</span><span>{isDraft && canEdit ? <div className="row-actions"><button className="small-neutral-button" type="button" onClick={() => { setEditing(item); setOpen(true) }}><Pencil size={14} /> Editar</button>{canDelete && <button className="small-expense-button" type="button" onClick={() => setDeleteTarget(item)}><Trash2 size={14} /> Excluir</button>}</div> : item.status === 'devolvido' && canEdit ? <button className="small-expense-button" type="button" onClick={() => { setEditing(item); setOpen(true) }}><Pencil size={14} /> Corrigir e reenviar</button> : <span className="muted-dash">—</span>}</span></div>
+        return <div className="data-row" key={item.id}><span>{item.competencia || '—'}</span>{item.fornecedor && item.nome === companyName ? <span><strong>{item.fornecedor}</strong><small>{companyName}</small></span> : <span><strong>{item.nome || 'Sem nome'}</strong><small>{item.fornecedor || ''}</small></span>}<span><strong>{item.expenseAccountCode || item.classificacaoContabil || '—'}</strong><small>{item.expenseAccountName || item.categoria || 'Não classificada'}</small></span><span><WorkflowStatusBadge status={item.status} label={expenseStatusLabels[item.status] || item.status || '—'} /></span><span className="numeric expense-text"><strong>{money.format(toNumber(item.valorTotal))}</strong>{count > 0 ? <button className="attachment-count-button" type="button" onClick={() => setAttachmentTarget(item)} title="Abrir anexos"><Paperclip size={14} /><b>{count}</b></button> : <small>Sem anexos</small>}</span><span>{isDraft && canEdit ? <div className="row-actions"><button className="small-neutral-button" type="button" onClick={() => { setEditing(item); setOpen(true) }}><Pencil size={14} /> Editar</button>{canDelete && <button className="small-expense-button" type="button" onClick={() => setDeleteTarget(item)}><Trash2 size={14} /> Excluir</button>}</div> : item.status === 'devolvido' && canEdit ? <button className="small-expense-button" type="button" onClick={() => { setEditing(item); setOpen(true) }}><Pencil size={14} /> Corrigir e reenviar</button> : <span className="muted-dash">—</span>}</span></div>
       })}</div>}
     </section>
 

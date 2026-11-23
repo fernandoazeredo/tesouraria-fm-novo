@@ -8,7 +8,6 @@ import { CpfCnpjValidationEnhancer } from './components/CpfCnpjValidationEnhance
 import { DreAccountSearchEnhancer } from './components/DreAccountSearchEnhancer'
 import { DreRegimeViewEnhancer } from './components/DreRegimeViewEnhancer'
 import { DynamicAgreementInstallmentsEnhancer } from './components/DynamicAgreementInstallmentsEnhancer'
-import { ExpenseFormSemanticsEnhancer } from './components/ExpenseFormSemanticsEnhancer'
 import { ExpenseFiltersPanel } from './components/ExpenseFiltersPanel'
 import { ExpenseSettlementPanel } from './components/ExpenseSettlementPanel'
 import { InstitutionalDisplaySync } from './components/InstitutionalDisplaySync'
@@ -45,7 +44,6 @@ createRoot(document.getElementById('root')!).render(
         <ThemeControls />
         <SocietaryRouteAccessGuard />
         <CpfCnpjValidationEnhancer />
-        <ExpenseFormSemanticsEnhancer />
         <DreAccountSearchEnhancer />
         <DreRegimeViewEnhancer />
         <DynamicAgreementInstallmentsEnhancer />
