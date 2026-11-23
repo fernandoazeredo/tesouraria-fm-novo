@@ -4,7 +4,6 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './auth/AuthContext'
 import { DreRegimeViewEnhancer } from './components/DreRegimeViewEnhancer'
-import { ExpenseFiltersPanel } from './components/ExpenseFiltersPanel'
 import { SocietaryRouteAccessGuard } from './components/SocietaryRouteAccessGuard'
 import { ThemeControls } from './components/ThemeControls'
 import './societary-transfer-error-guard'
@@ -36,7 +35,6 @@ createRoot(document.getElementById('root')!).render(
         <SocietaryRouteAccessGuard />
         <DreRegimeViewEnhancer />
         <App />
-        <ExpenseFiltersPanel />
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,
