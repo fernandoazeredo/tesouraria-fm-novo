@@ -1,3 +1,4 @@
+import { DreRegimeView } from '../components/DreRegimeView'
 import { useEffect, useMemo, useState, useId } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
 import { BarChart3, CheckCircle2, ChevronDown, CircleAlert, Filter, RefreshCw, Search, Sparkles } from 'lucide-react'
@@ -383,17 +384,7 @@ export function DreGerencialPageV2() {
         </article>
       })}</div>}
     </section> : <>
-      <section className="page-card dre-report-card">
-        <div className="dre-section-heading"><div><span className="eyebrow">Demonstrativo Gerencial</span><h2>Resultado do Período</h2><p>Somente lançamentos classificados e em status financeiro válido entram nesta visão.</p></div></div>
-        <div className="dre-report-filters"><label><span>Competência</span><input type="month" value={dreCompetence} onChange={(event) => setDreCompetence(event.target.value)} /><small>{dreCompetence ? 'Filtrando somente a competência selecionada' : 'Todo o período'}</small></label><label><span>Unidade</span><select value={dreUnit} onChange={(event) => setDreUnit(event.target.value)}><option>Todas</option><option>RJ</option><option>SP</option></select></label></div>
-        <div className="dre-kpis"><div><span>Receitas</span><strong>{money.format(totalRevenue)}</strong></div><div><span>Despesas</span><strong>{money.format(totalExpense)}</strong></div><div className={result >= 0 ? 'positive' : 'negative'}><span>Resultado Gerencial</span><strong>{money.format(result)}</strong></div><div><span>Lançamentos na DRE</span><strong>{dreRows.length}</strong></div></div>
-
-        <div className="dre-statement"><div className="dre-statement-row head"><span>Grupo DRE</span><span>Lançamentos</span><span>Valor</span></div>{dreGroups.length === 0 ? <div className="dre-empty-statement">Nenhum lançamento classificado para os filtros selecionados.</div> : dreGroups.map(([label, values]) => {
-          const isExpense = values.expense > 0 && values.revenue === 0
-          const net = values.revenue - values.expense
-          return <div className={`dre-statement-row ${isExpense ? 'expense' : 'revenue'}`} key={label}><span>{label}</span><span>{values.count}</span><strong>{isExpense ? `(${money.format(values.expense)})` : money.format(net)}</strong></div>
-        })}<div className="dre-statement-row total"><span>RESULTADO GERENCIAL</span><span>{dreRows.length}</span><strong>{money.format(result)}</strong></div></div>
-      </section>
+      <DreRegimeView />
     </>}
   </>
 }

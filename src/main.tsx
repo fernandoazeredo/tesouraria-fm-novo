@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './auth/AuthContext'
-import { DreRegimeViewEnhancer } from './components/DreRegimeViewEnhancer'
 import { SocietaryRouteAccessGuard } from './components/SocietaryRouteAccessGuard'
 import { ThemeControls } from './components/ThemeControls'
 import './societary-transfer-error-guard'
@@ -33,7 +32,6 @@ createRoot(document.getElementById('root')!).render(
       <AuthProvider>
         <ThemeControls />
         <SocietaryRouteAccessGuard />
-        <DreRegimeViewEnhancer />
         <App />
       </AuthProvider>
     </BrowserRouter>
