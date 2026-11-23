@@ -75,7 +75,7 @@ function buildParcelas(count: number, current: Parcela[]): Parcela[] {
   })
 }
 
-function LaborAgreementModal({ onClose }: { onClose: () => void }) {
+export function LaborAgreementModal({ onClose }: { onClose: () => void }) {
   const institutionalName = useInstitutionalSettings().razaoSocial
   const { profile } = useAuth()
   const [recordRef] = useState(() => doc(collection(db, 'receivables')))
@@ -323,27 +323,4 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
 
     <div className="modal-actions"><button className="secondary-button" type="button" onClick={onClose}>Cancelar</button><button className="outline-revenue-button" type="button" disabled={busy} onClick={() => void save('rascunho')}>Salvar rascunho</button><button className="revenue-button" type="button" disabled={busy} onClick={() => void save('enviado_tesouraria')}><Send size={17} /> Enviar à Tesouraria</button></div>
   </section></div>
-}
-
-export function LaborAgreementReceivableLauncher() {
-  const [open, setOpen] = useState(false)
-  const [target, setTarget] = useState<HTMLElement | null>(null)
-
-  useEffect(() => {
-    function locate() {
-      const onReceivables = window.location.pathname === '/alvaras'
-      const actions = document.querySelector('.page-heading .quick-actions') as HTMLElement | null
-      setTarget(onReceivables ? actions : null)
-    }
-    locate()
-    const observer = new MutationObserver(locate)
-    observer.observe(document.body, { childList: true, subtree: true })
-    window.addEventListener('popstate', locate)
-    return () => { observer.disconnect(); window.removeEventListener('popstate', locate) }
-  }, [])
-
-  return <>
-    {target && createPortal(<button className="labor-agreement-launch-button" type="button" onClick={() => setOpen(true)}><Plus size={18} /><FileText size={17} /> Novo Acordo Trabalhista</button>, target)}
-    {open && createPortal(<LaborAgreementModal onClose={() => setOpen(false)} />, document.body)}
-  </>
 }
