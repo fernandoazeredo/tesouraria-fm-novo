@@ -13,7 +13,6 @@ import { ExpenseFiltersPanel } from './components/ExpenseFiltersPanel'
 import { ExpenseSettlementPanel } from './components/ExpenseSettlementPanel'
 import { InstitutionalDisplaySync } from './components/InstitutionalDisplaySync'
 import { LaborAgreementReceivableLauncher } from './components/LaborAgreementReceivable'
-import { NavigationCopyEnhancer } from './components/NavigationCopyEnhancer'
 import { OtherRevenueReceivable } from './components/OtherRevenueReceivable'
 import { RevenueTypeChooser } from './components/RevenueTypeChooser'
 import { SocietaryRouteAccessGuard } from './components/SocietaryRouteAccessGuard'
@@ -56,7 +55,6 @@ createRoot(document.getElementById('root')!).render(
         <RevenueTypeChooser />
         <AgreementHelpAdditions />
         <App />
-        <NavigationCopyEnhancer />
         <ExpenseFiltersPanel />
         <ExpenseSettlementPanel />
       </AuthProvider>
