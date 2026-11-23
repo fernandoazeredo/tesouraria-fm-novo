@@ -48,7 +48,7 @@ async function appEdit(db, id, fromStatus, toStatus, changes = {}) {
     updatedAt: serverTimestamp(), updatedBy: 'op1', updatedByName: 'Operador Teste',
     editHistory: arrayUnion({ action, fromStatus, toStatus, at: new Date().toISOString(), by: 'op1', byName: 'Operador Teste' }),
   })
-  await addDoc(collection(db, 'auditLogs'), { action, module: 'Recebimento de Alvarás', detail: `Documento ${id}`, entityId: id, userId: 'op1', createdAt: serverTimestamp() })
+  await addDoc(collection(db, 'auditLogs'), { action, module: 'Recebimento de Alvarás', detail: `Documento ${id}`, entityId: id, userId: 'op1', userName: 'operador', userEmail: users.operador.email, createdAt: serverTimestamp() })
 }
 
 before(async () => {

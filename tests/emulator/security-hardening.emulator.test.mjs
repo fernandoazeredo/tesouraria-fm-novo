@@ -110,8 +110,14 @@ test('repasse societário: tesouraria paga exatamente o valor apurado', async ()
 
 test('auditoria não aceita registro em nome de outro usuário', async () => {
   const db = dbAs(users.operador)
-  await assertSucceeds(addDoc(collection(db, 'auditLogs'), { action: 'Teste', userId: 'op1', createdAt: serverTimestamp() }))
-  await assertFails(addDoc(collection(db, 'auditLogs'), { action: 'Forjado', userId: 'ge1', createdAt: serverTimestamp() }))
+  const valid = { action: 'Teste', module: 'Despesas', detail: 'Operacao', userId: 'op1',
+    userName: 'operador', userEmail: users.operador.email, createdAt: serverTimestamp() }
+  await assertSucceeds(addDoc(collection(db, 'auditLogs'), valid))
+  await assertFails(addDoc(collection(db, 'auditLogs'), { ...valid, action: 'Forjado', userId: 'ge1' }))
+  await assertFails(addDoc(collection(db, 'auditLogs'), { ...valid, userEmail: 'outra@example.test' }))
+  await assertFails(addDoc(collection(db, 'auditLogs'), { ...valid, userName: 'gerente' }))
+  await assertFails(addDoc(collection(db, 'auditLogs'), { ...valid, createdAt: new Date('2020-01-01') }))
+  await assertFails(addDoc(collection(db, 'auditLogs'), { ...valid, isMaster: true }))
 })
 
 test('cadastro com e-mail de sócio exige e-mail verificado', async () => {
