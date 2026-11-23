@@ -71,4 +71,4 @@ jobs:
           npm install --no-package-lock
           npm install --no-save --no-package-lock firebase-tools @firebase/rules-unit-testing
       - name: Executar testes de permissoes no emulador Storage + Firestore
-        run: npx firebase emulators:exec --only firestore,storage --project demo-tesouraria-fm-storage "node --experimental-strip-types --test --test-concurrency=1 tests/emulator/storage-permissions.emulator.test.mjs"
+        run: npx firebase emulators:exec --only firestore,storage --project demo-tesouraria-fm-storage "node --experimental-strip-types --test --test-concurrency=1 tests/emulator/storage-permissions.storage.test.mjs"
