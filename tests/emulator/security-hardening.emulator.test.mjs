@@ -2,7 +2,7 @@
 // Não faz parte do npm test. Para rodar localmente:
 //   npm i -D --legacy-peer-deps firebase-tools @firebase/rules-unit-testing
 //   npx firebase emulators:exec --only firestore --project demo-tesouraria-fm \
-//     "node --experimental-strip-types --test tests/emulator/security-hardening.emulator.test.mjs"
+//     "node --experimental-strip-types --test --test-concurrency=1 tests/emulator/"
 import test, { after, before } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing'
@@ -24,7 +24,7 @@ async function seed(path, id, data) {
 }
 
 before(async () => {
-  env = await initializeTestEnvironment({ projectId: 'demo-tesouraria-fm', firestore: { rules: RULES, host: '127.0.0.1', port: 8080 } })
+  env = await initializeTestEnvironment({ projectId: 'demo-tesouraria-fm-seguranca', firestore: { rules: RULES, host: '127.0.0.1', port: 8080 } })
 })
 after(async () => { await env?.cleanup() })
 
