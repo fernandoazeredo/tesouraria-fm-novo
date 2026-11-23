@@ -71,6 +71,16 @@ test('comissão aprovada: tesouraria não altera o valor de uma parcela ao pagar
   await assertFails(updateDoc(doc(db, 'agentCommissions', 'c2'), { installments: [{ value: 250, paid: true }, { value: 999, paid: false }], status: 'parcialmente_pago' }))
 })
 
+test('comissão com 12 parcelas: paga a 1ª sem mudar valores; alterar a 10ª é negado', async () => {
+  const installments = Array.from({ length: 12 }, () => ({ value: 100, paid: false }))
+  await seed('agentCommissions', 'c12', { status: 'aprovado', amountDue: 1200, installments })
+  const db = dbAs(users.tesouraria)
+  const paidFirst = installments.map((item, index) => index === 0 ? { ...item, paid: true } : item)
+  const changedTenth = paidFirst.map((item, index) => index === 9 ? { ...item, value: 1 } : item)
+  await assertFails(updateDoc(doc(db, 'agentCommissions', 'c12'), { installments: changedTenth, status: 'parcialmente_pago' }))
+  await assertSucceeds(updateDoc(doc(db, 'agentCommissions', 'c12'), { installments: paidFirst, status: 'parcialmente_pago' }))
+})
+
 test('repasse de alvará: plano devolvido pode ser replanejado com novos valores', async () => {
   const plan = { status: 'devolvido', amountDue: 500, installments: [{ value: 500, paid: false }] }
   await seed('alvaraTransfers', 't1', plan)
