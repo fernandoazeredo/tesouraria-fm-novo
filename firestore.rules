@@ -614,11 +614,41 @@ service cloud.firestore {
       allow delete: if masterRestoreMode();
     }
 
+    // Protege metadados de autoria e o formato dos logs gravados pelo cliente.
+    // Observacao: a prova definitiva da ocorrencia de um evento exige escrita
+    // pelo backend, na mesma operacao da acao auditada.
+    function validClientAuditLog() {
+      return activeUser()
+        && request.resource.data.keys().hasAll([
+          'action', 'module', 'detail', 'userId', 'userEmail', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'action', 'module', 'detail', 'entityId', 'userId', 'userName',
+          'userEmail', 'createdAt', 'counts', 'removedFiles', 'status',
+          'error', 'month', 'bankScope'
+        ])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.userEmail is string
+        && request.resource.data.userEmail.lower() == authEmail().lower()
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.action is string
+        && request.resource.data.action.size() > 0
+        && request.resource.data.action.size() <= 200
+        && request.resource.data.module is string
+        && request.resource.data.module.size() > 0
+        && request.resource.data.module.size() <= 100
+        && request.resource.data.detail is string
+        && request.resource.data.detail.size() <= 10000
+        && (!('userName' in request.resource.data)
+          || request.resource.data.userName == currentUser().data.get('displayName', null))
+        && (!('entityId' in request.resource.data)
+          || request.resource.data.entityId == null
+          || request.resource.data.entityId is string);
+    }
+
     match /auditLogs/{document=**} {
       allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
-      // Cada registro precisa identificar o próprio autor; logs só saem na limpeza/restauração controlada.
-      allow create: if masterRestoreMode()
-        || (activeUser() && request.resource.data.userId == request.auth.uid);
+      allow create: if masterRestoreMode() || validClientAuditLog();
       allow update: if masterRestoreMode();
       allow delete: if masterRestoreMode() || masterWipeMode();
     }
