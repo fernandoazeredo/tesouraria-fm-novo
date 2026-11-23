@@ -12,6 +12,7 @@ import { WorkflowStatusBadge } from '../components/WorkflowStatusBadge'
 import { DEFAULT_BANK_ACCOUNT_ID, getBankAccount, type BankAccount } from '../data/bankAccounts'
 import type { ChartOfAccount } from '../data/chartOfAccounts'
 import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
+import { maskCpfCnpj, onlyDigits, validateCpfCnpj } from '../lib/cpfCnpjValidator'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 type AnyRecord = { id: string } & DocumentData
@@ -149,6 +150,11 @@ function ExpenseModal({ record, onClose }: { record?: AnyRecord | null; onClose:
   const [competencia, setCompetencia] = useState(String(record?.competencia ?? new Date().toISOString().slice(0, 7)))
   const [fornecedor, setFornecedor] = useState(String(record?.fornecedor ?? ''))
   const [documento, setDocumento] = useState(String(record?.documento ?? ''))
+  // CPF/CNPJ: máscara ao digitar e validação ao sair do campo e ao enviar para aprovação.
+  const [documentoTouched, setDocumentoTouched] = useState(false)
+  const documentoRef = useRef<HTMLInputElement>(null)
+  const documentoError = onlyDigits(documento) ? validateCpfCnpj(documento).message : undefined
+  const showDocumentoError = documentoTouched && Boolean(documentoError)
   const [subcategoria, setSubcategoria] = useState(String(record?.subcategoria ?? ''))
   const [observacoes, setObservacoes] = useState(String(record?.observacoes ?? ''))
   const [account] = useState<ChartOfAccount | null>(null)
@@ -268,6 +274,12 @@ function ExpenseModal({ record, onClose }: { record?: AnyRecord | null; onClose:
 
   async function save(status: 'rascunho' | 'devolvido' | 'enviado_aprovacao') {
     const validItems = items.filter((item) => item.historico.trim() || parseBRL(item.valor) > 0)
+    if (status === 'enviado_aprovacao' && documentoError) {
+      setDocumentoTouched(true)
+      documentoRef.current?.focus()
+      documentoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
     const missingKeys: string[] = []
     if (!nome.trim()) missingKeys.push('expense-name')
     if (status === 'enviado_aprovacao' && !fornecedor.trim()) missingKeys.push('expense-supplier')
@@ -345,7 +357,7 @@ function ExpenseModal({ record, onClose }: { record?: AnyRecord | null; onClose:
     <div className="legacy-title-block"><strong>{companyName}</strong><span>DEMONSTRATIVO DE DESPESAS</span></div>
     {isReturned && <div className="return-note"><div><strong>Devolvido para correção</strong><span>{record?.approvalNote || 'A Diretoria solicitou correção deste demonstrativo.'}</span></div></div>}
 
-    <div className="form-grid compact-grid"><label><span>Unidade</span><select value={unidade} onChange={(e) => setUnidade(e.target.value as 'RJ' | 'SP')}><option>RJ</option><option>SP</option></select></label><label className="span-2"><span>Nome da Empresa</span><input data-required-key="expense-name" value={nome} readOnly aria-readonly="true" className="institutional-readonly-field" /></label><label><span>Competência</span><input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} /></label><label className="span-2"><span>Nome do Fornecedor / Favorecido</span><input data-required-key="expense-supplier" value={fornecedor} onChange={(e) => setFornecedor(e.target.value)} /></label><label><span>CPF do Favorecido / CNPJ do Fornecedor</span><input value={documento} onChange={(e) => setDocumento(e.target.value)} /></label></div>
+    <div className="form-grid compact-grid"><label><span>Unidade</span><select value={unidade} onChange={(e) => setUnidade(e.target.value as 'RJ' | 'SP')}><option>RJ</option><option>SP</option></select></label><label className="span-2"><span>Nome da Empresa</span><input data-required-key="expense-name" value={nome} readOnly aria-readonly="true" className="institutional-readonly-field" /></label><label><span>Competência</span><input type="month" value={competencia} onChange={(e) => setCompetencia(e.target.value)} /></label><label className="span-2"><span>Nome do Fornecedor / Favorecido</span><input data-required-key="expense-supplier" value={fornecedor} onChange={(e) => setFornecedor(e.target.value)} /></label><label><span>CPF do Favorecido / CNPJ do Fornecedor</span><input ref={documentoRef} value={documento} className={showDocumentoError ? 'cpf-cnpj-invalid' : undefined} aria-invalid={showDocumentoError} onChange={(e) => setDocumento(maskCpfCnpj(onlyDigits(e.target.value).slice(0, 14)))} onBlur={() => setDocumentoTouched(true)} />{showDocumentoError && <small className="cpf-cnpj-field-error" role="alert">{documentoError}</small>}</label></div>
 
     <div className="legacy-table expense-table"><div className="legacy-row legacy-head"><span>DATA</span><span>HISTÓRICO</span><span>VALOR</span><span></span></div>{items.map((item, index) => <div className="legacy-row" key={index}><input type="date" value={item.data} onChange={(e) => updateItem(index, 'data', e.target.value)} /><input data-required-key={`expense-history-${index}`} value={item.historico} onChange={(e) => updateItem(index, 'historico', e.target.value)} /><div className="money-input-with-preview"><input data-required-key={`expense-value-${index}`} inputMode="decimal" value={item.valor} onChange={(e) => updateItem(index, 'valor', normalizeCurrencyEntry(e.target.value))} onBlur={(e) => updateItem(index, 'valor', formatCurrencyEntry(e.target.value))} placeholder="0,00" /><small>{money.format(parseBRL(item.valor))}</small></div><button type="button" className="row-remove" onClick={() => setItems((current) => current.length > 1 ? current.filter((_, i) => i !== index) : current)}><Trash2 size={15} /></button></div>)}</div>
     <button type="button" className="add-row-button expense-text" onClick={() => setItems((current) => [...current, { data: '', historico: '', valor: '' }])}><Plus size={16} /> Adicionar linha</button>
