@@ -41,10 +41,83 @@ service cloud.firestore {
         'components', 'agentCommissionValue', 'invoiceValue', 'createdBy', 'createdAt']);
     }
 
+    // Valor de cada parcela (até 60, limite da tela) não muda após o envio para aprovação.
+    // As regras não têm laço, por isso cada posição é verificada explicitamente.
+    function installmentValueSame(i) {
+      return request.resource.data.installments[i].value == resource.data.installments[i].value;
+    }
+
+    function installmentValuesLocked() {
+      return !('installments' in resource.data) || (
+        resource.data.installments.size() <= 60
+        && (resource.data.installments.size() <= 0 || installmentValueSame(0))
+        && (resource.data.installments.size() <= 1 || installmentValueSame(1))
+        && (resource.data.installments.size() <= 2 || installmentValueSame(2))
+        && (resource.data.installments.size() <= 3 || installmentValueSame(3))
+        && (resource.data.installments.size() <= 4 || installmentValueSame(4))
+        && (resource.data.installments.size() <= 5 || installmentValueSame(5))
+        && (resource.data.installments.size() <= 6 || installmentValueSame(6))
+        && (resource.data.installments.size() <= 7 || installmentValueSame(7))
+        && (resource.data.installments.size() <= 8 || installmentValueSame(8))
+        && (resource.data.installments.size() <= 9 || installmentValueSame(9))
+        && (resource.data.installments.size() <= 10 || installmentValueSame(10))
+        && (resource.data.installments.size() <= 11 || installmentValueSame(11))
+        && (resource.data.installments.size() <= 12 || installmentValueSame(12))
+        && (resource.data.installments.size() <= 13 || installmentValueSame(13))
+        && (resource.data.installments.size() <= 14 || installmentValueSame(14))
+        && (resource.data.installments.size() <= 15 || installmentValueSame(15))
+        && (resource.data.installments.size() <= 16 || installmentValueSame(16))
+        && (resource.data.installments.size() <= 17 || installmentValueSame(17))
+        && (resource.data.installments.size() <= 18 || installmentValueSame(18))
+        && (resource.data.installments.size() <= 19 || installmentValueSame(19))
+        && (resource.data.installments.size() <= 20 || installmentValueSame(20))
+        && (resource.data.installments.size() <= 21 || installmentValueSame(21))
+        && (resource.data.installments.size() <= 22 || installmentValueSame(22))
+        && (resource.data.installments.size() <= 23 || installmentValueSame(23))
+        && (resource.data.installments.size() <= 24 || installmentValueSame(24))
+        && (resource.data.installments.size() <= 25 || installmentValueSame(25))
+        && (resource.data.installments.size() <= 26 || installmentValueSame(26))
+        && (resource.data.installments.size() <= 27 || installmentValueSame(27))
+        && (resource.data.installments.size() <= 28 || installmentValueSame(28))
+        && (resource.data.installments.size() <= 29 || installmentValueSame(29))
+        && (resource.data.installments.size() <= 30 || installmentValueSame(30))
+        && (resource.data.installments.size() <= 31 || installmentValueSame(31))
+        && (resource.data.installments.size() <= 32 || installmentValueSame(32))
+        && (resource.data.installments.size() <= 33 || installmentValueSame(33))
+        && (resource.data.installments.size() <= 34 || installmentValueSame(34))
+        && (resource.data.installments.size() <= 35 || installmentValueSame(35))
+        && (resource.data.installments.size() <= 36 || installmentValueSame(36))
+        && (resource.data.installments.size() <= 37 || installmentValueSame(37))
+        && (resource.data.installments.size() <= 38 || installmentValueSame(38))
+        && (resource.data.installments.size() <= 39 || installmentValueSame(39))
+        && (resource.data.installments.size() <= 40 || installmentValueSame(40))
+        && (resource.data.installments.size() <= 41 || installmentValueSame(41))
+        && (resource.data.installments.size() <= 42 || installmentValueSame(42))
+        && (resource.data.installments.size() <= 43 || installmentValueSame(43))
+        && (resource.data.installments.size() <= 44 || installmentValueSame(44))
+        && (resource.data.installments.size() <= 45 || installmentValueSame(45))
+        && (resource.data.installments.size() <= 46 || installmentValueSame(46))
+        && (resource.data.installments.size() <= 47 || installmentValueSame(47))
+        && (resource.data.installments.size() <= 48 || installmentValueSame(48))
+        && (resource.data.installments.size() <= 49 || installmentValueSame(49))
+        && (resource.data.installments.size() <= 50 || installmentValueSame(50))
+        && (resource.data.installments.size() <= 51 || installmentValueSame(51))
+        && (resource.data.installments.size() <= 52 || installmentValueSame(52))
+        && (resource.data.installments.size() <= 53 || installmentValueSame(53))
+        && (resource.data.installments.size() <= 54 || installmentValueSame(54))
+        && (resource.data.installments.size() <= 55 || installmentValueSame(55))
+        && (resource.data.installments.size() <= 56 || installmentValueSame(56))
+        && (resource.data.installments.size() <= 57 || installmentValueSame(57))
+        && (resource.data.installments.size() <= 58 || installmentValueSame(58))
+        && (resource.data.installments.size() <= 59 || installmentValueSame(59))
+      );
+    }
+
     function paymentControlValuesLocked() {
       return unchanged(['amountDue', 'amountReceived', 'grossAmount', 'deductions', 'deductionTotal',
           'netAmountDue', 'sourceReceivableId', 'beneficiary', 'installmentCount', 'createdBy', 'createdAt'])
-        && sameInstallmentCount();
+        && sameInstallmentCount()
+        && installmentValuesLocked();
     }
 
     function isDirectorEmail() {

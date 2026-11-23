@@ -24,18 +24,6 @@ service firebase.storage {
       return authEmail() == 'fernandoazeredo64@gmail.com';
     }
 
-    function isDirectorEmail() {
-      return authEmail() == 'flavio.marques@marquesemuller.adv.br';
-    }
-
-    function isManagerEmail() {
-      return authEmail() == 'reinaldo@marquesemuller.adv.br';
-    }
-
-    function isTreasuryEmail() {
-      return authEmail() == 'socorro@marquesemuller.adv.br';
-    }
-
     function officialReaderEmail(email) {
       return email in [
         'fernandoazeredo64@gmail.com',
