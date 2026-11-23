@@ -1,4 +1,5 @@
 import { getApps, initializeApp } from 'firebase/app'
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check'
 import { getAuth } from 'firebase/auth'
 import { getFirestore, initializeFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
@@ -23,6 +24,24 @@ const firebaseConfig = {
 }
 
 export const firebaseApp = getApps()[0] ?? initializeApp(firebaseConfig)
+
+// App Check: prova que as chamadas vêm do app publicado (reCAPTCHA Enterprise).
+// A chave de site é pública. Em localhost usa token de depuração, que precisa
+// ser cadastrado em Firebase Console > App Check > Gerenciar tokens de depuração.
+const appCheckSiteKey = import.meta.env.VITE_APPCHECK_SITE_KEY || '6Lfyty4uAAAAAFX0-O3tPExg-S6nh9YcRAiWJNgH'
+if (typeof window !== 'undefined' && appCheckSiteKey) {
+  if (['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+    ;(self as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean }).FIREBASE_APPCHECK_DEBUG_TOKEN = true
+  }
+  try {
+    initializeAppCheck(firebaseApp, {
+      provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
+      isTokenAutoRefreshEnabled: true,
+    })
+  } catch (error) {
+    console.warn('App Check não inicializado', error)
+  }
+}
 export const auth = getAuth(firebaseApp)
 
 // Os controles financeiros possuem metadados opcionais por parcela
