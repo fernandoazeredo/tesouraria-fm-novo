@@ -10,7 +10,6 @@ import { DreRegimeViewEnhancer } from './components/DreRegimeViewEnhancer'
 import { DynamicAgreementInstallmentsEnhancer } from './components/DynamicAgreementInstallmentsEnhancer'
 import { ExpenseFiltersPanel } from './components/ExpenseFiltersPanel'
 import { ExpenseSettlementPanel } from './components/ExpenseSettlementPanel'
-import { InstitutionalDisplaySync } from './components/InstitutionalDisplaySync'
 import { LaborAgreementReceivableLauncher } from './components/LaborAgreementReceivable'
 import { OtherRevenueReceivable } from './components/OtherRevenueReceivable'
 import { RevenueTypeChooser } from './components/RevenueTypeChooser'
@@ -47,7 +46,6 @@ createRoot(document.getElementById('root')!).render(
         <DreAccountSearchEnhancer />
         <DreRegimeViewEnhancer />
         <DynamicAgreementInstallmentsEnhancer />
-        <InstitutionalDisplaySync />
         <LaborAgreementReceivableLauncher />
         <OtherRevenueReceivable />
         <RevenueTypeChooser />

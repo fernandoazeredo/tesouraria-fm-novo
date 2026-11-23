@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import { createPortal } from 'react-dom'
 import { addDoc, collection, doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
@@ -75,6 +76,7 @@ function buildParcelas(count: number, current: Parcela[]): Parcela[] {
 }
 
 function LaborAgreementModal({ onClose }: { onClose: () => void }) {
+  const institutionalName = useInstitutionalSettings().razaoSocial
   const { profile } = useAuth()
   const [recordRef] = useState(() => doc(collection(db, 'receivables')))
   const [busy, setBusy] = useState(false)
@@ -257,7 +259,7 @@ function LaborAgreementModal({ onClose }: { onClose: () => void }) {
 
   return <div className="modal-backdrop labor-agreement-backdrop"><section className="modal-sheet labor-agreement-sheet" role="dialog" aria-modal="true" aria-label="Controle de Recebimento de Acordo Trabalhista">
     <div className="modal-toolbar"><div><span className="eyebrow revenue-text">Recebimento jurídico</span><h2>Controle de Recebimento de Acordo Trabalhista</h2></div><button className="icon-button" type="button" onClick={onClose}><X size={20} /></button></div>
-    <div className="legacy-title-block revenue-title"><strong>FLÁVIO MARQUES ADVOGADOS ASSOCIADOS</strong><span>CONTROLE DE RECEBIMENTO DE ACORDOS</span></div>
+    <div className="legacy-title-block revenue-title"><strong>{institutionalName}</strong><span>CONTROLE DE RECEBIMENTO DE ACORDOS</span></div>
 
     <h3 className="form-section-title">Dados do Processo</h3>
     <div className="form-grid compact-grid labor-agreement-grid">
