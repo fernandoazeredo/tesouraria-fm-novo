@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useInstitutionalSettings } from '../hooks/useInstitutionalSettings'
+import { useDiscardGuard } from '../hooks/useDiscardGuard'
 import { RevenueTypeModal } from '../components/RevenueTypeChooser'
 import { LaborAgreementModal } from '../components/LaborAgreementReceivable'
 import { OtherRevenueModal } from '../components/OtherRevenueReceivable'
@@ -362,7 +363,8 @@ function ReceivableModal({ onClose, existing }: { onClose: () => void; existing?
     } finally { setBusy(false) }
   }
 
-  return <div className="modal-backdrop"><section className="modal-sheet legacy-sheet revenue-sheet">
+  const discardGuard = useDiscardGuard(() => void closeAndClean())
+  return <div className="modal-backdrop" {...discardGuard.backdropProps}><section className="modal-sheet legacy-sheet revenue-sheet" ref={discardGuard.sheetRef}>
     <div className="modal-toolbar"><div><span className="eyebrow revenue-text">Recebimento de Alvarás</span><h2>{editMode === 'draft' ? 'Editar rascunho — Demonstrativo de Recebimento de Honorários' : editMode === 'returned' ? 'Corrigir e reenviar — Demonstrativo de Recebimento de Honorários' : 'Demonstrativo de Recebimento de Honorários'}</h2></div><button className="icon-button" onClick={() => void closeAndClean()}><X size={20} /></button></div>
     {editMode === 'returned' && <div className="decision-reason devolvido"><strong>Devolvido pela Tesouraria{existing?.treasuryReturnedByName ? ` (${String(existing.treasuryReturnedByName)})` : ''}</strong><span>Motivo: {String(existing?.treasuryReturnNote || 'não informado')}</span></div>}
     <div className="legacy-title-block revenue-title"><strong>{institutionalName}</strong><span>DEMONSTRATIVO DE RECEBIMENTO DE HONORÁRIOS</span></div>

@@ -1,3 +1,4 @@
+import { statusTextClass } from '../components/WorkflowStatusBadge'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   addDoc,
@@ -166,7 +167,7 @@ function PageHeader({ eyebrow, title, description, actions }: { eyebrow: string;
 }
 
 function StatusBadge({ value, tone = 'neutral' }: { value: string; tone?: 'expense' | 'revenue' | 'success' | 'warning' | 'neutral' }) {
-  return <span className={`status-badge ${tone}`}>{value}</span>
+  return <span className={`status-badge ${tone} ${statusTextClass(value)}`}>{value}</span>
 }
 
 function EmptyState({ icon: Icon, title, text }: { icon: typeof FileText; title: string; text: string }) {
