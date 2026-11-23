@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './auth/AuthContext'
-import { DreAccountSearchEnhancer } from './components/DreAccountSearchEnhancer'
 import { DreRegimeViewEnhancer } from './components/DreRegimeViewEnhancer'
 import { DynamicAgreementInstallmentsEnhancer } from './components/DynamicAgreementInstallmentsEnhancer'
 import { ExpenseFiltersPanel } from './components/ExpenseFiltersPanel'
@@ -37,7 +36,6 @@ createRoot(document.getElementById('root')!).render(
       <AuthProvider>
         <ThemeControls />
         <SocietaryRouteAccessGuard />
-        <DreAccountSearchEnhancer />
         <DreRegimeViewEnhancer />
         <DynamicAgreementInstallmentsEnhancer />
         <App />

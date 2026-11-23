@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useId } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
 import { BarChart3, CheckCircle2, ChevronDown, CircleAlert, Filter, RefreshCw, Search, Sparkles } from 'lucide-react'
 import { db } from '../lib/firebase'
@@ -163,6 +163,35 @@ function useManagerialData() {
 
 function classificationKey(type: SourceType, sourceId: string) {
   return `${type}__${sourceId}`
+}
+
+
+function normalizeAccountText(value: string) {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+}
+
+/** Campo de conta gerencial com busca por número ou nome (lista sugerida pelo navegador). */
+function AccountCombobox({ accounts, value, onChange }: { accounts: Array<{ code: string; name: string }>; value: string; onChange: (code: string) => void }) {
+  const listId = useId()
+  const labelOf = (code: string) => { const account = accounts.find((item) => item.code === code); return account ? `${account.code} — ${account.name}` : '' }
+  const [text, setText] = useState(() => labelOf(value))
+  const [focused, setFocused] = useState(false)
+  useEffect(() => { if (!focused) setText(labelOf(value)) }, [value, accounts, focused]) // eslint-disable-line react-hooks/exhaustive-deps
+  function commit(raw: string) {
+    const typed = normalizeAccountText(raw)
+    if (!typed) return
+    const match = accounts.find((account) => normalizeAccountText(account.code) === typed || normalizeAccountText(`${account.code} — ${account.name}`) === typed)
+    if (!match) return
+    if (match.code !== value) onChange(match.code)
+    setText(`${match.code} — ${match.name}`)
+  }
+  return <>
+    <input className="dre-account-combobox" type="text" list={listId} autoComplete="off" placeholder="Digite o número ou nome da conta" value={text}
+      onFocus={(event) => { setFocused(true); const target = event.currentTarget; requestAnimationFrame(() => target.select()) }}
+      onChange={(event) => { setText(event.target.value); commit(event.target.value) }}
+      onBlur={(event) => { setFocused(false); commit(event.target.value) }} />
+    <datalist className="dre-account-datalist" id={listId}>{accounts.map((account) => <option key={account.code} value={`${account.code} — ${account.name}`} />)}</datalist>
+  </>
 }
 
 export function DreGerencialPageV2() {
@@ -347,7 +376,7 @@ export function DreGerencialPageV2() {
           <div className="dre-launch-amount"><span>Valor gerencial</span><strong>{money.format(item.amount)}</strong>{item.sourceType === 'revenue' && <small>{item.source.tipoRecebimento === 'outras_receitas' ? 'Valor da receita' : 'Honorários do escritório'}</small>}</div>
           <div className="dre-account-choice">
             {!item.classification?.confirmed && <div className={`dre-suggestion confidence-${suggestion.confidence >= 90 ? 'high' : suggestion.confidence >= 60 ? 'medium' : 'low'}`}><Sparkles size={14} /><span>{suggestion.account ? `Sugestão · ${suggestion.reason}` : suggestion.reason}</span></div>}
-            <label><span>Conta gerencial</span><select value={accountCode} onChange={(event) => setDraftAccounts((current) => ({ ...current, [item.key]: event.target.value }))}><option value="">Selecione a conta...</option>{accounts.map((account) => <option key={account.code} value={account.code}>{account.code} — {account.name}</option>)}</select></label>
+            <label><span>Conta gerencial</span><AccountCombobox accounts={accounts} value={accountCode} onChange={(code) => setDraftAccounts((current) => ({ ...current, [item.key]: code }))} /></label>
             {item.classification?.accountDre && <small className="dre-destination">DRE: {item.classification.accountDre}</small>}
           </div>
           <button className="dre-confirm-button" disabled={!accountCode || savingKey === item.key} onClick={() => void confirmClassification(item, accountCode)}>{savingKey === item.key ? <RefreshCw className="spin" size={16} /> : <CheckCircle2 size={16} />}{item.classification?.confirmed ? 'Alterar classificação' : 'Confirmar'}</button>
