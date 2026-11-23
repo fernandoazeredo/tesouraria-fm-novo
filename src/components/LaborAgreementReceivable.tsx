@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import { createPortal } from 'react-dom'
 import { addDoc, collection, doc, serverTimestamp, setDoc } from 'firebase/firestore'
@@ -118,6 +118,35 @@ export function LaborAgreementModal({ onClose }: { onClose: () => void }) {
   const liquidoClienteRecebido = useMemo(() => realizadas.reduce((sum, row) => sum + row.liquidoCliente, 0), [realizadas])
   const clientDataIncomplete = !bancoCliente.trim() || !agenciaCliente.trim() || !contaCliente.trim() || !titularCliente.trim() || !cpfCliente.trim() || !emailCliente.trim() || !telefoneCliente.trim() || !enderecoCliente.trim()
   const processDataIncomplete = !processo.trim() || !reclamante.trim()
+
+  const installmentRowsRef = useRef<Array<HTMLDivElement | null>>([])
+
+  function addParcela() {
+    if (quantidadeParcelas >= 60) { window.alert('O limite é de 60 parcelas.'); return }
+    setQuantidadeParcelas((current) => current + 1)
+  }
+
+  function editParcela(index: number) {
+    const row = installmentRowsRef.current[index]
+    const firstInput = row?.querySelector('input')
+    firstInput?.focus()
+    firstInput?.select?.()
+    row?.classList.add('labor-row-editing')
+    window.setTimeout(() => row?.classList.remove('labor-row-editing'), 1200)
+  }
+
+  function removeParcela(index: number) {
+    const row = parcelas[index]
+    if (!row) return
+    const hasData = Boolean(row.dataPrevista || row.dataRealizada || row.dataContabilizacao || row.valorParcela || row.deducoes)
+    if (hasData && !window.confirm(`Excluir a parcela ${index + 1}? Os dados desta linha serão removidos.`)) return
+    if (parcelas.length === 1) {
+      setParcelas(buildParcelas(1, []))
+      return
+    }
+    setParcelas((current) => current.filter((_, i) => i !== index).map((item, i) => ({ ...item, numero: i + 1 })))
+    setQuantidadeParcelas((current) => Math.max(1, current - 1))
+  }
 
   function updateParcela(index: number, patch: Partial<Parcela>) {
     setParcelas((current) => current.map((row, i) => {
@@ -276,14 +305,14 @@ export function LaborAgreementModal({ onClose }: { onClose: () => void }) {
     <div className="form-grid compact-grid labor-agreement-grid">
       <label className="span-2"><span>Forma de Recebimento</span><input value={formaRecebimento} onChange={(e) => setFormaRecebimento(e.target.value)} /></label>
       <label><span>Valor bruto do acordo</span><MoneyInput value={valorAcordoBruto} onChange={setValorAcordoBruto} ariaLabel="Valor bruto do acordo" validationKey="acordo-valor-bruto" /></label>
-      <label><span>Número de parcelas</span><input type="number" min="1" max="60" value={quantidadeParcelas} onChange={(e) => setQuantidadeParcelas(Math.min(60, Math.max(1, Number(e.target.value) || 1)))} /></label>
       <label className="span-2"><span>Conta de recebimento do escritório</span><select value={getBankAccount(receivingBankAccountId).id} onChange={(e) => setReceivingBankAccountId(e.target.value as BankAccount['id'])}>{bankOptions.map(({ id }) => { const account = getBankAccount(id); return <option key={id} value={id}>{account.bank} · Ag. {account.agency} · C/C {account.account}</option> })}</select></label>
     </div>
 
     <h3 className="form-section-title">Parcelas e Datas de Recebimento</h3>
+    <div className="labor-installments-toolbar"><span>Adicione somente as parcelas necessárias. As linhas não serão criadas automaticamente.</span><button type="button" className="revenue-button labor-add-installment-button" onClick={addParcela}>+ Adicionar parcela</button></div>
     <div className="labor-installments-table">
-      <div className="labor-installment-row head"><span>Parc.</span><span>Prevista</span><span>Realizada</span><span>Valor parcela</span><span>Honorários</span><span>Deduções</span><span>Líquido cliente</span><span>Data contabilização</span></div>
-      {parcelas.map((row, index) => <div className="labor-installment-row" key={row.numero}>
+      <div className="labor-installment-row head"><span>Parc.</span><span>Prevista</span><span>Realizada</span><span>Valor parcela</span><span>Honorários</span><span>Deduções</span><span>Líquido cliente</span><span>Data contabilização</span><span className="labor-actions-head">Ações</span></div>
+      {parcelas.map((row, index) => <div className="labor-installment-row" key={row.numero} ref={(element) => { installmentRowsRef.current[index] = element }}>
         <strong>{row.numero}</strong>
         <input type="date" value={row.dataPrevista} onChange={(e) => updateParcela(index, { dataPrevista: e.target.value })} />
         <input data-required-key={`acordo-realizada-${index}`} type="date" value={row.dataRealizada} onChange={(e) => updateParcela(index, { dataRealizada: e.target.value })} />
@@ -292,6 +321,7 @@ export function LaborAgreementModal({ onClose }: { onClose: () => void }) {
         <MoneyInput value={row.deducoes} onChange={(value) => updateParcela(index, { deducoes: value })} ariaLabel={`Deduções parcela ${row.numero}`} />
         <strong>{money.format(row.liquidoCliente)}</strong>
         <input type="date" value={row.dataContabilizacao} onChange={(e) => updateParcela(index, { dataContabilizacao: e.target.value })} />
+        <div className="labor-row-actions"><button type="button" className="labor-edit-row-button" title={`Editar parcela ${index + 1}`} onClick={() => editParcela(index)}>Editar</button><button type="button" className="labor-delete-row-button" title={`Excluir parcela ${index + 1}`} onClick={() => removeParcela(index)}>Excluir</button></div>
       </div>)}
     </div>
     <div className="labor-agreement-summary"><span>Valor do acordo <strong>{money.format(valorAcordoBruto)}</strong></span><span>Parcelas previstas <strong>{money.format(totalPrevisto)}</strong></span><span>Recebido até agora <strong>{money.format(totalRecebido)}</strong></span><span>Honorários recebidos <strong>{money.format(honorariosRecebidos)}</strong></span></div>
