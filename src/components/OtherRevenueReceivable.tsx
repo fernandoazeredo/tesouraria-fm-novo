@@ -1,3 +1,4 @@
+import { useDiscardGuard } from '../hooks/useDiscardGuard'
 import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
@@ -167,8 +168,9 @@ export function OtherRevenueModal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  return <div className="modal-backdrop other-revenue-backdrop">
-    <section className="modal-sheet legacy-sheet revenue-sheet other-revenue-sheet" role="dialog" aria-modal="true" aria-label="Outras Receitas">
+  const discardGuard = useDiscardGuard(onClose)
+  return <div className="modal-backdrop other-revenue-backdrop" {...discardGuard.backdropProps}>
+    <section ref={discardGuard.sheetRef} className="modal-sheet legacy-sheet revenue-sheet other-revenue-sheet" role="dialog" aria-modal="true" aria-label="Outras Receitas">
       <div className="modal-toolbar">
         <div><span className="eyebrow revenue-text">Receitas</span><h2>Outras Receitas</h2></div>
         <button className="icon-button" type="button" onClick={onClose} aria-label="Fechar"><X size={20} /></button>

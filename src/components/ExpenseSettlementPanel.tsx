@@ -1,3 +1,4 @@
+import { statusTextClass } from './WorkflowStatusBadge'
 import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, updateDoc, type DocumentData } from 'firebase/firestore'
 import { Archive, CheckCircle2, WalletCards } from 'lucide-react'
@@ -154,7 +155,7 @@ export function ExpenseSettlementPanel() {
                 <small>{item.expenseAccountCode || item.classificacaoContabil || '—'} · {item.expenseAccountName || item.categoria || 'Não classificada'}</small>
               </div>
               <div className="expense-settlement-value">
-                <span className={`status-badge ${approved ? 'success' : 'revenue'}`}>{approved ? 'Aprovado' : 'Pago'}</span>
+                <span className={`status-badge ${approved ? 'success' : 'revenue'} ${statusTextClass(approved ? 'Aprovado' : 'Pago')}`}>{approved ? 'Aprovado' : 'Pago'}</span>
                 <strong>{money.format(Number(item.valorTotal) || 0)}</strong>
               </div>
               <div className="expense-settlement-actions">

@@ -61,7 +61,8 @@ import { AlvaraTransfersPageV3 } from './pages/AlvaraControlPagesV3'
 import { AgentCommissionsPageV4 } from './pages/AgentCommissionsPageV4'
 import { AuditPageEnhancedV2 } from './pages/AuditPageEnhancedV2'
 import { SocietaryTransferSync, SocietaryTransfersPage, SocietaryTreasuryPanel } from './pages/SocietaryTransfersPage'
-import { WorkflowStatusEnhancer } from './components/WorkflowStatusEnhancer'
+import { useDateTypingHelper } from './hooks/useDateTypingHelper'
+import './qa-polish.css'
 import './system.css'
 import './fixes.css'
 import './review-fixes.css'
@@ -358,6 +359,7 @@ function VersionUpdateNotice() {
 }
 
 function AppShell() {
+  useDateTypingHelper()
   const { profile, logout } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const accessRole = accessRoleFromUserRole(profile?.role)
@@ -399,7 +401,6 @@ function AppShell() {
   return (
     <div className="app-shell">
       <VersionUpdateNotice />
-      <WorkflowStatusEnhancer />
       <SocietaryTransferSync />
       <header className="mobile-app-header">
         <button type="button" className="mobile-menu-toggle" aria-label={mobileMenuOpen ? 'Fechar menu' : 'Abrir menu'} aria-expanded={mobileMenuOpen} aria-controls="app-sidebar" onClick={() => setMobileMenuOpen((open) => !open)}>{mobileMenuOpen ? <X size={23} /> : <Menu size={23} />}</button>
