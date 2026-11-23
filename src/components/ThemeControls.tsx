@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Moon, Sun } from 'lucide-react'
 import '../theme.css'
+import { useAuth } from '../auth/AuthContext'
 
 type ThemeMode = 'light' | 'dark'
 
@@ -15,28 +16,15 @@ function initialTheme(): ThemeMode {
 
 export function ThemeControls() {
   const [theme, setTheme] = useState<ThemeMode>(initialTheme)
-  const [authVisible, setAuthVisible] = useState(false)
+  const { user, profile, loading } = useAuth()
+  // Telas de carregamento, login e cadastro pendente (as mesmas de App) ficam sempre no modo claro.
+  const authVisible = loading || !user || !profile || profile.status !== 'active'
 
   useEffect(() => {
-    const syncAuthState = () => {
-      const visible = Boolean(document.querySelector('.auth-page'))
-      setAuthVisible(visible)
-      const activeTheme: ThemeMode = visible ? 'light' : theme
-      document.documentElement.dataset.theme = activeTheme
-      document.documentElement.style.colorScheme = activeTheme
-    }
-
-    syncAuthState()
-    const observer = new MutationObserver(syncAuthState)
-    observer.observe(document.body, { childList: true, subtree: true })
-    return () => observer.disconnect()
-  }, [theme])
-
-  useEffect(() => {
-    if (authVisible) return
-    document.documentElement.dataset.theme = theme
-    document.documentElement.style.colorScheme = theme
-    window.localStorage.setItem(STORAGE_KEY, theme)
+    const activeTheme: ThemeMode = authVisible ? 'light' : theme
+    document.documentElement.dataset.theme = activeTheme
+    document.documentElement.style.colorScheme = activeTheme
+    if (!authVisible) window.localStorage.setItem(STORAGE_KEY, theme)
   }, [theme, authVisible])
 
   if (authVisible) return null

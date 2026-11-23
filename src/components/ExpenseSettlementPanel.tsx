@@ -2,7 +2,6 @@ import { statusTextClass } from './WorkflowStatusBadge'
 import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, updateDoc, type DocumentData } from 'firebase/firestore'
 import { Archive, CheckCircle2, WalletCards } from 'lucide-react'
-import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { db } from '../lib/firebase'
@@ -27,20 +26,8 @@ export function ExpenseSettlementPanel() {
   const [records, setRecords] = useState<AnyRecord[]>([])
   const [busyId, setBusyId] = useState('')
   const [dates, setDates] = useState<Record<string, string>>({})
-  const [host, setHost] = useState<HTMLElement | null>(null)
 
   const canOperate = profile?.role === 'master' || profile?.role === 'tesouraria'
-
-  useEffect(() => {
-    if (location.pathname !== '/despesas') {
-      setHost(null)
-      return
-    }
-    const locate = () => setHost(document.querySelector<HTMLElement>('.main-content'))
-    locate()
-    const timer = window.setTimeout(locate, 0)
-    return () => window.clearTimeout(timer)
-  }, [location.pathname])
 
   useEffect(() => {
     if (location.pathname !== '/despesas' || !canOperate || !profile?.uid) {
@@ -128,9 +115,9 @@ export function ExpenseSettlementPanel() {
     }
   }
 
-  if (location.pathname !== '/despesas' || !canOperate || !host) return null
+  if (location.pathname !== '/despesas' || !canOperate) return null
 
-  return createPortal(
+  return (
     <section className="page-card expense-settlement-panel">
       <div className="expense-settlement-heading">
         <div>
@@ -168,7 +155,6 @@ export function ExpenseSettlementPanel() {
           })}
         </div>
       )}
-    </section>,
-    host,
+    </section>
   )
 }
