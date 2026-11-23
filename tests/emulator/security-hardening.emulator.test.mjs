@@ -120,3 +120,17 @@ test('cadastro com e-mail de sócio exige e-mail verificado', async () => {
   await assertFails(setDoc(doc(dbAs(fake, { email_verified: false }), 'users', 'fake1'), payload))
   await assertSucceeds(setDoc(doc(dbAs(fake, { email_verified: true }), 'users', 'fake1'), payload))
 })
+
+test('repasse societario: impede adulterar valor durante aprovacao e envio', async () => {
+  const master = { uid: 'master1', email: 'fernandoazeredo64@gmail.com' }
+  await seed('users', master.uid, { uid: master.uid, email: master.email, role: 'master', status: 'active' })
+  const db = dbAs(master, { email_verified: true })
+  await seed('societaryTransfers', 'seg1', { status: 'aguardando_aprovacao', sourceReceivableId: 'seg1', transferValue: 700, percent: 40 })
+  await assertFails(updateDoc(doc(db, 'societaryTransfers', 'seg1'), { status: 'aprovado', transferValue: 900, approvedValue: 900, approvedPercent: 40 }))
+  await assertSucceeds(updateDoc(doc(db, 'societaryTransfers', 'seg1'), { status: 'aprovado', approvedValue: 700, approvedPercent: 40 }))
+  await assertFails(updateDoc(doc(db, 'societaryTransfers', 'seg1'), { status: 'enviado_tesouraria', percent: 50 }))
+  await assertSucceeds(updateDoc(doc(db, 'societaryTransfers', 'seg1'), { status: 'enviado_tesouraria' }))
+  await assertFails(updateDoc(doc(db, 'societaryTransfers', 'seg1'), { status: 'apurado', transferValue: 300 }))
+  await assertSucceeds(updateDoc(doc(db, 'societaryTransfers', 'seg1'), { status: 'apurado' }))
+  await assertSucceeds(updateDoc(doc(db, 'societaryTransfers', 'seg1'), { transferValue: 300 }))
+})

@@ -14,12 +14,6 @@ service firebase.storage {
         : '';
     }
 
-    function rawEmail() {
-      return signedIn() && request.auth.token.email != null
-        ? request.auth.token.email.lower()
-        : '';
-    }
-
     function isPrimaryAdminEmail() {
       return authEmail() == 'fernandoazeredo64@gmail.com';
     }
@@ -41,16 +35,14 @@ service firebase.storage {
       ];
     }
 
-    // E-mail oficial verificado, ou e-mail oficial com cadastro ativo
-    // (cadastro ativo só existe após liberação manual do Master).
+    // Contas oficiais precisam de email verificado E cadastro ativo.
+    // Suspensao no Firestore revoga acesso, inclusive a arquivos existentes.
     function financialReader() {
-      return officialReaderEmail(authEmail())
-        || (officialReaderEmail(rawEmail()) && activeUser());
+      return activeUser() && officialReaderEmail(authEmail());
     }
 
     function financialWriter() {
-      return officialWriterEmail(authEmail())
-        || (officialWriterEmail(rawEmail()) && activeUser());
+      return activeUser() && officialWriterEmail(authEmail());
     }
 
     function activeUser() {
@@ -58,10 +50,7 @@ service firebase.storage {
         && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'active';
     }
 
-    // A consulta cruzada ao Firestore depende das permissões de um service agent
-    // distinto da conta do GitHub Actions. As contas financeiras oficiais já
-    // identificadas no Firebase Auth têm uma rota explícita e restrita de acesso.
-    // Mantemos a autorização anterior para usuários ativos.
+    // Acesso financeiro exige cadastro ativo, inclusive para contas oficiais.
     function demonstrativeAuthorizedUser() {
       return signedIn() && (financialReader() || activeUser());
     }
