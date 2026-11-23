@@ -4,7 +4,6 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './auth/AuthContext'
 import { AgreementHelpAdditions } from './components/AgreementHelpAdditions'
-import { CpfCnpjValidationEnhancer } from './components/CpfCnpjValidationEnhancer'
 import { DreAccountSearchEnhancer } from './components/DreAccountSearchEnhancer'
 import { DreRegimeViewEnhancer } from './components/DreRegimeViewEnhancer'
 import { DynamicAgreementInstallmentsEnhancer } from './components/DynamicAgreementInstallmentsEnhancer'
@@ -42,7 +41,6 @@ createRoot(document.getElementById('root')!).render(
       <AuthProvider>
         <ThemeControls />
         <SocietaryRouteAccessGuard />
-        <CpfCnpjValidationEnhancer />
         <DreAccountSearchEnhancer />
         <DreRegimeViewEnhancer />
         <DynamicAgreementInstallmentsEnhancer />
