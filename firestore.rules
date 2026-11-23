@@ -373,6 +373,14 @@ service cloud.firestore {
         && request.resource.data.status == 'apurado';
     }
 
+    // Edicao de valores so ocorre enquanto o repasse permanece em apuracao.
+    // Para corrigir um aprovado, reabrir primeiro e depois editar.
+    function societaryFinancialValuesLocked() {
+      return unchanged(['sourceReceivableId', 'originalTransferValue', 'officeFees',
+        'percent', 'transferValue', 'anaShare', 'flavioShare', 'clientValue',
+        'taxAmount', 'calculationVersion', 'beneficiary', 'processo', 'receiptDate']);
+    }
+
     function societaryDirectorUpdate() {
       return societaryDecisionUser()
         && (
@@ -390,7 +398,12 @@ service cloud.firestore {
           ||
           (resource.data.status == 'enviado_tesouraria'
             && request.resource.data.status in ['apurado', 'cancelado'])
-        );
+        )
+        && ((resource.data.status == 'apurado' && request.resource.data.status == 'apurado')
+          || societaryFinancialValuesLocked())
+        && (request.resource.data.status != 'aprovado'
+          || (request.resource.data.approvedValue == resource.data.transferValue
+            && request.resource.data.approvedPercent == resource.data.percent));
     }
 
     function societaryTreasuryUpdate() {
