@@ -59,7 +59,7 @@ function safeFileName(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'arquivo'
 }
 
-function OtherRevenueModal({ onClose }: { onClose: () => void }) {
+export function OtherRevenueModal({ onClose }: { onClose: () => void }) {
   const { profile } = useAuth()
   const institutional = useInstitutionalSettings()
   const [recordRef] = useState(() => doc(collection(db, 'receivables')))
@@ -208,17 +208,4 @@ function OtherRevenueModal({ onClose }: { onClose: () => void }) {
       </div>
     </section>
   </div>
-}
-
-export function OtherRevenueReceivable() {
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    const handler = () => setOpen(true)
-    window.addEventListener('open-other-revenue', handler)
-    return () => window.removeEventListener('open-other-revenue', handler)
-  }, [])
-
-  if (!open) return null
-  return <OtherRevenueModal onClose={() => setOpen(false)} />
 }

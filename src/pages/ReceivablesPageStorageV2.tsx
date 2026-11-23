@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useInstitutionalSettings } from '../hooks/useInstitutionalSettings'
+import { RevenueTypeModal } from '../components/RevenueTypeChooser'
+import { LaborAgreementModal } from '../components/LaborAgreementReceivable'
+import { OtherRevenueModal } from '../components/OtherRevenueReceivable'
 import { addDoc, arrayUnion, collection, doc, getDoc, onSnapshot, serverTimestamp, setDoc, updateDoc, type DocumentData } from 'firebase/firestore'
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytesResumable, type UploadTask } from 'firebase/storage'
 import { BadgeDollarSign, CheckCircle2, ExternalLink, FileText, Paperclip, PencilLine, Plus, RefreshCw, Search, Send, Trash2, Upload, X } from 'lucide-react'
@@ -439,13 +443,25 @@ export function ReceivablesPageStorageV2() {
   const { profile } = useAuth()
   const { records, loading } = useReceivables()
   useEffect(() => { if (params.get('novo') === '1') setOpen(true) }, [params])
+  // "+ Nova Receita" abre a escolha do tipo (também via ?escolherReceita=1, usado pelo Dashboard).
+  const [chooserOpen, setChooserOpen] = useState(params.get('escolherReceita') === '1')
+  const [agreementOpen, setAgreementOpen] = useState(false)
+  const [otherOpen, setOtherOpen] = useState(false)
+  useEffect(() => {
+    if (params.get('escolherReceita') !== '1') return
+    setChooserOpen(true)
+    setParams({}, { replace: true })
+  }, [params, setParams])
   const filtered = records.filter((item) => `${item.processo ?? ''} ${item.reclamante ?? ''} ${item.reclamada ?? ''} ${item.agentName ?? ''} ${item.receivingBankAccount?.bank ?? ''} ${item.receivingBankAccount?.account ?? ''}`.toLowerCase().includes(search.toLowerCase()))
   const close = () => { setOpen(false); setParams({}) }
 
   return <>
-    <div className="page-heading"><div><span className="eyebrow">Origem do recebimento</span><h1>Receitas</h1><p>O departamento de origem registra os recebimentos, informa a conta em que o valor foi recebido e faz o upload no sistema de toda a documentação comprobatória. As informações e os documentos anexados seguem eletronicamente para a Tesouraria, evitando o envio e a circulação de documentos em papel.</p></div><div className="quick-actions"><button className="outline-revenue-button" type="button" onClick={() => printRevenueExtract(records)}><FileText size={18} /> Extrato de Receitas</button><button className="revenue-button" type="button" onClick={() => setOpen(true)}><Plus size={18} /> Nova Receita</button></div></div>
+    <div className="page-heading"><div><span className="eyebrow">Origem do recebimento</span><h1>Receitas</h1><p>O departamento de origem registra os recebimentos, informa a conta em que o valor foi recebido e faz o upload no sistema de toda a documentação comprobatória. As informações e os documentos anexados seguem eletronicamente para a Tesouraria, evitando o envio e a circulação de documentos em papel.</p></div><div className="quick-actions"><button className="outline-revenue-button" type="button" onClick={() => printRevenueExtract(records)}><FileText size={18} /> Extrato de Receitas</button><button className="revenue-button revenue-type-chooser-button" type="button" onClick={() => setChooserOpen(true)}><Plus size={18} /> Nova Receita</button></div></div>
     <section className="page-card module-card revenue-module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por processo, partes, agente, banco ou conta de recebimento" /></div></div>{loading ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando receitas</strong></div> : filtered.length === 0 ? <div className="module-empty"><BadgeDollarSign size={34} /><strong>Nenhuma receita cadastrada</strong></div> : <div className="data-table receivable-integrated-table"><div className="data-row data-head"><span>Processo</span><span>Partes</span><span>Conta de Recebimento</span><span>Status</span><span className="numeric">Valor</span></div>{filtered.map((item) => { const attachments = attachmentsOf(item); const bank = item.receivingBankAccount; return <div className="data-row" key={item.id}><span><strong>{item.processo || '—'}</strong><small>{item.natureza || ''}</small></span><span><strong>{item.reclamante || '—'}</strong><small>{item.reclamada || ''}{item.agentName ? ` · Agente: ${item.agentName}` : ''}</small></span><span><strong>{bank?.bank || '—'}</strong><small>{bank ? `Ag. ${bank.agency} · C/C ${bank.account}` : 'Conta ainda não informada'}</small></span><span><WorkflowStatusBadge status={item.status} label={statusLabels[item.status] || item.status || '—'} />{canEditReceivable(item, profile?.role, profile?.uid) && <button className="small-neutral-button receivable-edit-button" type="button" onClick={() => setEditTarget(item)}><PencilLine size={14} /> {item.status === 'devolvido' ? 'Corrigir e reenviar' : 'Editar rascunho'}</button>}</span><span className="numeric revenue-text"><strong>{money.format(toNumber(item.valorAlvara))}</strong>{attachments.length > 0 && <button className="attachment-count-link" type="button" onClick={() => setAttachmentsTarget(item)}><Paperclip size={14} /> {attachments.length}</button>}</span></div> })}</div>}</section>
     {open && <ReceivableModal key="nova-receita-storage-v2" onClose={close} />}
+    {chooserOpen && <RevenueTypeModal onClose={() => setChooserOpen(false)} onStandard={() => { setChooserOpen(false); setOpen(true) }} onAgreement={() => { setChooserOpen(false); setAgreementOpen(true) }} onOther={() => { setChooserOpen(false); setOtherOpen(true) }} />}
+    {agreementOpen && createPortal(<LaborAgreementModal onClose={() => setAgreementOpen(false)} />, document.body)}
+    {otherOpen && <OtherRevenueModal onClose={() => setOtherOpen(false)} />}
     {editTarget && <ReceivableModal key={`editar-receita-${editTarget.id}`} existing={editTarget} onClose={() => setEditTarget(null)} />}
     {attachmentsTarget && <div className="modal-backdrop"><section className="decision-modal" role="dialog" aria-modal="true"><div className="modal-toolbar"><div><span className="eyebrow">Documentos da receita</span><h2>{attachmentsTarget.processo || attachmentsTarget.reclamante || 'Recebimento'}</h2></div><button className="icon-button" onClick={() => setAttachmentsTarget(null)}><X size={20} /></button></div><div className="storage-dossier-files">{attachmentsOf(attachmentsTarget).map((file) => <a key={file.path} href={file.url} target="_blank" rel="noreferrer"><Paperclip size={14} /><span>{file.name}</span><ExternalLink size={13} /></a>)}</div></section></div>}
   </>

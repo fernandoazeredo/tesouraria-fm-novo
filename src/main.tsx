@@ -3,15 +3,11 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './auth/AuthContext'
-import { AgreementHelpAdditions } from './components/AgreementHelpAdditions'
 import { DreAccountSearchEnhancer } from './components/DreAccountSearchEnhancer'
 import { DreRegimeViewEnhancer } from './components/DreRegimeViewEnhancer'
 import { DynamicAgreementInstallmentsEnhancer } from './components/DynamicAgreementInstallmentsEnhancer'
 import { ExpenseFiltersPanel } from './components/ExpenseFiltersPanel'
 import { ExpenseSettlementPanel } from './components/ExpenseSettlementPanel'
-import { LaborAgreementReceivableLauncher } from './components/LaborAgreementReceivable'
-import { OtherRevenueReceivable } from './components/OtherRevenueReceivable'
-import { RevenueTypeChooser } from './components/RevenueTypeChooser'
 import { SocietaryRouteAccessGuard } from './components/SocietaryRouteAccessGuard'
 import { ThemeControls } from './components/ThemeControls'
 import './societary-transfer-error-guard'
@@ -44,10 +40,6 @@ createRoot(document.getElementById('root')!).render(
         <DreAccountSearchEnhancer />
         <DreRegimeViewEnhancer />
         <DynamicAgreementInstallmentsEnhancer />
-        <LaborAgreementReceivableLauncher />
-        <OtherRevenueReceivable />
-        <RevenueTypeChooser />
-        <AgreementHelpAdditions />
         <App />
         <ExpenseFiltersPanel />
         <ExpenseSettlementPanel />

@@ -1,3 +1,4 @@
+import { AgreementHelpCard } from '../components/AgreementHelpAdditions'
 import {
   AlertTriangle,
   BadgeCheck,
@@ -88,6 +89,7 @@ export function TipsPageEnhanced() {
       </div>
     </section>
     <OperationalFlowImage />
+    <AgreementHelpCard />
   </>
 }
 
@@ -130,5 +132,6 @@ export function HowToPageEnhanced() {
     <Header eyebrow="Guia operacional" title="Como Usar" description="Passo a passo atualizado de Despesas, Receitas, Repasses, Comissões, Repasse Societário, DRE Gerencial, Contabilidade, Permissões, Bancos e Contas, IA Executiva e Auditoria." />
     <div className="howto-steps enhanced-howto">{steps.map(([number, title, text]) => <article key={number}><span>{number}</span><div><h3>{title}</h3><p>{text}</p></div></article>)}</div>
     <section className="page-card tour-callout"><Lightbulb size={24} /><div><h2>Referência operacional</h2><p>Este guia acompanha o fluxo atualmente disponível no aplicativo e deve ser usado como referência para homologação e treinamento dos usuários.</p></div></section>
+    <AgreementHelpCard />
   </>
 }
