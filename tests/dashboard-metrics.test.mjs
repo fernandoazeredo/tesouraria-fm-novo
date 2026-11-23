@@ -41,3 +41,26 @@ test('a pagar 7 dias, previsão 30 dias e repasses pendentes', () => {
   assert.equal(p.total, 1300)
   assert.equal(p.rows.find((r) => r.origin === 'Repasse de Alvarás').count, 1)
 })
+
+test('comparação, saldo acumulado, vencimentos e recebíveis', async () => {
+  const { previousRange, pctChange, cumulativeBalance, upcomingPayments, receivablesOutlook } = await import('../src/lib/dashboardMetrics.ts')
+  assert.deepEqual(previousRange('mes', today), { start: '2026-10-01', end: '2026-10-31' })
+  assert.deepEqual(previousRange('trimestre', today), { start: '2026-07-01', end: '2026-09-30' })
+  assert.deepEqual(previousRange('ano', today), { start: '2025-01-01', end: '2025-12-31' })
+  assert.equal(previousRange('tudo', today), null)
+  assert.equal(pctChange(110, 100), 10)
+  assert.equal(pctChange(10, 0), null)
+  assert.deepEqual(cumulativeBalance([{ receitas: 100, despesas: 40 }, { receitas: 0, despesas: 10 }]), [60, 50])
+  const all = movements(
+    [{ id: 'r1', status: 'enviado_tesouraria', valorAlvara: 5000, dataPrevista: '2026-11-25', processo: 'P1' },
+     { id: 'r2', status: 'enviado_tesouraria', valorAlvara: 900, dataPrevista: '2026-11-12', processo: 'P2' },
+     { id: 'r3', status: 'enviado_tesouraria', valorAlvara: 700, dataPrevista: '2027-02-01' },
+     { id: 'r4', status: 'recebido_tesouraria', valorAlvara: 300, receiptDate: '2026-11-05' }],
+    [{ id: 'e1', status: 'aprovado', valorTotal: 200, paymentDate: '2026-11-20' }, { id: 'e2', status: 'aprovado', valorTotal: 80, paymentDate: '2026-11-10' }],
+    [], [], [])
+  assert.deepEqual(upcomingPayments(all, today).map((m) => [m.value, m.late]), [[80, true], [200, false]])
+  const out = receivablesOutlook(all, today)
+  assert.equal(out.total, 5900); assert.equal(out.lateCount, 1); assert.equal(out.lateValue, 900)
+  assert.equal(out.received, 300); assert.equal(out.weeks[0] + out.weeks[1], 5000)
+  assert.deepEqual(out.items.map((i) => i.days), [-5, 8])
+})
