@@ -6,7 +6,6 @@ import { useSearchParams } from 'react-router-dom'
 import { useInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import { db, storage } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
-import { ExpenseSettlementPanel } from '../components/ExpenseSettlementPanel'
 import { ExpenseManagementDashboard } from '../components/ExpenseManagementDashboard'
 import { FinancialMovementCard } from '../components/FinancialMovementCard'
 import { WorkflowStatusBadge } from '../components/WorkflowStatusBadge'
@@ -455,6 +454,5 @@ export function ExpensesPageStorage() {
     {attachmentTarget && <div className="modal-backdrop"><section className="decision-modal attachment-viewer-modal" role="dialog" aria-modal="true"><div className="modal-toolbar"><div><span className="eyebrow">Documentos comprobatórios</span><h2>Anexos da despesa</h2></div><button className="icon-button" type="button" onClick={() => setAttachmentTarget(null)}><X size={20} /></button></div><div className="attachment-viewer-heading"><Paperclip size={20} /><div><strong>{attachmentTarget.nome || 'Despesa'}</strong><span>{existingAttachments(attachmentTarget).length} arquivo(s)</span></div></div><div className="attachment-viewer-list">{existingAttachments(attachmentTarget).map((item) => <a key={item.path || item.url} href={item.url} target="_blank" rel="noreferrer"><CheckCircle2 size={17} /><div><strong>{item.name}</strong><span>Enviado · {formatBytes(item.size)}</span></div><ExternalLink size={14} /></a>)}</div><div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setAttachmentTarget(null)}>Fechar</button></div></section></div>}
 
     {deleteTarget && <div className="modal-backdrop"><section className="decision-modal rejeitado" role="dialog" aria-modal="true"><div className="modal-toolbar"><div><span className="eyebrow">Excluir rascunho</span><h2>Confirmar exclusão</h2></div><button className="icon-button" type="button" onClick={() => setDeleteTarget(null)}><X size={20} /></button></div><div className="decision-warning"><AlertTriangle size={20} /><div><strong>{deleteTarget.nome || 'Despesa em rascunho'}</strong><span>{money.format(toNumber(deleteTarget.valorTotal))}</span></div></div><p>Esta ação é permitida somente enquanto o lançamento estiver em <strong>Rascunho</strong>. O registro será removido da lista e a exclusão ficará registrada na Auditoria.</p><div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setDeleteTarget(null)}>Cancelar</button><button className="expense-button" type="button" disabled={deleting} onClick={confirmDeleteDraft}><Trash2 size={16} /> {deleting ? 'Excluindo...' : 'Excluir rascunho'}</button></div></section></div>}
-    <ExpenseSettlementPanel />
   </>
 }
