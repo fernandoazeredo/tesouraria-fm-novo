@@ -1,4 +1,4 @@
-# Controle de Despesas e Receitas MM
+# Tesouraria FM Novo
 
 Aplicativo financeiro, documental e de aprovação da **FLÁVIO MARQUES ADVOGADOS ASSOCIADOS**.
 
@@ -16,7 +16,8 @@ Aplicativo financeiro, documental e de aprovação da **FLÁVIO MARQUES ADVOGADO
 
 - Escritório: **FLÁVIO MARQUES ADVOGADOS ASSOCIADOS**
 - Aplicativo: **Controle de Despesas e Receitas**
-- Repositório técnico: `controle-despesas-receitas-mm`
+- Repositório técnico: `tesouraria-fm-novo`
+- Projeto Firebase: `tesouraria-fm-novo`
 
 ## Módulos previstos
 

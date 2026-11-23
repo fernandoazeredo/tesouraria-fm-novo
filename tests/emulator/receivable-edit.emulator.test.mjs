@@ -67,7 +67,9 @@ test('editar e salvar rascunho atualiza o mesmo documento, sem duplicar e preser
   await seed('rec1', draft)
   const db = dbAs(users.operador)
   await assertSucceeds(appEdit(db, 'rec1', 'rascunho', 'rascunho', { formaRecebimento: 'TED (teste)' }))
-  const all = await env.withSecurityRulesDisabled(async (ctx) => (await getDocs(collection(ctx.firestore(), 'receivables'))).docs)
+  // withSecurityRulesDisabled não devolve o retorno da função; capturamos em variável.
+  let all = []
+  await env.withSecurityRulesDisabled(async (ctx) => { all = (await getDocs(collection(ctx.firestore(), 'receivables'))).docs })
   assert.equal(all.length, 1)
   const data = all[0].data()
   assert.equal(all[0].id, 'rec1')

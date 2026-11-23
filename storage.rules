@@ -5,9 +5,18 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    // Somente e-mails verificados pelo Firebase Auth concedem papel por e-mail.
+    // Impede que uma conta e-mail/senha não verificada assuma o e-mail de um sócio.
     function authEmail() {
       return signedIn() && request.auth.token.email != null
-        ? request.auth.token.email
+        && request.auth.token.email_verified == true
+        ? request.auth.token.email.lower()
+        : '';
+    }
+
+    function rawEmail() {
+      return signedIn() && request.auth.token.email != null
+        ? request.auth.token.email.lower()
         : '';
     }
 
@@ -27,12 +36,33 @@ service firebase.storage {
       return authEmail() == 'socorro@marquesemuller.adv.br';
     }
 
+    function officialReaderEmail(email) {
+      return email in [
+        'fernandoazeredo64@gmail.com',
+        'flavio.marques@marquesemuller.adv.br',
+        'reinaldo@marquesemuller.adv.br',
+        'socorro@marquesemuller.adv.br'
+      ];
+    }
+
+    function officialWriterEmail(email) {
+      return email in [
+        'fernandoazeredo64@gmail.com',
+        'reinaldo@marquesemuller.adv.br',
+        'socorro@marquesemuller.adv.br'
+      ];
+    }
+
+    // E-mail oficial verificado, ou e-mail oficial com cadastro ativo
+    // (cadastro ativo só existe após liberação manual do Master).
     function financialReader() {
-      return isPrimaryAdminEmail() || isDirectorEmail() || isManagerEmail() || isTreasuryEmail();
+      return officialReaderEmail(authEmail())
+        || (officialReaderEmail(rawEmail()) && activeUser());
     }
 
     function financialWriter() {
-      return isPrimaryAdminEmail() || isManagerEmail() || isTreasuryEmail();
+      return officialWriterEmail(authEmail())
+        || (officialWriterEmail(rawEmail()) && activeUser());
     }
 
     function activeUser() {
@@ -66,22 +96,24 @@ service firebase.storage {
       return request.resource == null || request.resource.size <= 30 * 1024 * 1024;
     }
 
+    // Comprovantes: somente usuários com cadastro ativo (ou contas financeiras
+    // oficiais). Antes bastava estar logado, o que incluía qualquer conta Google.
     match /despesas/{userId}/{allPaths=**} {
-      allow read: if signedIn();
+      allow read: if demonstrativeAuthorizedUser();
       allow create, update: if signedIn()
-        && (request.auth.uid == userId || isPrimaryAdminEmail())
+        && ((request.auth.uid == userId && activeUser()) || isPrimaryAdminEmail())
         && validAttachmentSize();
       allow delete: if signedIn()
-        && (request.auth.uid == userId || isPrimaryAdminEmail());
+        && ((request.auth.uid == userId && activeUser()) || isPrimaryAdminEmail());
     }
 
     match /recebimentos/{userId}/{allPaths=**} {
-      allow read: if signedIn();
+      allow read: if demonstrativeAuthorizedUser();
       allow create, update: if signedIn()
-        && (request.auth.uid == userId || isPrimaryAdminEmail())
+        && ((request.auth.uid == userId && activeUser()) || isPrimaryAdminEmail())
         && validAttachmentSize();
       allow delete: if signedIn()
-        && (request.auth.uid == userId || isPrimaryAdminEmail());
+        && ((request.auth.uid == userId && activeUser()) || isPrimaryAdminEmail());
     }
 
     match /demonstrativos/{allPaths=**} {
@@ -102,7 +134,12 @@ service firebase.storage {
       allow delete: if financialWriter();
     }
 
-    match /envios-contabilidade/{allPaths=**}
+    // ZIPs mensais enviados à Contabilidade (removidos junto com o extrato).
+    match /envios-contabilidade/{allPaths=**} {
+      allow read: if financialReader();
+      allow create, update: if financialWriter() && validBankStatementSize();
+      allow delete: if financialWriter();
+    }
 
     // Estrutura antiga mantida somente para leitura/limpeza de pacotes já existentes.
     match /pacotes-contabeis/{allPaths=**} {

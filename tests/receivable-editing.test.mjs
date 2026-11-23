@@ -18,6 +18,9 @@ const defaults = [
 
 test('botão disponível apenas para rascunho e devolvido', () => {
   assert.equal(canEditReceivable({ status: 'rascunho' }, 'operador'), true)
+  assert.equal(canEditReceivable({ status: 'rascunho', createdBy: 'op1' }, 'operador', 'op1'), true)
+  assert.equal(canEditReceivable({ status: 'rascunho', createdBy: 'op2' }, 'operador', 'op1'), false)
+  assert.equal(canEditReceivable({ status: 'rascunho', createdBy: 'op2' }, 'gerente', 'ge1'), true)
   assert.equal(canEditReceivable({ status: 'devolvido' }, 'gerente'), true)
   for (const status of ['enviado_tesouraria', 'recebido_tesouraria', 'encerrado', undefined]) {
     assert.equal(canEditReceivable({ status }, 'master'), false, String(status))
