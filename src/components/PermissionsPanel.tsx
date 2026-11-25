@@ -62,7 +62,7 @@ export function PermissionsPanel() {
       const payload={schemaVersion:1,modules,updatedBy:profile.uid,updatedAt:serverTimestamp()}
       const batch=writeBatch(db)
       batch.set(doc(db,'userPermissions',user.pending?pendingPermissionDocId(user.email):user.id),payload)
-      batch.set(doc(collection(db,'auditLogs')),{action:'Permissões de usuário alteradas',module:'Configurações',entityId:user.id,detail:description,userId:profile.uid,userName:profile.displayName,userEmail:profile.email,targetUserId:user.id,targetEmail:user.email,before:old,after:modules,createdAt:serverTimestamp()})
+      batch.set(doc(collection(db,'auditLogs')),{action:'Permissões de usuário alteradas',module:'Configurações',entityId:user.id,detail:('Usuário: '+(user.displayName||'')+' <'+(user.email||'')+'>\n'+description).slice(0,10000),userId:profile.uid,userName:profile.displayName,userEmail:profile.email,createdAt:serverTimestamp()})
       await batch.commit()
       setOriginal({schemaVersion:1,modules});setMessage('Permissões salvas e registradas na Auditoria.')
     }catch(e){setMessage('Falha ao salvar alterações: '+String(e))}
