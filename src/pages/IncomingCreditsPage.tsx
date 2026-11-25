@@ -124,7 +124,7 @@ export function IncomingCreditsPage() {
     </section>
 
     <section className="page-card icp-pending">
-      <div className="card-title-row"><h2>Receitas previstas aguardando extrato</h2><small>{pending.length}</small></div>
+      <div className="card-title-row"><h2>Receitas previstas aguardando confirmação</h2><small>{pending.length}</small></div>
       {pending.length === 0 ? <p className="dash-empty">Nenhuma receita prevista aguardando confirmação. Acordos parcelados continuam sendo confirmados pela Tesouraria.</p> : <div className="icp-pending-list">{pending.map((r) => {
         const options = suggestCredits(r, shown)
         const selected = options.find((c) => c.id === choice[r.id]) || options[0]
