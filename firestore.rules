@@ -641,27 +641,28 @@ service cloud.firestore {
 
     match /bankCredits/{creditId} {
       allow read: if incomingCreditsReader();
-      allow create: if hasRole(['master', 'tesouraria'])
+      allow create: if masterRestoreMode() || (hasRole(['master', 'tesouraria'])
         && request.resource.data.keys().hasOnly(['date', 'amount', 'memo', 'name', 'fitId', 'refNum', 'importedBy', 'importedByName', 'importedAt', 'matchedReceivableId'])
         && request.resource.data.amount is number
         && request.resource.data.amount > 0
         && request.resource.data.date is string
         && request.resource.data.matchedReceivableId == null
-        && request.resource.data.importedBy == request.auth.uid;
-      allow update: if bankCreditMatch(creditId) || bankCreditUnmatch(creditId);
-      allow delete: if hasRole(['master', 'tesouraria']) && resource.data.matchedReceivableId == null;
+        && request.resource.data.importedBy == request.auth.uid);
+      allow update: if masterRestoreMode() || bankCreditMatch(creditId) || bankCreditUnmatch(creditId);
+      allow delete: if masterWipeMode() || masterRestoreMode()
+        || (hasRole(['master', 'tesouraria']) && resource.data.matchedReceivableId == null);
     }
 
     // Extrato vigente da Conferência de Entradas: só o último upload vale.
     match /bankCreditImports/{importId} {
       allow read: if incomingCreditsReader();
-      allow create, update: if hasRole(['master', 'tesouraria'])
+      allow create, update: if masterRestoreMode() || (hasRole(['master', 'tesouraria'])
         && importId == 'current'
         && request.resource.data.keys().hasOnly(['fileName', 'uploadedAt', 'uploadedBy', 'uploadedByName', 'creditIds', 'count', 'total', 'periodStart', 'periodEnd'])
         && request.resource.data.uploadedBy == request.auth.uid
         && request.resource.data.uploadedAt == request.time
-        && request.resource.data.creditIds is list;
-      allow delete: if false;
+        && request.resource.data.creditIds is list);
+      allow delete: if masterWipeMode() || masterRestoreMode();
     }
 
     match /bankStatements/{document=**} {
