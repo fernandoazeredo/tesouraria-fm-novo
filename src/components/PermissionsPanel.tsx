@@ -11,7 +11,7 @@ const labels: Record<ModuleId,string> = {
   repasse_societario:'Repasse Societário',nota_fiscal:'Nota Fiscal',comissoes:'Comissões de Agentes',
   tesouraria:'Tesouraria — Recebimentos',aprovacoes:'Aprovações',dre:'DRE Gerencial',
   plano_contas:'Plano de Contas',contabilidade:'Contabilidade',calendario:'Calendário Financeiro',
-  fluxo_caixa:'Fluxo de Caixa',conciliacao:'Conciliação Bancária',documentos:'Arquivo de Documentos',
+  fluxo_caixa:'Fluxo de Caixa',conciliacao:'Conciliação Bancária',conferencia_entradas:'Conferência de Entradas',documentos:'Arquivo de Documentos',
   usuarios:'Usuários',auditoria:'Auditoria',utilitarios:'Utilitários',configuracoes:'Configurações',ia:'IA Executiva Privada',
 }
 type UserOption={id:string;displayName?:string;email:string;role:string;pending?:boolean}

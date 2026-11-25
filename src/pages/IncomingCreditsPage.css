@@ -1,0 +1,27 @@
+.icp .page-card { margin: 0; }
+.icp .card-title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.icp .card-title-row h2 { display: flex; align-items: center; gap: 6px; }
+.icp .card-title-row small { font-weight: 700; color: var(--text-muted, #6d7d8f); }
+.icp select { height: 34px; border-radius: 9px; border: 1px solid var(--border-default, #d6e0e8); background: var(--bg-input, #fff); color: var(--text-primary, inherit); padding: 0 8px; font-weight: 600; max-width: 100%; }
+.icp-upload { cursor: pointer; }
+.icp-upload.busy { opacity: .6; pointer-events: none; }
+.icp-msg { margin: 0 0 14px; padding: 10px 14px; border-radius: 10px; background: var(--revenue-soft, #edf7ff); color: var(--revenue, #1678c8); font-weight: 600; }
+.icp-msg.error { background: var(--expense-soft, #fff0f1); color: var(--expense, #c9363d); }
+.icp-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; }
+.icp-credit, .icp-rec-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.icp-credit { padding: 10px 0; border-bottom: 1px solid var(--border-default, #d6e0e8); }
+.icp .desc { min-width: 0; font-size: 13px; }
+.icp .desc > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.icp .desc small { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-muted, #6d7d8f); }
+.icp-credit strong, .icp-rec-top strong { white-space: nowrap; color: var(--revenue, #1678c8); }
+.icp-credit.done strong { color: var(--success, #168653); }
+.icp-credit.done small { color: var(--success, #168653); font-weight: 700; }
+.icp-total { display: flex; justify-content: space-between; padding-top: 10px; font-size: 13px; font-weight: 700; color: var(--text-muted, #6d7d8f); }
+.icp-total strong { color: var(--text-primary, inherit); }
+.icp-rec { padding: 12px 0; border-bottom: 1px solid var(--border-default, #d6e0e8); }
+.icp-rec-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.icp-rec-actions select { flex: 1 1 220px; }
+.icp-none { display: block; margin-top: 6px; color: var(--warning, #a96d00); font-weight: 600; font-size: 12px; }
+.icp-note { margin: 12px 0 0; font-size: 12px; color: var(--text-muted, #6d7d8f); }
+.icp .dash-empty { color: var(--text-muted, #6d7d8f); font-size: 13px; }
+@media (max-width: 1000px) { .icp-grid { grid-template-columns: 1fr; } }

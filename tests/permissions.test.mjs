@@ -65,7 +65,7 @@ test('Aprovações são consultáveis por todos; Socorro não decide',()=>{
 })
 
 test('Flávio vê tudo, exceto DRE, Plano de Contas, Contabilidade, administração, Documentos e Conciliação',()=>{
-  const blocked=['ia','dre','plano_contas','contabilidade','usuarios','auditoria','utilitarios','configuracoes','documentos','conciliacao']
+  const blocked=['ia','dre','plano_contas','contabilidade','usuarios','auditoria','utilitarios','configuracoes','documentos','conciliacao','conferencia_entradas']
   for(const id of Object.keys(defaultRoles)){
     assert.equal(effectiveView(id,'diretor',director,null,admin,director),!blocked.includes(id),id)
   }

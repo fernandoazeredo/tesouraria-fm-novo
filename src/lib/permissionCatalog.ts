@@ -8,6 +8,7 @@ export const modulePaths = {
   dre: '/dre-gerencial', plano_contas: '/plano-contas',
   contabilidade: '/contabilidade', calendario: '/calendario-financeiro',
   fluxo_caixa: '/fluxo-caixa', conciliacao: '/conciliacao-bancaria',
+  conferencia_entradas: '/conferencia-entradas',
   documentos: '/documentos', usuarios: '/usuarios',
   auditoria: '/auditoria', utilitarios: '/utilitarios',
   configuracoes: '/configuracoes', ia: '/ia',
@@ -36,6 +37,7 @@ export const defaultRoles: Record<ModuleId, readonly string[]> = {
   calendario:['master','diretor','gerente','tesouraria'],
   fluxo_caixa:['master','diretor'],
   conciliacao:['master','diretor','gerente','tesouraria'],
+  conferencia_entradas:['master'],
   documentos:['master','diretor','gerente','tesouraria','operador'],
   usuarios:['master'],auditoria:['master'],utilitarios:['master'],configuracoes:['master'],
   ia:['master'],
@@ -43,7 +45,7 @@ export const defaultRoles: Record<ModuleId, readonly string[]> = {
 const ALL_ROLES = ['master','diretor','gerente','tesouraria','operador'] as const
 /** Perfis aos quais o Fernando pode liberar o módulo (compatível com as Rules). Sem entrada = mesmo que o padrão. */
 const grantableRoles: Partial<Record<ModuleId, readonly string[]>> = {
-  plano_contas: ALL_ROLES, ia: ALL_ROLES,
+  plano_contas: ALL_ROLES, ia: ALL_ROLES, conferencia_entradas: ALL_ROLES,
   fluxo_caixa: ['master','diretor','gerente','tesouraria'],
 }
 export const canGrant = (id: ModuleId, role: string) => (grantableRoles[id] ?? defaultRoles[id]).includes(role)
@@ -53,7 +55,7 @@ const FLAVIO = 'flavio.marques@marquesemuller.adv.br'
 /** Reinaldo (Jurídico): todas as receitas/alvarás, repasse de alvarás e comissões de agentes. */
 export const REINALDO_MODULES: readonly ModuleId[] = ['receitas', 'repasse_alvaras', 'comissoes', 'aprovacoes']
 /** Flávio (Diretor): tudo, exceto IA, DRE, Plano de Contas, Contabilidade, administração, Documentos e Conciliação. */
-export const FLAVIO_BLOCKED: readonly ModuleId[] = ['ia', 'dre', 'plano_contas', 'contabilidade', 'usuarios', 'auditoria', 'utilitarios', 'configuracoes', 'documentos', 'conciliacao']
+export const FLAVIO_BLOCKED: readonly ModuleId[] = ['ia', 'dre', 'plano_contas', 'contabilidade', 'usuarios', 'auditoria', 'utilitarios', 'configuracoes', 'documentos', 'conciliacao', 'conferencia_entradas']
 /** Padrão por pessoa (definido pelo Fernando). Só vale enquanto o Fernando não marcar/desmarcar o módulo em Configurações. */
 export function personDefaultBlocked(id: ModuleId, rawEmail: string) {
   const e = rawEmail.trim().toLowerCase()

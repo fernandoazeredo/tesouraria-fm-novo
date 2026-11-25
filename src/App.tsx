@@ -49,6 +49,7 @@ import { DashboardPageEnhanced } from './pages/DashboardPageEnhanced'
 import { ApprovalsPageEnhanced } from './pages/ApprovalsPageEnhanced'
 import { AccountingPageStorageV2 } from './pages/AccountingPageStorageV2'
 import { BankReconciliationPage } from './pages/BankReconciliationPage'
+import { IncomingCreditsPage } from './pages/IncomingCreditsPage'
 import { ExecutiveAiPage } from './pages/ExecutiveAiPage'
 import { FinancialCalendarPage } from './pages/FinancialCalendarPage'
 import { CashFlowMonthlyPage } from './pages/CashFlowMonthlyPage'
@@ -106,6 +107,7 @@ const menu: MenuItem[] = [
   { to: '/calendario-financeiro', label: 'Calendário Financeiro', icon: CalendarDays, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/fluxo-caixa', label: 'Fluxo de Caixa', icon: Wallet, roles: ['master', 'diretor'] },
   { to: '/conciliacao-bancaria', label: 'Conciliação Bancária', icon: Landmark, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
+  { to: '/conferencia-entradas', label: 'Conferência de Entradas', icon: Landmark, tone: 'revenue', roles: ['master', 'diretor', 'gerente', 'tesouraria', 'operador'] },
   { to: '/documentos', label: 'Arquivo de Documentos', icon: FolderArchive, roles: ['master', 'diretor', 'gerente', 'tesouraria', 'operador'] },
   { to: '/usuarios', label: 'Usuários', icon: Users, roles: ['master'] },
   { to: '/auditoria', label: 'Auditoria', icon: ShieldCheck, roles: ['master'] },
@@ -444,6 +446,7 @@ function AppShell() {
           <Route path="/calendario-financeiro" element={guarded('/calendario-financeiro', <FinancialCalendarPage />)} />
           <Route path="/fluxo-caixa" element={guarded('/fluxo-caixa', <CashFlowMonthlyPage />)} />
           <Route path="/conciliacao-bancaria" element={guarded('/conciliacao-bancaria', <BankReconciliationPage />)} />
+          <Route path="/conferencia-entradas" element={guarded('/conferencia-entradas', <IncomingCreditsPage />)} />
           <Route path="/documentos" element={guarded('/documentos', <DocumentsPageStorage />)} />
           <Route path="/usuarios" element={guarded('/usuarios', <UsersPageKitFernando />)} />
           <Route path="/auditoria" element={guarded('/auditoria', <AuditPageEnhancedV2 />)} />
