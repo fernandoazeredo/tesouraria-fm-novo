@@ -389,9 +389,11 @@ function AppShell() {
     if (!id) return true
     return effectiveView(id, accessRole, profile.email || '', permissionDoc, PRIMARY_ADMIN_EMAIL, DIRECTOR_EMAIL)
   }
-  const denied = <section className="page-card" role="alert"><h1>Acesso não autorizado</h1><p>Seu usuário não possui permissão para acessar este módulo.</p></section>
-  const guarded = (path: string, content: ReactNode) => !permissionsLoaded ? <section className="page-card" role="status"><p>Carregando…</p></section> : canOpen(path) ? content : denied
   const visibleMenu = menu.filter(item => canOpen(item.to))
+  // Sem permissão para a página: abre direto o primeiro menu liberado, sem mensagem de erro.
+  const firstAllowed = visibleMenu[0]?.to
+  const denied = firstAllowed ? <Navigate to={firstAllowed} replace /> : <section className="page-card" role="alert"><h1>Nenhum módulo liberado</h1><p>Peça ao Administrador Master para liberar o seu acesso.</p></section>
+  const guarded = (path: string, content: ReactNode) => !permissionsLoaded ? <section className="page-card" role="status"><p>Carregando…</p></section> : canOpen(path) ? content : denied
 
   useEffect(() => {
     document.body.classList.toggle('mobile-menu-lock', mobileMenuOpen)
@@ -430,7 +432,7 @@ function AppShell() {
       </aside>
       <main className="main-content">
         <Routes>
-          <Route path="/" element={!permissionsLoaded ? <section className="page-card" role="status">Carregando…</section> : canOpen('/') ? <DashboardPageEnhanced /> : <Navigate to={canOpen('/alvaras') ? '/alvaras' : canOpen('/aprovacoes') ? '/aprovacoes' : '/sem-acesso'} replace />} />
+          <Route path="/" element={!permissionsLoaded ? <section className="page-card" role="status">Carregando…</section> : canOpen('/') ? <DashboardPageEnhanced /> : denied} />
           <Route path="/sem-acesso" element={denied} />
           <Route path="/despesas" element={guarded('/despesas', <><ExpensesPageStorage /><ExpenseSettlementPanel /></>)} />
           <Route path="/alvaras" element={guarded('/alvaras', <ReceivablesPageStorageV2 />)} />
