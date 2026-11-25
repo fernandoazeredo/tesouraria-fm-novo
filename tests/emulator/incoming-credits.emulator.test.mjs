@@ -94,7 +94,7 @@ test('fluxo completo de uma receita fictícia: rascunho → prevista → extrato
   const { creditsFromOfx, confirmableReceivables, suggestCredits } = await import('../../src/lib/incomingCredits.ts')
   const { parseOfx } = await import('../../src/lib/ofx.ts')
   const op = dbAs(u.juridico)
-  const read = async () => (await env.withSecurityRulesDisabled(async (ctx) => (await getDoc(doc(ctx.firestore(), 'receivables', 'fic'))).data()))
+  const read = async () => { let data; await env.withSecurityRulesDisabled(async (ctx) => { data = (await getDoc(doc(ctx.firestore(), 'receivables', 'fic'))).data() }); return data }
   const stage = async () => movements([{ id: 'fic', ...(await read()) }], [], [], [], []).map((m) => m.stage)
   // 1) Jurídico lança como rascunho: fora do caixa
   await assertSucceeds(setDoc(doc(op, 'receivables', 'fic'), { status: 'rascunho', valorAlvara: 12345.67, processo: 'FICTICIO-0001', reclamante: 'CLIENTE FICTÍCIO', dataPrevista: '2026-11-26', createdBy: 'op1', createdAt: serverTimestamp(), baseCalculo: 12345.67 }))
