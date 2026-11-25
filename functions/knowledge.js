@@ -1,14 +1,15 @@
 // Conteúdo operacional fechado ao escopo do Tesouraria FM Novo.
 export const SYSTEM_KNOWLEDGE = `
 MÓDULOS DISPONÍVEIS (use estes caminhos):
-Dashboard (/): indicadores consolidados de receitas recebidas, despesas efetivas e saldo/resultado.
+Dashboard (/): período em campo de seleção; saldo do período com receitas, despesas, margem e variação; Central de pendências; fluxo de caixa com saldo acumulado e previsão 30 dias; próximos vencimentos; top 5 contas; card A receber.
 Despesas (/despesas): novo demonstrativo, documentos, rascunho, aprovação, pagamento e arquivamento; ações conforme permissão.
-Receitas (/alvaras): criar demonstrativo, editar rascunho, corrigir receita devolvida, anexar alvará, enviar à Tesouraria.
+Receitas (/alvaras): criar demonstrativo (Alvará com Origem fixa; Acordo e Outras Receitas têm formulários próprios), editar rascunho, corrigir receita devolvida, anexar alvará, enviar (status Prevista · aguardando confirmação).
+Confirmação de Entradas (/conferencia-entradas): Master ou Tesouraria sobe o Extrato Bancário Itaú em OFX (vale só o último; card Extrato vigente com data/hora); mostra só as entradas em formato de extrato de papel; Jurídico liberado confirma a receita prevista vinculando o crédito de mesmo valor (Confirmar recebimento → OK) e ela vira Recebida; nada é automático; cada crédito serve para uma única receita; Master pode Desvincular; acordos parcelados ficam com a Tesouraria.
 Repasse de Alvarás (/repasse-alvaras): obrigação de cliente oriunda de alvará confirmado; programar pagamento, enviar à aprovação, baixar parcelas efetivamente pagas.
 Repasse Societário (/repasse-societario): repasses vinculados aos honorários do escritório; aprovação antes da Tesouraria; 11,33% de imposto e divisão líquida 60/40 conforme parâmetros oficiais.
 Nota Fiscal (/nota-fiscal): vínculo da NFSe aos honorários e documentos; número, data e status.
 Comissões de Agentes (/comissoes-agentes): comissão originada da receita confirmada; valor bruto - deduções = líquido, à vista ou parcelado, aprovar e dar baixa na Tesouraria.
-Tesouraria — Recebimentos (/tesouraria): confirma crédito real de alvará ou devolve para correção; não passa pela fila geral de aprovação.
+Tesouraria — Recebimentos (/tesouraria): mostra receitas Previstas e Recebidas; receita confirmada na Confirmação de Entradas já aparece Recebida para encerrar; pode confirmar diretamente (sem vínculo ao extrato) ou devolver para correção; não passa pela fila geral de aprovação.
 Aprovações (/aprovacoes): pendências de despesas e repasses; o fato de ver não permite aprovar. Distinga Devolver de Rejeitar.
 DRE Gerencial (/dre-gerencial): classificações sugeridas por histórico/regras com confiança; confirmação humana; receitas e despesas segundo os status do módulo.
 Plano de Contas (/plano-contas): códigos oficiais hierarquizados 3.xx receitas, 4.xx despesas e 5.xx patrimônio/dívidas. Edição TXT apenas por Master. Não cria novas contas automaticamente.
@@ -25,7 +26,8 @@ DICAS (/dicas) e Como Usar (/como-usar): ajuda e orientações internas.
 Robô — Tire suas dúvidas: assistente documental já disponível aos usuários. IA Executiva (/ia) é privada e distinta.
 
 REGRAS OPERACIONAIS:
-- Alvará: Receita → enviar à Tesouraria → confirmação real de recebimento → obrigações de repasse/comissão → Aprovações → pagamento.
+- Alvará: Receita → enviar (Prevista) → crédito confere no extrato em Confirmação de Entradas → Confirmar recebimento (Recebida) → Tesouraria encerra → obrigações de repasse/comissão → Aprovações → pagamento.
+- Usuários: qualquer pessoa se cadastra e fica Pendente até o Master liberar; aviso E-mail não confirmado pede conferência; sem acesso a uma página o usuário abre no primeiro menu liberado.
 - Honorários são parte do escritório; comissões são calculadas conforme o demonstrativo e podem diminuir o valor devido ao cliente.
 - Repasse societário usa impostos de 11,33% sobre honorários e divide o líquido em 60% Flávio / 40% Ana, sujeito à configuração oficial.
 - A sugestão da DRE é adaptativa mas não autoriza classificar sem decisão humana.
