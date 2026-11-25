@@ -120,11 +120,12 @@ test('auditoria não aceita registro em nome de outro usuário', async () => {
   await assertFails(addDoc(collection(db, 'auditLogs'), { ...valid, isMaster: true }))
 })
 
-test('cadastro com e-mail de sócio exige e-mail verificado', async () => {
+test('cadastro com e-mail de sócio entra só como Pendente (Master libera)', async () => {
   const fake = { uid: 'fake1', email: 'flavio.marques@marquesemuller.adv.br' }
-  const payload = { uid: 'fake1', email: fake.email, role: 'diretor', status: 'pending' }
-  await assertFails(setDoc(doc(dbAs(fake, { email_verified: false }), 'users', 'fake1'), payload))
-  await assertSucceeds(setDoc(doc(dbAs(fake, { email_verified: true }), 'users', 'fake1'), payload))
+  const payload = { uid: 'fake1', email: fake.email, role: 'diretor', status: 'pending', emailVerified: false }
+  await assertFails(setDoc(doc(dbAs(fake, { email_verified: false }), 'users', 'fake1'), { ...payload, status: 'active' }))
+  await assertFails(setDoc(doc(dbAs(fake, { email_verified: false }), 'users', 'fake1'), { ...payload, role: 'master' }))
+  await assertSucceeds(setDoc(doc(dbAs(fake, { email_verified: false }), 'users', 'fake1'), payload))
 })
 
 test('repasse societario: impede adulterar valor durante aprovacao e envio', async () => {

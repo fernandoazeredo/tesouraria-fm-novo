@@ -3,6 +3,7 @@ import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendEmailVerification,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -86,7 +87,7 @@ function normalizeProfile(uid: string, data: Record<string, unknown>): AppUser {
   }
 }
 
-async function ensureProfile(firebaseUser: User, requestedName?: string): Promise<AppUser> {
+async function ensureProfile(firebaseUser: User, requestedName?: string, sendVerification = false): Promise<AppUser> {
   const ref = doc(db, 'users', firebaseUser.uid)
   const snapshot = await getDoc(ref)
 
@@ -98,6 +99,8 @@ async function ensureProfile(firebaseUser: User, requestedName?: string): Promis
   const email = (firebaseUser.email ?? '').trim().toLowerCase()
   const role = officialRoleForEmail(email)
   const isPrimaryAdmin = role === 'master'
+  // Qualquer pessoa pode se cadastrar; fica Pendente até o Master liberar. O link de confirmação é só um reforço.
+  if (sendVerification && !firebaseUser.emailVerified && !isPrimaryAdmin) await sendEmailVerification(firebaseUser).catch(() => undefined)
   const profile: AppUser = {
     uid: firebaseUser.uid,
     email,
@@ -109,6 +112,7 @@ async function ensureProfile(firebaseUser: User, requestedName?: string): Promis
 
   await setDoc(ref, {
     ...profile,
+    emailVerified: firebaseUser.emailVerified === true,
     createdAt: serverTimestamp(),
     lastLoginAt: serverTimestamp(),
   })
@@ -131,6 +135,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return
         }
         setProfile(await ensureProfile(firebaseUser))
+      } catch {
+        setProfile(null)
       } finally {
         setLoading(false)
       }
@@ -147,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     registerEmail: async (name, email, password) => {
       const credential = await createUserWithEmailAndPassword(auth, email.trim(), password)
-      setProfile(await ensureProfile(credential.user, name))
+      setProfile(await ensureProfile(credential.user, name, true))
     },
     signInGoogle: async () => {
       const provider = new GoogleAuthProvider()

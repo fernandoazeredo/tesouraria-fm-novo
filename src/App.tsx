@@ -127,7 +127,7 @@ function accessRoleFromUserRole(role: UserRole | undefined): AccessRole {
 function humanizeAuthError(error: unknown) {
   const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: string }).code) : ''
   if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) return 'E-mail ou senha inválidos.'
-  if (code.includes('email-already-in-use')) return 'Este e-mail já possui cadastro.'
+  if (code.includes('email-already-in-use')) return 'Este e-mail já possui cadastro. Use Entrar com o mesmo e-mail e senha.'
   if (code.includes('weak-password')) return 'A senha deve possuir pelo menos 6 caracteres.'
   if (code.includes('popup-closed-by-user')) return 'A janela do Google foi fechada antes de concluir o acesso.'
   if (code.includes('popup-blocked')) return 'O navegador bloqueou a janela de login do Google.'
@@ -226,7 +226,7 @@ function LoginScreen() {
 
 function PendingScreen() {
   const { profile, logout } = useAuth()
-  return <div className="auth-page"><section className="pending-card"><UserRoundCheck size={42} /><span className="eyebrow">Cadastro recebido</span><h1>Aguardando liberação</h1><p>Seu cadastro foi criado, mas ainda precisa ser ativado pelo Administrador Master.</p><strong>{profile?.email}</strong><button className="secondary-button" type="button" onClick={logout}><LogOut size={18} /> Sair</button></section></div>
+  return <div className="auth-page"><section className="pending-card"><UserRoundCheck size={42} /><span className="eyebrow">Cadastro recebido</span><h1>{profile ? 'Aguardando liberação' : 'Cadastro não concluído'}</h1><p>{profile ? 'Seu cadastro foi criado, mas ainda precisa ser ativado pelo Administrador Master.' : 'Não foi possível registrar seu cadastro. Clique em Sair e entre novamente com o mesmo e-mail e senha.'}</p><strong>{profile?.email}</strong><button className="secondary-button" type="button" onClick={logout}><LogOut size={18} /> Sair</button></section></div>
 }
 
 function Configuracoes() {
