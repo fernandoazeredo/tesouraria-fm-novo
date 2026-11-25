@@ -2,13 +2,13 @@
 export const PERMISSION_SCHEMA_VERSION = 1
 export const modulePaths = {
   dashboard: '/', despesas: '/despesas', receitas: '/alvaras',
+  conferencia_entradas: '/conferencia-entradas',
   repasse_alvaras: '/repasse-alvaras', repasse_societario: '/repasse-societario',
   nota_fiscal: '/nota-fiscal', comissoes: '/comissoes-agentes',
   tesouraria: '/tesouraria', aprovacoes: '/aprovacoes',
   dre: '/dre-gerencial', plano_contas: '/plano-contas',
   contabilidade: '/contabilidade', calendario: '/calendario-financeiro',
   fluxo_caixa: '/fluxo-caixa', conciliacao: '/conciliacao-bancaria',
-  conferencia_entradas: '/conferencia-entradas',
   documentos: '/documentos', usuarios: '/usuarios',
   auditoria: '/auditoria', utilitarios: '/utilitarios',
   configuracoes: '/configuracoes', ia: '/ia',
