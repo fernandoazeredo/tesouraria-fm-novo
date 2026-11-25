@@ -87,7 +87,7 @@ export function IncomingCreditsPage() {
     <div className="page-heading">
       <div><span className="eyebrow">Receitas</span><h1>Conferência de Entradas</h1>
         <p>Entradas do extrato Itaú (OFX). Confirme aqui as receitas previstas que caíram na conta: elas passam direto a Recebidas.</p></div>
-      {canUpload && <label className={`revenue-button button-link icp-upload ${busy ? 'busy' : ''}`}><Upload size={18} /> Carregar extrato OFX
+      {canUpload && <label className={`icp-upload ${busy ? 'busy' : ''}`}><Upload size={18} /> Carregar extrato OFX
         <input type="file" accept=".ofx" hidden disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void upload(f) }} /></label>}
     </div>
     {error && <p className="icp-msg error" role="alert">{error}</p>}
@@ -95,7 +95,7 @@ export function IncomingCreditsPage() {
 
     <div className="icp-grid">
       <section className="page-card">
-        <div className="card-title-row"><h2><Landmark size={17} /> Entradas do dia</h2>
+        <div className="card-title-row icp-day-row"><h2><Landmark size={17} /> Entradas do dia</h2>
           <select aria-label="Dia do extrato" value={day} onChange={(e) => setDay(e.target.value)}>
             {days.length === 0 && <option value="">Nenhum extrato carregado</option>}
             {days.map((d) => <option key={d} value={d}>{br(d)}</option>)}
