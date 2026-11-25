@@ -48,3 +48,8 @@
   .icp-value { text-align: left; }
   .icp input[type=search] { width: 100%; }
 }
+.icp-upload-info { display: flex; align-items: center; gap: 14px; border-left: 5px solid var(--revenue, #1678c8); color: var(--revenue, #1678c8); }
+.icp-upload-info div { display: flex; flex-direction: column; color: var(--text-primary, inherit); }
+.icp-upload-info span { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted, #6d7d8f); }
+.icp-upload-info strong { font-size: 22px; }
+.icp-upload-info small { font-size: 13px; color: var(--text-muted, #6d7d8f); }

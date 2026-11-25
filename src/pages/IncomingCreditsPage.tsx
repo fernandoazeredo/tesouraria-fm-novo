@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, writeBatch, type DocumentData } from 'firebase/firestore'
-import { CheckCircle2, Landmark, Upload } from 'lucide-react'
+import type { Timestamp } from 'firebase/firestore'
+import { CheckCircle2, Clock3, Landmark, Upload } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
 import { parseOfx, readOfxFile } from '../lib/ofx'
@@ -24,6 +25,11 @@ export function IncomingCreditsPage() {
   const { profile } = useAuth()
   const { rows: credits, error } = useLive<IncomingCredit>('bankCredits')
   const { rows: receivables } = useLive('receivables')
+  const { rows: imports } = useLive('bankCreditImports')
+  const current = imports.find((item) => item.id === 'current') as (AnyRecord & { creditIds?: string[]; uploadedAt?: Timestamp }) | undefined
+  const currentIds = useMemo(() => new Set(current?.creditIds || []), [current])
+  const shown = useMemo(() => credits.filter((c) => currentIds.has(c.id)), [credits, currentIds])
+  const uploadedAt = current?.uploadedAt?.toDate?.()
   const canUpload = profile?.role === 'master' || profile?.role === 'tesouraria'
   const [status, setStatus] = useState<'todos' | 'livres' | 'vinculados'>('todos')
   const [search, setSearch] = useState('')
@@ -32,8 +38,8 @@ export function IncomingCreditsPage() {
   const [choice, setChoice] = useState<Record<string, string>>({})
 
   const term = search.trim().toLowerCase()
-  const visible = useMemo(() => credits.filter((c) => (status === 'todos' || (status === 'livres' ? !c.matchedReceivableId : !!c.matchedReceivableId))
-    && (!term || `${c.memo} ${c.name} ${br(c.date)} ${money.format(c.amount)}`.toLowerCase().includes(term))), [credits, status, term])
+  const visible = useMemo(() => shown.filter((c) => (status === 'todos' || (status === 'livres' ? !c.matchedReceivableId : !!c.matchedReceivableId))
+    && (!term || `${c.memo} ${c.name} ${br(c.date)} ${money.format(c.amount)}`.toLowerCase().includes(term))), [shown, status, term])
   const groups = useMemo(() => {
     const map = new Map<string, IncomingCredit[]>()
     for (const c of [...visible].sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount)) map.set(c.date, [...(map.get(c.date) || []), c])
@@ -54,15 +60,27 @@ export function IncomingCreditsPage() {
     try {
       if (!/\.ofx$/i.test(file.name)) throw new Error('Envie o extrato no formato OFX (Itaú).')
       const incoming = creditsFromOfx(parseOfx(await readOfxFile(file)))
-      const known = new Set(credits.map((c) => c.id))
+      if (!incoming.length) throw new Error('Nenhuma entrada (crédito) encontrada neste extrato.')
+      if (current && !window.confirm(`Substituir o extrato atual (enviado em ${uploadedAt ? uploadedAt.toLocaleString('pt-BR') : '—'}) por ${file.name}?\n\nVale só o último extrato. Entradas já vinculadas a receitas continuam guardadas.`)) return
+      const known = new Map(credits.map((c) => [c.id, c]))
+      const newIds = new Set(incoming.map((c) => c.id))
+      const ops: ((batch: ReturnType<typeof writeBatch>) => void)[] = []
+      // Extrato anterior: apaga as entradas não vinculadas que não estão no novo.
+      credits.filter((c) => !c.matchedReceivableId && !newIds.has(c.id)).forEach((c) => ops.push((b) => b.delete(doc(db, 'bankCredits', c.id))))
       const fresh = incoming.filter((c) => !known.has(c.id))
-      for (let i = 0; i < fresh.length; i += 400) {
+      fresh.forEach(({ id, ...c }) => ops.push((b) => b.set(doc(db, 'bankCredits', id), { ...c, importedBy: profile.uid, importedByName: profile.displayName ?? profile.email ?? '', importedAt: serverTimestamp(), matchedReceivableId: null })))
+      for (let i = 0; i < ops.length; i += 400) {
         const batch = writeBatch(db)
-        fresh.slice(i, i + 400).forEach(({ id, ...c }) => batch.set(doc(db, 'bankCredits', id), { ...c, importedBy: profile.uid, importedByName: profile.displayName ?? profile.email ?? '', importedAt: serverTimestamp(), matchedReceivableId: null }))
+        ops.slice(i, i + 400).forEach((op) => op(batch))
         await batch.commit()
       }
-      setMessage(`${incoming.length} ${incoming.length === 1 ? 'entrada lida' : 'entradas lidas'} no extrato · ${fresh.length} ${fresh.length === 1 ? 'nova' : 'novas'} · ${incoming.length - fresh.length} já ${incoming.length - fresh.length === 1 ? 'estava' : 'estavam'} carregadas.`)
-      await audit('Extrato de entradas carregado', `${file.name} · ${fresh.length} créditos novos`)
+      const dates = incoming.map((c) => c.date).sort()
+      const total = Math.round(incoming.reduce((t, c) => t + c.amount, 0) * 100) / 100
+      const meta = writeBatch(db)
+      meta.set(doc(db, 'bankCreditImports', 'current'), { fileName: file.name, uploadedAt: serverTimestamp(), uploadedBy: profile.uid, uploadedByName: profile.displayName ?? profile.email ?? '', creditIds: [...newIds], count: incoming.length, total, periodStart: dates[0], periodEnd: dates[dates.length - 1] })
+      await meta.commit()
+      setMessage(`Extrato atualizado: ${incoming.length} ${incoming.length === 1 ? 'entrada' : 'entradas'} de ${br(dates[0])} a ${br(dates[dates.length - 1])}.`)
+      await audit('Extrato de entradas substituído', `${file.name} · ${incoming.length} entradas`)
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Não foi possível ler o extrato.')
     } finally { setBusy(false) }
@@ -98,10 +116,19 @@ export function IncomingCreditsPage() {
     {error && <p className="icp-msg error" role="alert">{error}</p>}
     {message && <p className="icp-msg" role="status">{message}</p>}
 
+    <section className="page-card icp-upload-info">
+      <Clock3 size={22} />
+      {current ? <div>
+        <span>Extrato vigente · enviado em</span>
+        <strong>{uploadedAt ? uploadedAt.toLocaleDateString('pt-BR') + ' às ' + uploadedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}</strong>
+        <small>{String(current.uploadedByName || '')} · {String(current.fileName || '')} · {Number(current.count || 0)} entradas de {br(String(current.periodStart || ''))} a {br(String(current.periodEnd || ''))}</small>
+      </div> : <div><span>Extrato vigente</span><strong>Nenhum extrato enviado</strong><small>Vale sempre o último extrato enviado.</small></div>}
+    </section>
+
     <section className="page-card icp-pending">
       <div className="card-title-row"><h2>Receitas previstas aguardando extrato</h2><small>{pending.length}</small></div>
       {pending.length === 0 ? <p className="dash-empty">Nenhuma receita prevista aguardando confirmação. Acordos parcelados continuam sendo confirmados pela Tesouraria.</p> : <div className="icp-pending-list">{pending.map((r) => {
-        const options = suggestCredits(r, credits)
+        const options = suggestCredits(r, shown)
         const selected = options.find((c) => c.id === choice[r.id]) || options[0]
         return <div key={r.id} className="icp-rec">
           <span className="desc"><span>{String(r.processo || r.descricao || 'Receita')}</span><small>{String(r.reclamante || '')}{r.dataPrevista ? ` · previsto ${br(String(r.dataPrevista).slice(0, 10))}` : ''}</small></span>
@@ -126,7 +153,7 @@ export function IncomingCreditsPage() {
           </select>
         </div>
       </div>
-      {credits.length === 0 ? <p className="dash-empty">{canUpload ? 'Clique em Extrato Bancário e carregue o OFX do Itaú.' : 'Nenhum extrato carregado ainda.'}</p>
+      {shown.length === 0 ? <p className="dash-empty">{canUpload ? 'Clique em Extrato Bancário e carregue o OFX do Itaú.' : 'Nenhum extrato carregado ainda.'}</p>
         : groups.length === 0 ? <p className="dash-empty">Nenhuma entrada encontrada com esse filtro.</p> : <>
         <div className="icp-row icp-head"><span>Data</span><span>Lançamento</span><span>Conferência</span><span>Valor (R$)</span></div>
         {groups.map(([date, rows]) => <div key={date} className="icp-day">
