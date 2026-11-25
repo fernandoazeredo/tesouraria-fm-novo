@@ -1,4 +1,4 @@
-/** Conferência de Entradas: regras puras (sem Firebase). */
+/** Confirmação de Entradas: regras puras (sem Firebase). */
 import type { ParsedOfx } from './ofx'
 
 export type IncomingCredit = { id: string; date: string; amount: number; memo: string; name: string; fitId: string; refNum: string; matchedReceivableId?: string | null; matchedByName?: string }

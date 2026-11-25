@@ -325,7 +325,8 @@ service cloud.firestore {
     }
 
     function treasuryReceivableUpdate() {
-      return hasRole(['master', 'tesouraria'])
+      return (hasRole(['master', 'tesouraria'])
+          || (hasRole(['gerente', 'operador']) && moduleGranted('tesouraria')))
         && (
           (resource.data.status == 'enviado_tesouraria'
             && request.resource.data.status in ['enviado_tesouraria', 'recebido_tesouraria', 'devolvido'])
@@ -445,6 +446,29 @@ service cloud.firestore {
         && request.resource.data.matchedBy == request.auth.uid
         && getAfter(/databases/$(database)/documents/receivables/$(request.resource.data.matchedReceivableId)).data.bankCreditId == creditId
         && getAfter(/databases/$(database)/documents/receivables/$(request.resource.data.matchedReceivableId)).data.status == 'recebido_tesouraria';
+    }
+
+    // Master desfaz um vínculo (teste ou engano): crédito volta a ficar livre e a receita volta a Prevista.
+    function bankCreditUnmatch(creditId) {
+      return isPrimaryAdminEmail() && hasRole(['master'])
+        && resource.data.matchedReceivableId is string
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['matchedReceivableId', 'matchedAt', 'matchedBy', 'matchedByName'])
+        && request.resource.data.matchedReceivableId == null
+        && (!exists(/databases/$(database)/documents/receivables/$(resource.data.matchedReceivableId))
+          || getAfter(/databases/$(database)/documents/receivables/$(resource.data.matchedReceivableId)).data.get('bankCreditId', null) == null);
+    }
+
+    function bankUnmatchedReceivableRevert() {
+      return isPrimaryAdminEmail() && hasRole(['master'])
+        && resource.data.status == 'recebido_tesouraria'
+        && resource.data.get('bankCreditId', null) is string
+        && request.resource.data.status == 'enviado_tesouraria'
+        && request.resource.data.get('bankCreditId', null) == null
+        && receivableValuesLocked()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'bankCreditId', 'updatedAt', 'bankConfirmedBy', 'bankConfirmedByName', 'bankConfirmedAt'])
+        && getAfter(/databases/$(database)/documents/bankCredits/$(resource.data.bankCreditId)).data.matchedReceivableId == null;
     }
 
     // Receita prevista vira recebida direto quando o crédito correspondente está no extrato.
@@ -624,7 +648,7 @@ service cloud.firestore {
         && request.resource.data.date is string
         && request.resource.data.matchedReceivableId == null
         && request.resource.data.importedBy == request.auth.uid;
-      allow update: if bankCreditMatch(creditId);
+      allow update: if bankCreditMatch(creditId) || bankCreditUnmatch(creditId);
       allow delete: if hasRole(['master', 'tesouraria']) && resource.data.matchedReceivableId == null;
     }
 
@@ -767,6 +791,7 @@ service cloud.firestore {
       allow update: if resource.data.status in ['recebido_tesouraria', 'encerrado']
         && officialPdfMetadataOnly('receitas', documentId);
       allow update: if bankMatchedReceivableUpdate(documentId);
+      allow update: if bankUnmatchedReceivableRevert();
     }
 
     match /alvaraTransfers/{documentId} {

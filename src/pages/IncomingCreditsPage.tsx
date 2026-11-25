@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { addDoc, collection, doc, onSnapshot, serverTimestamp, writeBatch, type DocumentData } from 'firebase/firestore'
+import { addDoc, collection, deleteField, doc, onSnapshot, serverTimestamp, writeBatch, type DocumentData } from 'firebase/firestore'
 import type { Timestamp } from 'firebase/firestore'
 import { CheckCircle2, Clock3, Landmark, Upload } from 'lucide-react'
 import { db } from '../lib/firebase'
@@ -49,7 +49,7 @@ export function IncomingCreditsPage() {
 
   async function audit(action: string, detail: string, entityId?: string) {
     if (!profile) return
-    await addDoc(collection(db, 'auditLogs'), { action, module: 'Conferência de Entradas', detail, entityId: entityId ?? null, userId: profile.uid, userName: profile.displayName, userEmail: profile.email, createdAt: serverTimestamp() }).catch(() => undefined)
+    await addDoc(collection(db, 'auditLogs'), { action, module: 'Confirmação de Entradas', detail, entityId: entityId ?? null, userId: profile.uid, userName: profile.displayName, userEmail: profile.email, createdAt: serverTimestamp() }).catch(() => undefined)
   }
 
   async function upload(file: File) {
@@ -104,9 +104,25 @@ export function IncomingCreditsPage() {
     } finally { setBusy(false) }
   }
 
+  const isMaster = profile?.role === 'master'
+  async function unlink(credit: IncomingCredit) {
+    if (!profile || !credit.matchedReceivableId) return
+    const linked = byId.get(credit.matchedReceivableId)
+    if (!window.confirm(`Desvincular este crédito de ${money.format(credit.amount)}?\n\nO crédito volta a ficar disponível${linked ? ' e a receita volta para Prevista' : ''}.`)) return
+    setBusy(true); setMessage('')
+    try {
+      const batch = writeBatch(db)
+      if (linked && linked.status === 'recebido_tesouraria' && linked.bankCreditId === credit.id) batch.update(doc(db, 'receivables', linked.id), { status: 'enviado_tesouraria', bankCreditId: deleteField(), bankConfirmedBy: deleteField(), bankConfirmedByName: deleteField(), bankConfirmedAt: deleteField(), updatedAt: serverTimestamp() })
+      batch.update(doc(db, 'bankCredits', credit.id), { matchedReceivableId: null, matchedAt: deleteField(), matchedBy: deleteField(), matchedByName: deleteField() })
+      await batch.commit()
+      await audit('Crédito desvinculado', `${money.format(credit.amount)} · ${br(credit.date)}`, linked?.id)
+      setMessage('Crédito desvinculado.')
+    } catch { setMessage('Não foi possível desvincular. Se a receita já foi encerrada pela Tesouraria, ela precisa ser tratada antes.') } finally { setBusy(false) }
+  }
+
   return <div className="icp">
     <div className="page-heading">
-      <div><span className="eyebrow">Receitas</span><h1>Conferência de Entradas</h1>
+      <div><span className="eyebrow">Receitas</span><h1>Confirmação de Entradas</h1>
         <p>Entradas do extrato Itaú (OFX). Confirme aqui as receitas previstas que caíram na conta: elas passam direto a Recebidas.</p></div>
       {canUpload && <label className={`icp-upload ${busy ? 'busy' : ''}`}><Upload size={18} /> Extrato Bancário
         <input type="file" accept=".ofx" hidden disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void upload(f) }} /></label>}
@@ -157,7 +173,7 @@ export function IncomingCreditsPage() {
             return <div key={c.id} className={`icp-row ${c.matchedReceivableId ? 'done' : ''}`}>
               <span className="date">{br(date)}</span>
               <span className="memo" title={`${c.memo} ${c.name}`.trim()}>{c.memo || c.name || 'Crédito'}</span>
-              <span className="state">{c.matchedReceivableId ? <><CheckCircle2 size={13} /> {String(linked?.processo || linked?.reclamante || 'Vinculado')}{c.matchedByName ? ` · ${c.matchedByName}` : ''}</> : '—'}</span>
+              <span className="state">{c.matchedReceivableId ? <><CheckCircle2 size={13} /> {String(linked?.processo || linked?.reclamante || 'Vinculado')}{c.matchedByName ? ` · ${c.matchedByName}` : ''}{isMaster && <button type="button" className="icp-unlink" disabled={busy} onClick={() => void unlink(c)}>Desvincular</button>}</> : '—'}</span>
               <strong>{num.format(c.amount)} C</strong>
             </div>
           })}

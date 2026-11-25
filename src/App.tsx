@@ -95,7 +95,7 @@ const menu: MenuItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/despesas', label: 'Despesas', icon: ReceiptText, tone: 'expense', roles: ['master', 'diretor', 'gerente', 'tesouraria', 'operador'] },
   { to: '/alvaras', label: 'Receitas', icon: FileText, tone: 'revenue', roles: ['master', 'diretor', 'gerente', 'tesouraria', 'operador'] },
-  { to: '/conferencia-entradas', label: 'Conferência de Entradas', icon: Landmark, tone: 'revenue', roles: ['master', 'diretor', 'gerente', 'tesouraria', 'operador'] },
+  { to: '/conferencia-entradas', label: 'Confirmação de Entradas', icon: Landmark, tone: 'revenue', roles: ['master', 'diretor', 'gerente', 'tesouraria', 'operador'] },
   { to: '/repasse-alvaras', label: 'Repasse de Alvarás', icon: CircleDollarSign, tone: 'revenue', roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/repasse-societario', label: 'Repasse Societário', icon: Handshake, tone: 'revenue', roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
   { to: '/nota-fiscal', label: 'Nota Fiscal', icon: FileText, roles: ['master', 'diretor', 'gerente', 'tesouraria'] },
