@@ -3,7 +3,12 @@
 .icp .card-title-row h2 { display: flex; align-items: center; gap: 6px; }
 .icp .card-title-row small { font-weight: 700; color: var(--text-muted, #6d7d8f); }
 .icp select { height: 34px; border-radius: 9px; border: 1px solid var(--border-default, #d6e0e8); background: var(--bg-input, #fff); color: var(--text-primary, inherit); padding: 0 8px; font-weight: 600; max-width: 100%; }
-.icp-upload { cursor: pointer; }
+.icp-upload { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 18px; border-radius: 12px; background: var(--revenue, #1678c8); color: #fff; font-weight: 800; font-size: 14px; cursor: pointer; white-space: nowrap; align-self: flex-end; }
+.icp-upload:hover { filter: brightness(1.08); }
+.icp .page-heading { align-items: flex-end; gap: 16px; }
+.icp .icp-day-row { flex-wrap: wrap; }
+.icp .icp-day-row h2 { white-space: nowrap; }
+.icp .icp-day-row select { flex: 0 1 220px; min-width: 0; }
 .icp-upload.busy { opacity: .6; pointer-events: none; }
 .icp-msg { margin: 0 0 14px; padding: 10px 14px; border-radius: 10px; background: var(--revenue-soft, #edf7ff); color: var(--revenue, #1678c8); font-weight: 600; }
 .icp-msg.error { background: var(--expense-soft, #fff0f1); color: var(--expense, #c9363d); }
