@@ -64,3 +64,23 @@ test('comparação, saldo acumulado, vencimentos e recebíveis', async () => {
   assert.equal(out.received, 300); assert.equal(out.weeks[0] + out.weeks[1], 5000)
   assert.deepEqual(out.items.map((i) => i.days), [-5, 8])
 })
+
+test('conferência de entradas: créditos do OFX e sugestões por valor', async () => {
+  const { creditsFromOfx, confirmableReceivables, suggestCredits } = await import('../src/lib/incomingCredits.ts')
+  const parsed = { transactions: [
+    { identityKey: 'a', fitId: '1', movementClass: 'conciliavel', date: '2026-11-24', amount: 22000, memo: 'TED RECEBIDA', name: '', refNum: '' },
+    { identityKey: 'b', fitId: '2', movementClass: 'conciliavel', date: '2026-11-24', amount: -500, memo: 'PAGTO', name: '', refNum: '' },
+    { identityKey: 'c', fitId: '3', movementClass: 'saldo', date: '2026-11-24', amount: 9000, memo: 'SALDO', name: '', refNum: '' },
+    { identityKey: 'd', fitId: '4', movementClass: 'conciliavel', date: '2026-11-20', amount: 22000.004, memo: 'TED', name: '', refNum: '' },
+  ] }
+  const credits = creditsFromOfx(parsed)
+  assert.deepEqual(credits.map((c) => [c.id, c.amount]), [['itau__a', 22000], ['itau__d', 22000]])
+  const rows = [
+    { id: 'r1', status: 'enviado_tesouraria', valorAlvara: 22000, dataPrevista: '2026-11-25' },
+    { id: 'r2', status: 'rascunho', valorAlvara: 22000 },
+    { id: 'r3', status: 'enviado_tesouraria', tipoRecebimento: 'acordo_trabalhista', valorAlvara: 22000 },
+  ]
+  assert.deepEqual(confirmableReceivables(rows).map((r) => r.id), ['r1'])
+  assert.deepEqual(suggestCredits(rows[0], credits).map((c) => c.id), ['itau__a', 'itau__d'])
+  assert.deepEqual(suggestCredits(rows[0], [{ ...credits[0], matchedReceivableId: 'x' }, credits[1]]).map((c) => c.id), ['itau__d'])
+})

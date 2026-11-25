@@ -418,6 +418,54 @@ service cloud.firestore {
           || request.resource.data.paidValue == resource.data.transferValue);
     }
 
+    // Conferência de Entradas: módulo liberado pelo Fernando em Configurações (userPermissions/{uid}).
+    function moduleGranted(moduleId) {
+      return exists(/databases/$(database)/documents/userPermissions/$(request.auth.uid))
+        && get(/databases/$(database)/documents/userPermissions/$(request.auth.uid)).data
+          .get('modules', {}).get(moduleId, {}).get('ver', false) == true;
+    }
+
+    function incomingCreditsReader() {
+      return hasRole(['master', 'diretor', 'gerente', 'tesouraria'])
+        || (hasRole(['operador']) && moduleGranted('conferencia_entradas'));
+    }
+
+    function incomingCreditsConfirmer() {
+      return hasRole(['master'])
+        || (hasRole(['gerente', 'tesouraria', 'operador']) && moduleGranted('conferencia_entradas'));
+    }
+
+    // Crédito do extrato (entrada) vinculado a uma única receita, na mesma gravação em lote.
+    function bankCreditMatch(creditId) {
+      return incomingCreditsConfirmer()
+        && resource.data.matchedReceivableId == null
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['matchedReceivableId', 'matchedAt', 'matchedBy', 'matchedByName'])
+        && request.resource.data.matchedReceivableId is string
+        && request.resource.data.matchedBy == request.auth.uid
+        && getAfter(/databases/$(database)/documents/receivables/$(request.resource.data.matchedReceivableId)).data.bankCreditId == creditId
+        && getAfter(/databases/$(database)/documents/receivables/$(request.resource.data.matchedReceivableId)).data.status == 'recebido_tesouraria';
+    }
+
+    // Receita prevista vira recebida direto quando o crédito correspondente está no extrato.
+    function bankMatchedReceivableUpdate(documentId) {
+      return incomingCreditsConfirmer()
+        && resource.data.status == 'enviado_tesouraria'
+        && request.resource.data.status == 'recebido_tesouraria'
+        && resource.data.get('tipoRecebimento', '') != 'acordo_trabalhista'
+        && receivableValuesLocked()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'bankCreditId', 'receiptDate', 'updatedAt', 'bankConfirmedBy', 'bankConfirmedByName', 'bankConfirmedAt'])
+        && request.resource.data.bankConfirmedBy == request.auth.uid
+        && request.resource.data.bankCreditId is string
+        && exists(/databases/$(database)/documents/bankCredits/$(request.resource.data.bankCreditId))
+        && get(/databases/$(database)/documents/bankCredits/$(request.resource.data.bankCreditId)).data.matchedReceivableId == null
+        && getAfter(/databases/$(database)/documents/bankCredits/$(request.resource.data.bankCreditId)).data.matchedReceivableId == documentId
+        && get(/databases/$(database)/documents/bankCredits/$(request.resource.data.bankCreditId)).data.date == request.resource.data.receiptDate
+        && math.abs(get(/databases/$(database)/documents/bankCredits/$(request.resource.data.bankCreditId)).data.amount
+          - float(resource.data.valorAlvara)) < 0.01;
+    }
+
     function bankPeriodOpen(periodId) {
       return periodId != null
         && (
@@ -567,6 +615,19 @@ service cloud.firestore {
       allow update, delete: if masterRestoreMode() || hasRole(['master']);
     }
 
+    match /bankCredits/{creditId} {
+      allow read: if incomingCreditsReader();
+      allow create: if hasRole(['master', 'tesouraria'])
+        && request.resource.data.keys().hasOnly(['date', 'amount', 'memo', 'name', 'fitId', 'refNum', 'importedBy', 'importedByName', 'importedAt', 'matchedReceivableId'])
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.date is string
+        && request.resource.data.matchedReceivableId == null
+        && request.resource.data.importedBy == request.auth.uid;
+      allow update: if bankCreditMatch(creditId);
+      allow delete: if hasRole(['master']) && resource.data.matchedReceivableId == null;
+    }
+
     match /bankStatements/{document=**} {
       allow read: if hasRole(['master', 'diretor', 'gerente', 'tesouraria']);
       allow create, update: if masterRestoreMode() || hasRole(['master', 'gerente', 'tesouraria']);
@@ -693,6 +754,7 @@ service cloud.firestore {
     match /receivables/{documentId} {
       allow update: if resource.data.status in ['recebido_tesouraria', 'encerrado']
         && officialPdfMetadataOnly('receitas', documentId);
+      allow update: if bankMatchedReceivableUpdate(documentId);
     }
 
     match /alvaraTransfers/{documentId} {

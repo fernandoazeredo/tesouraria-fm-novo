@@ -77,8 +77,8 @@ const expenseStatusLabels: Record<string, string> = {
 
 const receivableStatusLabels: Record<string, string> = {
   rascunho: 'Rascunho',
-  enviado_tesouraria: 'Enviado à Tesouraria',
-  recebido_tesouraria: 'Recebido pela Tesouraria',
+  enviado_tesouraria: 'Prevista · aguardando extrato',
+  recebido_tesouraria: 'Recebida',
   devolvido: 'Devolvido para Correção',
   encerrado: 'Encerrado / Arquivado',
 }
@@ -547,6 +547,10 @@ export function TreasuryPage() {
     await updateDoc(doc(db, 'receivables', item.id), { status, updatedAt: serverTimestamp(), treasuryBy: profile?.uid, treasuryByName, treasuryAt: serverTimestamp(), ...(status === 'devolvido' ? { treasuryReturnNote: returnNote, treasuryReturnedByName: treasuryByName } : {}) })
     if (status === 'recebido_tesouraria') {
       await ensureOfficialDemonstrative('revenue', { ...item, status, treasuryBy: profile?.uid, treasuryByName }, { generatedBy: profile?.uid ?? null })
+    }
+    // Receitas confirmadas pelo Jurídico na Conferência de Entradas podem chegar sem demonstrativo: gera ao encerrar.
+    if (status === 'encerrado' && !item.demonstrative) {
+      await ensureOfficialDemonstrative('revenue', { ...item, status: 'recebido_tesouraria' }, { generatedBy: profile?.uid ?? null }).catch(() => undefined)
     }
     await writeAudit(profile, `Recebimento atualizado: ${receivableStatusLabels[status] ?? status}`, 'Tesouraria — Recebimentos', `Processo ${item.processo ?? item.id}${returnNote ? ` · Motivo: ${returnNote}` : ''}`, item.id)
   }
