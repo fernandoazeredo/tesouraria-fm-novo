@@ -31,15 +31,13 @@ export function IncomingCreditsPage() {
   const shown = useMemo(() => credits.filter((c) => currentIds.has(c.id)), [credits, currentIds])
   const uploadedAt = current?.uploadedAt?.toDate?.()
   const canUpload = profile?.role === 'master' || profile?.role === 'tesouraria'
-  const [status, setStatus] = useState<'todos' | 'livres' | 'vinculados'>('todos')
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [choice, setChoice] = useState<Record<string, string>>({})
 
   const term = search.trim().toLowerCase()
-  const visible = useMemo(() => shown.filter((c) => (status === 'todos' || (status === 'livres' ? !c.matchedReceivableId : !!c.matchedReceivableId))
-    && (!term || `${c.memo} ${c.name} ${br(c.date)} ${money.format(c.amount)}`.toLowerCase().includes(term))), [shown, status, term])
+  const visible = useMemo(() => shown.filter((c) => (!term || `${c.memo} ${c.name} ${br(c.date)} ${money.format(c.amount)}`.toLowerCase().includes(term))), [shown, term])
   const groups = useMemo(() => {
     const map = new Map<string, IncomingCredit[]>()
     for (const c of [...visible].sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount)) map.set(c.date, [...(map.get(c.date) || []), c])
@@ -148,9 +146,6 @@ export function IncomingCreditsPage() {
         <div className="icp-sheet-title"><h2><Landmark size={17} /> Extrato de entradas · Itaú PJ</h2>{visible.length > 0 && <small>Período {br(visible.reduce((m, c) => c.date < m ? c.date : m, visible[0].date))} a {br(visible.reduce((m, c) => c.date > m ? c.date : m, visible[0].date))}</small>}</div>
         <div className="icp-filters">
           <input type="search" placeholder="Buscar por valor, data ou histórico" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Buscar entradas" />
-          <select aria-label="Situação" value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
-            <option value="todos">Todas</option><option value="livres">Disponíveis</option><option value="vinculados">Vinculadas</option>
-          </select>
         </div>
       </div>
       {shown.length === 0 ? <p className="dash-empty">{canUpload ? 'Clique em Extrato Bancário e carregue o OFX do Itaú.' : 'Nenhum extrato carregado ainda.'}</p>
