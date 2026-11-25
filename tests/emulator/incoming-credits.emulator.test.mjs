@@ -143,3 +143,19 @@ test('Tesouraria — Recebimentos: operador só confirma se o módulo Tesouraria
   await assertSucceeds(updateDoc(doc(dbAs(u.juridico), 'receivables', 'r1'), { status: 'recebido_tesouraria' }))
   await assertFails(updateDoc(doc(dbAs(u.outro), 'receivables', 'r2'), { status: 'recebido_tesouraria' }))
 })
+
+test('Utilitários → Apagar tudo: com a limpeza aberta, o Master apaga créditos vinculados e o extrato vigente', async () => {
+  const { Timestamp } = await import('firebase/firestore')
+  await assertSucceeds(confirmBatch(dbAs(u.juridico), 'r1', 'c1'))
+  await env.withSecurityRulesDisabled(async (ctx) => { await setDoc(doc(ctx.firestore(), 'bankCreditImports', 'current'), { fileName: 'x.ofx', count: 2, creditIds: ['c1', 'c2'] }) })
+  const m = dbAs(u.master)
+  // Sem a janela de limpeza: crédito vinculado e extrato vigente não podem ser apagados
+  await assertFails(deleteDoc(doc(m, 'bankCredits', 'c1')))
+  await assertFails(deleteDoc(doc(m, 'bankCreditImports', 'current')))
+  // Janela de limpeza aberta pelo Master
+  await assertSucceeds(setDoc(doc(m, 'systemControl', 'wipe'), { uid: 'ma1', email: u.master.email, startedAt: serverTimestamp(), expiresAt: Timestamp.fromMillis(Date.now() + 600000) }))
+  await assertFails(deleteDoc(doc(dbAs(u.tesouraria), 'bankCreditImports', 'current')))
+  await assertSucceeds(deleteDoc(doc(m, 'bankCredits', 'c1')))
+  await assertSucceeds(deleteDoc(doc(m, 'bankCredits', 'c2')))
+  await assertSucceeds(deleteDoc(doc(m, 'bankCreditImports', 'current')))
+})

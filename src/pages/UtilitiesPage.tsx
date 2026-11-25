@@ -32,6 +32,8 @@ const BACKUP_COLLECTIONS = [
   'settings',
   'chartOfAccounts',
   'bankStatements',
+  'bankCredits',
+  'bankCreditImports',
 ] as const
 
 const PROTECTED_COLLECTIONS = new Set<string>(['users', 'userPermissions', 'settings', 'chartOfAccounts'])
