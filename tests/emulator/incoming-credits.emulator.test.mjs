@@ -123,3 +123,23 @@ test('fluxo completo de uma receita fictícia: rascunho → prevista → extrato
   await assertSucceeds(updateDoc(doc(dbAs(u.tesouraria), 'receivables', 'fic'), { status: 'encerrado' }))
   assert.deepEqual(await stage(), ['realizado'])
 })
+
+test('Master desvincula: crédito volta livre e receita volta a Prevista; outros não', async () => {
+  const { deleteField } = await import('firebase/firestore')
+  await assertSucceeds(confirmBatch(dbAs(u.juridico), 'r1', 'c1'))
+  const undo = (db) => { const b = writeBatch(db)
+    b.update(doc(db, 'receivables', 'r1'), { status: 'enviado_tesouraria', bankCreditId: deleteField(), bankConfirmedBy: deleteField(), bankConfirmedByName: deleteField(), bankConfirmedAt: deleteField(), updatedAt: serverTimestamp() })
+    b.update(doc(db, 'bankCredits', 'c1'), { matchedReceivableId: null, matchedAt: deleteField(), matchedBy: deleteField(), matchedByName: deleteField() })
+    return b.commit() }
+  await assertFails(undo(dbAs(u.juridico)))
+  await assertFails(undo(dbAs(u.tesouraria)))
+  await assertSucceeds(undo(dbAs(u.master)))
+  await assertSucceeds(confirmBatch(dbAs(u.juridico), 'r2', 'c1'))
+})
+
+test('Tesouraria — Recebimentos: operador só confirma se o módulo Tesouraria foi liberado', async () => {
+  await assertFails(updateDoc(doc(dbAs(u.juridico), 'receivables', 'r1'), { status: 'recebido_tesouraria' }))
+  await env.withSecurityRulesDisabled(async (ctx) => { await setDoc(doc(ctx.firestore(), 'userPermissions', 'op1'), { schemaVersion: 1, modules: { conferencia_entradas: { ver: true }, tesouraria: { ver: true } } }) })
+  await assertSucceeds(updateDoc(doc(dbAs(u.juridico), 'receivables', 'r1'), { status: 'recebido_tesouraria' }))
+  await assertFails(updateDoc(doc(dbAs(u.outro), 'receivables', 'r2'), { status: 'recebido_tesouraria' }))
+})

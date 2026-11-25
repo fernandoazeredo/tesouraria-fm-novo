@@ -53,3 +53,4 @@
 .icp-upload-info span { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted, #6d7d8f); }
 .icp-upload-info strong { font-size: 22px; }
 .icp-upload-info small { font-size: 13px; color: var(--text-muted, #6d7d8f); }
+.icp-unlink { margin-left: 8px; border: 1px solid var(--expense, #c9363d); color: var(--expense, #c9363d); background: transparent; border-radius: 6px; font-size: 11px; font-weight: 700; padding: 1px 6px; cursor: pointer; }
