@@ -625,7 +625,19 @@ service cloud.firestore {
         && request.resource.data.matchedReceivableId == null
         && request.resource.data.importedBy == request.auth.uid;
       allow update: if bankCreditMatch(creditId);
-      allow delete: if hasRole(['master']) && resource.data.matchedReceivableId == null;
+      allow delete: if hasRole(['master', 'tesouraria']) && resource.data.matchedReceivableId == null;
+    }
+
+    // Extrato vigente da Conferência de Entradas: só o último upload vale.
+    match /bankCreditImports/{importId} {
+      allow read: if incomingCreditsReader();
+      allow create, update: if hasRole(['master', 'tesouraria'])
+        && importId == 'current'
+        && request.resource.data.keys().hasOnly(['fileName', 'uploadedAt', 'uploadedBy', 'uploadedByName', 'creditIds', 'count', 'total', 'periodStart', 'periodEnd'])
+        && request.resource.data.uploadedBy == request.auth.uid
+        && request.resource.data.uploadedAt == request.time
+        && request.resource.data.creditIds is list;
+      allow delete: if false;
     }
 
     match /bankStatements/{document=**} {

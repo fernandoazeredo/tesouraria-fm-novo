@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, writeBatch, type DocumentData } from 'firebase/firestore'
-import { CheckCircle2, Landmark, Upload } from 'lucide-react'
+import type { Timestamp } from 'firebase/firestore'
+import { CheckCircle2, Clock3, Landmark, Upload } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
 import { parseOfx, readOfxFile } from '../lib/ofx'
@@ -10,6 +11,7 @@ import './IncomingCreditsPage.css'
 
 type AnyRecord = { id: string } & DocumentData
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+const num = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const br = (date: string) => date ? `${date.slice(8, 10)}/${date.slice(5, 7)}/${date.slice(0, 4)}` : '—'
 
 function useLive<T = AnyRecord>(name: string) {
@@ -23,16 +25,27 @@ export function IncomingCreditsPage() {
   const { profile } = useAuth()
   const { rows: credits, error } = useLive<IncomingCredit>('bankCredits')
   const { rows: receivables } = useLive('receivables')
+  const { rows: imports } = useLive('bankCreditImports')
+  const current = imports.find((item) => item.id === 'current') as (AnyRecord & { creditIds?: string[]; uploadedAt?: Timestamp }) | undefined
+  const currentIds = useMemo(() => new Set(current?.creditIds || []), [current])
+  const shown = useMemo(() => credits.filter((c) => currentIds.has(c.id)), [credits, currentIds])
+  const uploadedAt = current?.uploadedAt?.toDate?.()
   const canUpload = profile?.role === 'master' || profile?.role === 'tesouraria'
-  const [day, setDay] = useState('')
+  const [status, setStatus] = useState<'todos' | 'livres' | 'vinculados'>('todos')
+  const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [choice, setChoice] = useState<Record<string, string>>({})
 
-  const days = useMemo(() => Array.from(new Set(credits.map((c) => c.date))).sort().reverse(), [credits])
-  useEffect(() => { if (!day && days.length) setDay(days[0]) }, [day, days])
-  const dayCredits = credits.filter((c) => c.date === day).sort((a, b) => b.amount - a.amount)
-  const dayTotal = dayCredits.reduce((s, c) => s + c.amount, 0)
+  const term = search.trim().toLowerCase()
+  const visible = useMemo(() => shown.filter((c) => (status === 'todos' || (status === 'livres' ? !c.matchedReceivableId : !!c.matchedReceivableId))
+    && (!term || `${c.memo} ${c.name} ${br(c.date)} ${money.format(c.amount)}`.toLowerCase().includes(term))), [shown, status, term])
+  const groups = useMemo(() => {
+    const map = new Map<string, IncomingCredit[]>()
+    for (const c of [...visible].sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount)) map.set(c.date, [...(map.get(c.date) || []), c])
+    return [...map.entries()]
+  }, [visible])
+  const visibleTotal = visible.reduce((s, c) => s + c.amount, 0)
   const pending = confirmableReceivables(receivables).sort((a, b) => String(a.dataPrevista || '').localeCompare(String(b.dataPrevista || '')))
   const byId = new Map(receivables.map((r) => [r.id, r]))
 
@@ -47,17 +60,27 @@ export function IncomingCreditsPage() {
     try {
       if (!/\.ofx$/i.test(file.name)) throw new Error('Envie o extrato no formato OFX (Itaú).')
       const incoming = creditsFromOfx(parseOfx(await readOfxFile(file)))
-      const known = new Set(credits.map((c) => c.id))
+      if (!incoming.length) throw new Error('Nenhuma entrada (crédito) encontrada neste extrato.')
+      if (current && !window.confirm(`Substituir o extrato atual (enviado em ${uploadedAt ? uploadedAt.toLocaleString('pt-BR') : '—'}) por ${file.name}?\n\nVale só o último extrato. Entradas já vinculadas a receitas continuam guardadas.`)) return
+      const known = new Map(credits.map((c) => [c.id, c]))
+      const newIds = new Set(incoming.map((c) => c.id))
+      const ops: ((batch: ReturnType<typeof writeBatch>) => void)[] = []
+      // Extrato anterior: apaga as entradas não vinculadas que não estão no novo.
+      credits.filter((c) => !c.matchedReceivableId && !newIds.has(c.id)).forEach((c) => ops.push((b) => b.delete(doc(db, 'bankCredits', c.id))))
       const fresh = incoming.filter((c) => !known.has(c.id))
-      for (let i = 0; i < fresh.length; i += 400) {
+      fresh.forEach(({ id, ...c }) => ops.push((b) => b.set(doc(db, 'bankCredits', id), { ...c, importedBy: profile.uid, importedByName: profile.displayName ?? profile.email ?? '', importedAt: serverTimestamp(), matchedReceivableId: null })))
+      for (let i = 0; i < ops.length; i += 400) {
         const batch = writeBatch(db)
-        fresh.slice(i, i + 400).forEach(({ id, ...c }) => batch.set(doc(db, 'bankCredits', id), { ...c, importedBy: profile.uid, importedByName: profile.displayName ?? profile.email ?? '', importedAt: serverTimestamp(), matchedReceivableId: null }))
+        ops.slice(i, i + 400).forEach((op) => op(batch))
         await batch.commit()
       }
-      const newest = incoming.map((c) => c.date).sort().pop()
-      if (newest) setDay(newest)
-      setMessage(`${incoming.length} ${incoming.length === 1 ? 'entrada lida' : 'entradas lidas'} no extrato · ${fresh.length} ${fresh.length === 1 ? 'nova' : 'novas'} · ${incoming.length - fresh.length} já ${incoming.length - fresh.length === 1 ? 'estava' : 'estavam'} carregadas.`)
-      await audit('Extrato de entradas carregado', `${file.name} · ${fresh.length} créditos novos`)
+      const dates = incoming.map((c) => c.date).sort()
+      const total = Math.round(incoming.reduce((t, c) => t + c.amount, 0) * 100) / 100
+      const meta = writeBatch(db)
+      meta.set(doc(db, 'bankCreditImports', 'current'), { fileName: file.name, uploadedAt: serverTimestamp(), uploadedBy: profile.uid, uploadedByName: profile.displayName ?? profile.email ?? '', creditIds: [...newIds], count: incoming.length, total, periodStart: dates[0], periodEnd: dates[dates.length - 1] })
+      await meta.commit()
+      setMessage(`Extrato atualizado: ${incoming.length} ${incoming.length === 1 ? 'entrada' : 'entradas'} de ${br(dates[0])} a ${br(dates[dates.length - 1])}.`)
+      await audit('Extrato de entradas substituído', `${file.name} · ${incoming.length} entradas`)
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Não foi possível ler o extrato.')
     } finally { setBusy(false) }
@@ -93,43 +116,60 @@ export function IncomingCreditsPage() {
     {error && <p className="icp-msg error" role="alert">{error}</p>}
     {message && <p className="icp-msg" role="status">{message}</p>}
 
-    <div className="icp-grid">
-      <section className="page-card">
-        <div className="card-title-row icp-day-row"><h2><Landmark size={17} /> Entradas do dia</h2>
-          <select aria-label="Dia do extrato" value={day} onChange={(e) => setDay(e.target.value)}>
-            {days.length === 0 && <option value="">Nenhum extrato carregado</option>}
-            {days.map((d) => <option key={d} value={d}>{br(d)}</option>)}
-          </select></div>
-        {dayCredits.length === 0 ? <p className="dash-empty">{canUpload ? 'Carregue o OFX do Itaú para ver as entradas.' : 'O extrato deste dia ainda não foi carregado.'}</p> : <>
-          {dayCredits.map((c) => {
+    <section className="page-card icp-upload-info">
+      <Clock3 size={22} />
+      {current ? <div>
+        <span>Extrato vigente · enviado em</span>
+        <strong>{uploadedAt ? uploadedAt.toLocaleDateString('pt-BR') + ' às ' + uploadedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}</strong>
+        <small>{String(current.uploadedByName || '')} · {String(current.fileName || '')} · {Number(current.count || 0)} entradas de {br(String(current.periodStart || ''))} a {br(String(current.periodEnd || ''))}</small>
+      </div> : <div><span>Extrato vigente</span><strong>Nenhum extrato enviado</strong><small>Vale sempre o último extrato enviado.</small></div>}
+    </section>
+
+    <section className="page-card icp-pending">
+      <div className="card-title-row"><h2>Receitas previstas aguardando extrato</h2><small>{pending.length}</small></div>
+      {pending.length === 0 ? <p className="dash-empty">Nenhuma receita prevista aguardando confirmação. Acordos parcelados continuam sendo confirmados pela Tesouraria.</p> : <div className="icp-pending-list">{pending.map((r) => {
+        const options = suggestCredits(r, shown)
+        const selected = options.find((c) => c.id === choice[r.id]) || options[0]
+        return <div key={r.id} className="icp-rec">
+          <span className="desc"><span>{String(r.processo || r.descricao || 'Receita')}</span><small>{String(r.reclamante || '')}{r.dataPrevista ? ` · previsto ${br(String(r.dataPrevista).slice(0, 10))}` : ''}</small></span>
+          <strong className="icp-value">{money.format(Number(r.valorAlvara || 0))}</strong>
+          {options.length === 0 ? <small className="icp-none">Nenhum crédito com esse valor no extrato.</small> : <span className="icp-rec-actions">
+            <select aria-label="Crédito do extrato" value={selected?.id} onChange={(e) => setChoice((p) => ({ ...p, [r.id]: e.target.value }))}>
+              {options.map((c) => <option key={c.id} value={c.id}>{br(c.date)} · {money.format(c.amount)} · {c.memo.slice(0, 40)}</option>)}
+            </select>
+            <button className="small-revenue-button" disabled={busy || !selected} onClick={() => selected && void confirm(r, selected)}>Confirmar recebimento</button>
+          </span>}
+        </div>
+      })}</div>}
+    </section>
+
+    <section className="page-card icp-table-card">
+      <div className="card-title-row icp-toolbar">
+        <div className="icp-sheet-title"><h2><Landmark size={17} /> Extrato de entradas · Itaú PJ</h2>{visible.length > 0 && <small>Período {br(visible.reduce((m, c) => c.date < m ? c.date : m, visible[0].date))} a {br(visible.reduce((m, c) => c.date > m ? c.date : m, visible[0].date))}</small>}</div>
+        <div className="icp-filters">
+          <input type="search" placeholder="Buscar por valor, data ou histórico" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Buscar entradas" />
+          <select aria-label="Situação" value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+            <option value="todos">Todas</option><option value="livres">Disponíveis</option><option value="vinculados">Vinculadas</option>
+          </select>
+        </div>
+      </div>
+      {shown.length === 0 ? <p className="dash-empty">{canUpload ? 'Clique em Extrato Bancário e carregue o OFX do Itaú.' : 'Nenhum extrato carregado ainda.'}</p>
+        : groups.length === 0 ? <p className="dash-empty">Nenhuma entrada encontrada com esse filtro.</p> : <>
+        <div className="icp-row icp-head"><span>Data</span><span>Lançamento</span><span>Conferência</span><span>Valor (R$)</span></div>
+        {groups.map(([date, rows]) => <div key={date} className="icp-day">
+          {rows.map((c) => {
             const linked = c.matchedReceivableId ? byId.get(c.matchedReceivableId) : null
-            return <div key={c.id} className={`icp-credit ${c.matchedReceivableId ? 'done' : ''}`}>
-              <span className="desc"><span>{c.memo || c.name || 'Crédito'}</span>
-                <small>{c.matchedReceivableId ? <><CheckCircle2 size={13} /> Vinculado a {String(linked?.processo || linked?.reclamante || c.matchedReceivableId)}{c.matchedByName ? ` · ${c.matchedByName}` : ''}</> : 'Disponível'}</small></span>
-              <strong>{money.format(c.amount)}</strong>
+            return <div key={c.id} className={`icp-row ${c.matchedReceivableId ? 'done' : ''}`}>
+              <span className="date">{br(date)}</span>
+              <span className="memo" title={`${c.memo} ${c.name}`.trim()}>{c.memo || c.name || 'Crédito'}</span>
+              <span className="state">{c.matchedReceivableId ? <><CheckCircle2 size={13} /> {String(linked?.processo || linked?.reclamante || 'Vinculado')}{c.matchedByName ? ` · ${c.matchedByName}` : ''}</> : '—'}</span>
+              <strong>{num.format(c.amount)} C</strong>
             </div>
           })}
-          <div className="icp-total"><span>Total de entradas do dia</span><strong>{money.format(dayTotal)}</strong></div>
-        </>}
-      </section>
-
-      <section className="page-card">
-        <div className="card-title-row"><h2>Receitas previstas aguardando extrato</h2><small>{pending.length}</small></div>
-        {pending.length === 0 ? <p className="dash-empty">Nenhuma receita prevista aguardando confirmação.</p> : pending.map((r) => {
-          const options = suggestCredits(r, credits)
-          const selected = options.find((c) => c.id === choice[r.id]) || options[0]
-          return <div key={r.id} className="icp-rec">
-            <div className="icp-rec-top"><span className="desc"><span>{String(r.processo || r.descricao || 'Receita')}</span><small>{String(r.reclamante || '')}{r.dataPrevista ? ` · previsto ${br(String(r.dataPrevista).slice(0, 10))}` : ''}</small></span><strong>{money.format(Number(r.valorAlvara || 0))}</strong></div>
-            {options.length === 0 ? <small className="icp-none">Nenhum crédito com esse valor no extrato.</small> : <div className="icp-rec-actions">
-              <select aria-label="Crédito do extrato" value={selected?.id} onChange={(e) => setChoice((p) => ({ ...p, [r.id]: e.target.value }))}>
-                {options.map((c) => <option key={c.id} value={c.id}>{br(c.date)} · {money.format(c.amount)} · {c.memo.slice(0, 40)}</option>)}
-              </select>
-              <button className="small-revenue-button" disabled={busy || !selected} onClick={() => selected && void confirm(r, selected)}>Confirmar recebimento</button>
-            </div>}
-          </div>
-        })}
-        <p className="icp-note">Acordos parcelados não aparecem aqui: continuam sendo confirmados pela Tesouraria.</p>
-      </section>
-    </div>
+          <div className="icp-row icp-subtotal"><span>{br(date)}</span><span>TOTAL DE ENTRADAS DO DIA</span><span /><strong>{num.format(rows.reduce((t, c) => t + c.amount, 0))}</strong></div>
+        </div>)}
+        <div className="icp-row icp-grand"><span /><span>TOTAL DE ENTRADAS NO PERÍODO · {visible.length} {visible.length === 1 ? 'lançamento' : 'lançamentos'}</span><span /><strong>{num.format(visibleTotal)}</strong></div>
+      </>}
+    </section>
   </div>
 }
