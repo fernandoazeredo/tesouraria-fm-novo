@@ -116,7 +116,7 @@ export function UsersPageKitFernando() {
           const role = officialRoleForEmail(email)
           const currentStatus = (item.status as UserStatus) || 'pending'
           return <div className="data-row" key={item.id}>
-            <span><strong>{item.displayName || 'Usuário'}</strong><small>{email}</small>{locked && <em className="master-lock"><ShieldCheck size={13} /> Administrador Master</em>}</span>
+            <span><strong>{item.displayName || 'Usuário'}</strong><small>{email}</small>{item.emailVerified === false && <em className="pending-access-note">E-mail não confirmado — confira com a pessoa antes de liberar</em>}{locked && <em className="master-lock"><ShieldCheck size={13} /> Administrador Master</em>}</span>
             <span><strong>{roleLabels[role]}</strong><small>{roleNote(email)}</small></span>
             <span>{canManage && !locked ? <select className={`user-status-pill user-status-${currentStatus}`} aria-label={`Status de ${item.displayName || email}`} value={currentStatus} onChange={(event) => updateStatus(item, event.target.value as UserStatus)}>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select> : <WorkflowStatusBadge status={locked ? 'active' : currentStatus} label={locked ? 'Ativo' : statusLabels[currentStatus]} />}</span>
             <span>{item.status === 'active' && item.lastLoginAt ? timestampToDateTime(item.lastLoginAt) : item.status === 'pending' ? <span className="pending-access-note"><CheckCircle2 size={14} /> Aguardando liberação</span> : timestampToDateTime(item.lastLoginAt)}</span>

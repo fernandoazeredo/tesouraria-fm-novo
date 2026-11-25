@@ -249,15 +249,15 @@ service cloud.firestore {
             && request.resource.data.role == 'master'
             && request.resource.data.status == 'active')
           ||
-          (isDirectorEmail() && emailVerified()
+          (isDirectorEmail()
             && request.resource.data.role == 'diretor'
             && request.resource.data.status == 'pending')
           ||
-          (isManagerEmail() && emailVerified()
+          (isManagerEmail()
             && request.resource.data.role == 'gerente'
             && request.resource.data.status == 'pending')
           ||
-          (isTreasuryEmail() && emailVerified()
+          (isTreasuryEmail()
             && request.resource.data.role == 'tesouraria'
             && request.resource.data.status == 'pending')
           ||

@@ -87,8 +87,6 @@ function normalizeProfile(uid: string, data: Record<string, unknown>): AppUser {
   }
 }
 
-export const EMAIL_NOT_VERIFIED = 'app/email-not-verified'
-
 async function ensureProfile(firebaseUser: User, requestedName?: string, sendVerification = false): Promise<AppUser> {
   const ref = doc(db, 'users', firebaseUser.uid)
   const snapshot = await getDoc(ref)
@@ -101,12 +99,8 @@ async function ensureProfile(firebaseUser: User, requestedName?: string, sendVer
   const email = (firebaseUser.email ?? '').trim().toLowerCase()
   const role = officialRoleForEmail(email)
   const isPrimaryAdmin = role === 'master'
-  // E-mails oficiais (Flávio, Reinaldo, Socorro) só podem se cadastrar com e-mail confirmado (regra de segurança).
-  if (role !== 'master' && role !== 'operador' && !firebaseUser.emailVerified) {
-    if (sendVerification) await sendEmailVerification(firebaseUser).catch(() => undefined)
-    await signOut(auth).catch(() => undefined)
-    throw Object.assign(new Error('E-mail não verificado'), { code: EMAIL_NOT_VERIFIED })
-  }
+  // Qualquer pessoa pode se cadastrar; fica Pendente até o Master liberar. O link de confirmação é só um reforço.
+  if (sendVerification && !firebaseUser.emailVerified && !isPrimaryAdmin) await sendEmailVerification(firebaseUser).catch(() => undefined)
   const profile: AppUser = {
     uid: firebaseUser.uid,
     email,
@@ -118,6 +112,7 @@ async function ensureProfile(firebaseUser: User, requestedName?: string, sendVer
 
   await setDoc(ref, {
     ...profile,
+    emailVerified: firebaseUser.emailVerified === true,
     createdAt: serverTimestamp(),
     lastLoginAt: serverTimestamp(),
   })
@@ -154,7 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     signInEmail: async (email, password) => {
       const credential = await signInWithEmailAndPassword(auth, email.trim(), password)
-      setProfile(await ensureProfile(credential.user, undefined, true))
+      setProfile(await ensureProfile(credential.user))
     },
     registerEmail: async (name, email, password) => {
       const credential = await createUserWithEmailAndPassword(auth, email.trim(), password)
