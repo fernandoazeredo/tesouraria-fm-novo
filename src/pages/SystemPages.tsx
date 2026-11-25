@@ -77,7 +77,7 @@ const expenseStatusLabels: Record<string, string> = {
 
 const receivableStatusLabels: Record<string, string> = {
   rascunho: 'Rascunho',
-  enviado_tesouraria: 'Prevista · aguardando extrato',
+  enviado_tesouraria: 'Prevista · aguardando confirmação em Conferência de Entradas',
   recebido_tesouraria: 'Recebida',
   devolvido: 'Devolvido para Correção',
   encerrado: 'Encerrado / Arquivado',

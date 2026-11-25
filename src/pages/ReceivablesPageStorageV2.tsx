@@ -26,7 +26,7 @@ type AttachmentMeta = { name: string; url: string; path: string; size: number; t
 type UploadItem = { id: string; name: string; size: number; progress: number; status: 'uploading' | 'success' | 'error'; meta?: AttachmentMeta; error?: string; existing?: boolean }
 
 const statusLabels: Record<string, string> = {
-  rascunho: 'Rascunho', enviado_tesouraria: 'Prevista · aguardando extrato', recebido_tesouraria: 'Recebida', devolvido: 'Devolvido para Correção', encerrado: 'Encerrado / Arquivado',
+  rascunho: 'Rascunho', enviado_tesouraria: 'Prevista · aguardando confirmação em Conferência de Entradas', recebido_tesouraria: 'Recebida', devolvido: 'Devolvido para Correção', encerrado: 'Encerrado / Arquivado',
 }
 
 function safeFileName(value: string) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'arquivo' }
