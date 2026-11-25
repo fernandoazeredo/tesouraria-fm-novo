@@ -26,7 +26,7 @@
 .icp-sheet-title h2 { margin: 0; }
 .icp-sheet-title small { display: block; font-size: 13px; color: var(--text-muted, #6d7d8f); font-weight: 600; margin-top: 2px; }
 .icp-table-card { background: var(--bg-card, #fff); }
-.icp-row { display: grid; grid-template-columns: 100px minmax(0, 1fr) minmax(150px, .45fr) 160px; align-items: center; gap: 16px; padding: 7px 6px; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--text-primary, #1d2733); border-bottom: 1px dotted var(--border-default, #cfd8e0); }
+.icp-row { display: grid; grid-template-columns: 100px minmax(0, 1.6fr) minmax(140px, .5fr) 160px; align-items: center; gap: 16px; padding: 7px 6px; font-size: 14px; font-variant-numeric: tabular-nums; color: var(--text-primary, #1d2733); border-bottom: 1px dotted var(--border-default, #cfd8e0); }
 .icp-row > strong { text-align: right; white-space: nowrap; font-weight: 600; font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace; letter-spacing: -.01em; }
 .icp-row .date { font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace; font-size: 13px; color: var(--text-muted, #5d6b7a); }
 .icp-row .memo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: uppercase; font-size: 13px; letter-spacing: .01em; }
