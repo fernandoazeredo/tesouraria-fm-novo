@@ -3,6 +3,7 @@ import {
   GoogleAuthProvider,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendEmailVerification,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -86,7 +87,9 @@ function normalizeProfile(uid: string, data: Record<string, unknown>): AppUser {
   }
 }
 
-async function ensureProfile(firebaseUser: User, requestedName?: string): Promise<AppUser> {
+export const EMAIL_NOT_VERIFIED = 'app/email-not-verified'
+
+async function ensureProfile(firebaseUser: User, requestedName?: string, sendVerification = false): Promise<AppUser> {
   const ref = doc(db, 'users', firebaseUser.uid)
   const snapshot = await getDoc(ref)
 
@@ -98,6 +101,12 @@ async function ensureProfile(firebaseUser: User, requestedName?: string): Promis
   const email = (firebaseUser.email ?? '').trim().toLowerCase()
   const role = officialRoleForEmail(email)
   const isPrimaryAdmin = role === 'master'
+  // E-mails oficiais (Flávio, Reinaldo, Socorro) só podem se cadastrar com e-mail confirmado (regra de segurança).
+  if (role !== 'master' && role !== 'operador' && !firebaseUser.emailVerified) {
+    if (sendVerification) await sendEmailVerification(firebaseUser).catch(() => undefined)
+    await signOut(auth).catch(() => undefined)
+    throw Object.assign(new Error('E-mail não verificado'), { code: EMAIL_NOT_VERIFIED })
+  }
   const profile: AppUser = {
     uid: firebaseUser.uid,
     email,
@@ -131,6 +140,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return
         }
         setProfile(await ensureProfile(firebaseUser))
+      } catch {
+        setProfile(null)
       } finally {
         setLoading(false)
       }
@@ -143,11 +154,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     signInEmail: async (email, password) => {
       const credential = await signInWithEmailAndPassword(auth, email.trim(), password)
-      setProfile(await ensureProfile(credential.user))
+      setProfile(await ensureProfile(credential.user, undefined, true))
     },
     registerEmail: async (name, email, password) => {
       const credential = await createUserWithEmailAndPassword(auth, email.trim(), password)
-      setProfile(await ensureProfile(credential.user, name))
+      setProfile(await ensureProfile(credential.user, name, true))
     },
     signInGoogle: async () => {
       const provider = new GoogleAuthProvider()

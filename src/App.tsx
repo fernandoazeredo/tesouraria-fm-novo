@@ -127,7 +127,8 @@ function accessRoleFromUserRole(role: UserRole | undefined): AccessRole {
 function humanizeAuthError(error: unknown) {
   const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: string }).code) : ''
   if (code.includes('invalid-credential') || code.includes('wrong-password') || code.includes('user-not-found')) return 'E-mail ou senha inválidos.'
-  if (code.includes('email-already-in-use')) return 'Este e-mail já possui cadastro.'
+  if (code.includes('email-not-verified')) return 'Enviamos um link de confirmação para o seu e-mail. Abra o link e depois entre novamente com o mesmo e-mail e senha.'
+  if (code.includes('email-already-in-use')) return 'Este e-mail já possui cadastro. Use Entrar com o mesmo e-mail e senha.'
   if (code.includes('weak-password')) return 'A senha deve possuir pelo menos 6 caracteres.'
   if (code.includes('popup-closed-by-user')) return 'A janela do Google foi fechada antes de concluir o acesso.'
   if (code.includes('popup-blocked')) return 'O navegador bloqueou a janela de login do Google.'
