@@ -22,7 +22,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ReceiptText,
-  Scale,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -424,7 +423,7 @@ function AppShell() {
         <div className="mobile-sidebar-head"><strong>Menu do sistema</strong><button type="button" className="mobile-sidebar-close" aria-label="Fechar menu" title="Fechar menu" onClick={closeMobileMenu}><Menu size={21} /></button></div>
         <div className="brand"><div className="brand-logo-only"><img src="/logo-fm.svg" alt="Flávio Marques Advogados Associados" /></div><div className="app-name">Controle de Despesas e Receitas</div></div>
         <nav>{visibleMenu.map(({ to, label, icon: Icon, tone }) => <NavLink key={to} to={to} end={to === '/'} onClick={closeMobileMenu} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}${tone ? ` ${tone}-nav` : ''}${to === '/aprovacoes' ? ' approval-attention-nav' : ''}`}>{to === '/aprovacoes' ? <img className="nav-icon-img" src="/icone-aprovacoes.svg" alt="" width={22} height={22} /> : <Icon size={18} />}<span>{label}</span></NavLink>)}</nav>
-        <div className="sidebar-help"><NavLink to="/dicas" onClick={closeMobileMenu} className="tips-button"><Lightbulb size={18} /> DICAS</NavLink><NavLink to="/como-usar" onClick={closeMobileMenu} className="howto-link"><Scale size={18} /> Como Usar</NavLink><button type="button" className="fm-assistente-trigger" aria-label="Abrir robô para tirar dúvidas" title="Robô — Tire suas dúvidas" onClick={() => { closeMobileMenu();
+        <div className="sidebar-help"><NavLink to="/dicas" onClick={closeMobileMenu} className="tips-button"><Lightbulb size={18} /> DICAS</NavLink><NavLink to="/como-usar" onClick={closeMobileMenu} className="howto-link"><img className="nav-icon-img" src="/icone-como-usar.svg" alt="" width={22} height={22} /> Como Usar</NavLink><button type="button" className="fm-assistente-trigger" aria-label="Abrir robô para tirar dúvidas" title="Robô — Tire suas dúvidas" onClick={() => { closeMobileMenu();
         const width = 704
         const height = 623
         const left = Math.max(0, window.screenX + (window.outerWidth - width) / 2)
