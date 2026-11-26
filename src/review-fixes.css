@@ -60,7 +60,8 @@ html[data-theme="dark"] .sidebar .nav-link[href="/aprovacoes"].active,
 [data-theme="dark"] .sidebar .nav-link[href="/aprovacoes"].active svg { color: #ffffff !important; }
 
 /* Ícone colorido do menu Aprovações (imagem). */
-.sidebar .nav-link .nav-icon-img { width: 22px; height: 22px; flex: 0 0 22px; object-fit: contain; display: block; }
+.sidebar .nav-link .nav-icon-img,
+.sidebar .howto-link .nav-icon-img { width: 22px; height: 22px; flex: 0 0 22px; object-fit: contain; display: block; }
 
 /* Repasse Societário: destaque verde somente quando a rota está ativa. */
 .sidebar .nav-link[href="/repasse-societario"].active,
