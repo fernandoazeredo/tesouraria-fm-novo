@@ -1,7 +1,7 @@
 import { getCurrentInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
-import { FileText, RefreshCw, Search, X } from 'lucide-react'
+import { ExternalLink, FileText, RefreshCw, Search, X } from 'lucide-react'
 import { db } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
 import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
@@ -179,7 +179,7 @@ export function FiscalNotesPageV3() {
   const total = sources.reduce((sum, source) => sum + invoiceValue(source), 0)
 
   return <>
-    <div className="page-heading"><div><span className="eyebrow">Apoio à emissão</span><h1>Nota Fiscal</h1><p>Os dados do cliente e o valor dos honorários são trazidos automaticamente do Demonstrativo de Recebimento de Honorários.</p></div><div className="quick-actions"><button className="secondary-button" type="button" onClick={() => printExtract(sources, noteMap)}><FileText size={17} /> Gerar Extrato NFS-e</button></div></div>
+    <div className="page-heading"><div><span className="eyebrow">Apoio à emissão</span><h1>Nota Fiscal</h1><p>Os dados do cliente e o valor dos honorários são trazidos automaticamente do Demonstrativo de Recebimento de Honorários.</p></div><div className="quick-actions"><a className="revenue-button" href="https://www.nfse.gov.br/EmissorNacional/Login?ReturnUrl=%2fEmissorNacional%2fNotas%2fEmitidas" target="_blank" rel="noopener noreferrer"><ExternalLink size={17} /> Emissor Nacional NFS-e</a><button className="secondary-button" type="button" onClick={() => printExtract(sources, noteMap)}><FileText size={17} /> Gerar Extrato NFS-e</button></div></div>
     <div className="obligation-metrics fiscal-metrics"><article><span>Notas pendentes</span><strong>{pending}</strong></article><article><span>Notas emitidas</span><strong>{issued}</strong></article><article><span>Valor total dos honorários</span><strong>{money.format(total)}</strong></article></div>
     <section className="page-card module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por processo, cliente, CPF, status ou nº da NFS-e" /></div></div>
       {loadingReceivables || loadingNotes ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando Notas Fiscais</strong></div> : sources.length === 0 ? <div className="module-empty"><FileText size={34} /><strong>Nenhum honorário disponível para emissão</strong></div> : <div className="obligation-list fiscal-v3-list"><div className="obligation-list-row obligation-list-head"><span>Processo / Cliente</span><span>CPF</span><span>E-mail</span><span>Valor</span><span>Status NFS-e</span><span>Nº NFSe e Data</span><span>Ação</span></div>{sources.map((source) => {
