@@ -19,6 +19,8 @@ import {
   LogOut,
   Mail,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   ReceiptText,
   Scale,
   Settings,
@@ -27,7 +29,6 @@ import {
   UserRoundCheck,
   Users,
   Wrench,
-  X,
 } from 'lucide-react'
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { collection, doc, getDoc, onSnapshot, serverTimestamp, writeBatch } from 'firebase/firestore'
@@ -74,6 +75,7 @@ import './admin-tools.css'
 import './accounting-storage.css'
 import './accounts-fernando.css'
 import './storage-documents.css'
+import './sidebar-toggle.css'
 
 // Rotas financeiras críticas versionadas: Calendário Financeiro e Conciliação Bancária.
 const companyData = {
@@ -364,6 +366,12 @@ function AppShell() {
   useDateTypingHelper()
   const { profile, logout } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('fm.sidebarCollapsed') === '1' } catch { return false }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('fm.sidebarCollapsed', sidebarCollapsed ? '1' : '0') } catch { /* preferência opcional */ }
+  }, [sidebarCollapsed])
   const accessRole = accessRoleFromUserRole(profile?.role)
   const [permissionDoc, setPermissionDoc] = useState<PermissionDocument | null>(null)
   const [permissionsLoaded, setPermissionsLoaded] = useState(false)
@@ -403,16 +411,17 @@ function AppShell() {
   const closeMobileMenu = () => setMobileMenuOpen(false)
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
       <VersionUpdateNotice />
       <SocietaryTransferSync />
       <header className="mobile-app-header">
-        <button type="button" className="mobile-menu-toggle" aria-label={mobileMenuOpen ? 'Fechar menu' : 'Abrir menu'} aria-expanded={mobileMenuOpen} aria-controls="app-sidebar" onClick={() => setMobileMenuOpen((open) => !open)}>{mobileMenuOpen ? <X size={23} /> : <Menu size={23} />}</button>
+        <button type="button" className="mobile-menu-toggle" aria-label={mobileMenuOpen ? 'Fechar menu' : 'Abrir menu'} title={mobileMenuOpen ? 'Fechar menu' : 'Abrir menu'} aria-expanded={mobileMenuOpen} aria-controls="app-sidebar" onClick={() => setMobileMenuOpen((open) => !open)}><Menu size={23} /></button>
         <div className="mobile-header-brand"><img src="/logo-fm.svg" alt="Flávio Marques Advogados Associados" /><span>Controle de Despesas e Receitas</span></div>
       </header>
+      <button type="button" className="sidebar-toggle" aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'} title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'} aria-expanded={!sidebarCollapsed} aria-controls="app-sidebar" onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}>{sidebarCollapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}</button>
       <button type="button" className={`mobile-menu-backdrop${mobileMenuOpen ? ' is-open' : ''}`} aria-label="Fechar menu" onClick={closeMobileMenu} />
       <aside id="app-sidebar" className={`sidebar${mobileMenuOpen ? ' is-open' : ''}`}>
-        <div className="mobile-sidebar-head"><strong>Menu do sistema</strong><button type="button" className="mobile-sidebar-close" aria-label="Fechar menu" onClick={closeMobileMenu}><X size={21} /></button></div>
+        <div className="mobile-sidebar-head"><strong>Menu do sistema</strong><button type="button" className="mobile-sidebar-close" aria-label="Fechar menu" title="Fechar menu" onClick={closeMobileMenu}><Menu size={21} /></button></div>
         <div className="brand"><div className="brand-logo-only"><img src="/logo-fm.svg" alt="Flávio Marques Advogados Associados" /></div><div className="app-name">Controle de Despesas e Receitas</div></div>
         <nav>{visibleMenu.map(({ to, label, icon: Icon, tone }) => <NavLink key={to} to={to} end={to === '/'} onClick={closeMobileMenu} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}${tone ? ` ${tone}-nav` : ''}${to === '/aprovacoes' ? ' approval-attention-nav' : ''}`}>{to === '/aprovacoes' ? <img className="nav-icon-img" src="/icone-aprovacoes.svg" alt="" width={22} height={22} /> : <Icon size={18} />}<span>{label}</span></NavLink>)}</nav>
         <div className="sidebar-help"><NavLink to="/dicas" onClick={closeMobileMenu} className="tips-button"><Lightbulb size={18} /> DICAS</NavLink><NavLink to="/como-usar" onClick={closeMobileMenu} className="howto-link"><Scale size={18} /> Como Usar</NavLink><button type="button" className="fm-assistente-trigger" aria-label="Abrir robô para tirar dúvidas" title="Robô — Tire suas dúvidas" onClick={() => { closeMobileMenu();
