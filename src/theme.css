@@ -477,7 +477,7 @@ html[data-theme='dark'] .approval-banner strong { color: #fff1c7 !important; }
 }
 
 /* Destaques de cor no menu lateral: Despesas (vermelho), Receitas (azul), IA Executiva Privada (mostarda) */
-html[data-theme] { --ai-nav: #a16207; --ai-nav-soft: rgba(202, 138, 4, .14); }
+html[data-theme] { --ai-nav: #ca8a04; --ai-nav-soft: rgba(202, 138, 4, .14); }
 html[data-theme='dark'] { --ai-nav: #eab308; --ai-nav-soft: rgba(234, 179, 8, .16); }
 html[data-theme] .nav-link[href="/despesas"] { color: var(--expense) !important; font-weight: 700; }
 html[data-theme] .nav-link[href="/despesas"].active { background: var(--expense-soft) !important; }
