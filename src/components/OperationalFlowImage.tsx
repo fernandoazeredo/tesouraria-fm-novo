@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { createFlowPdfUrl } from '../lib/flowPdf'
 
-const FLOW_PARTS = ['/fluxo-operacional-svg-1.part', '/fluxo-operacional-svg-2.part']
+// Mude FLOW_VERSION a cada novo fluxograma para não servir a imagem antiga do cache do navegador.
+const FLOW_VERSION = '2026-11-26'
+const FLOW_PARTS = ['/fluxo-operacional-svg-1.part', '/fluxo-operacional-svg-2.part'].map((file) => `${file}?v=${FLOW_VERSION}`)
 
 export function OperationalFlowImage() {
   const [src, setSrc] = useState('')
