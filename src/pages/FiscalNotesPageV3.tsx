@@ -1,7 +1,8 @@
 import { getCurrentInstitutionalSettings } from '../hooks/useInstitutionalSettings'
 import { useEffect, useMemo, useState } from 'react'
 import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc, type DocumentData } from 'firebase/firestore'
-import { FileText, RefreshCw, Search, X } from 'lucide-react'
+import { Copy, FileText, RefreshCw, Search, X } from 'lucide-react'
+import { NFSE_FIXED_FIELDS, buildNfseDescription } from '../lib/nfseTemplate'
 import { db } from '../lib/firebase'
 import { useAuth } from '../auth/AuthContext'
 import { clearRequiredFieldErrors, showRequiredFieldErrors } from '../lib/requiredFieldValidation'
@@ -81,7 +82,23 @@ function FiscalNoteModal({ source, note, onClose }: { source: AnyRecord; note?: 
   const [issueDate, setIssueDate] = useState(String(note?.issueDate || ''))
   const [status, setStatus] = useState(String(note?.status || 'pendente'))
   const [notes, setNotes] = useState(String(note?.notes || ''))
+  const [description, setDescription] = useState(String(note?.description || buildNfseDescription(source)))
+  const [competence, setCompetence] = useState(String(note?.competence || source.receiptDate || source.data || '').slice(0, 10))
+  const savedAddress = (note?.tomadorAddress ?? {}) as Record<string, unknown>
+  const [cep, setCep] = useState(String(savedAddress.cep ?? ''))
+  const [street, setStreet] = useState(String(savedAddress.street ?? ''))
+  const [streetNumber, setStreetNumber] = useState(String(savedAddress.number ?? ''))
+  const [complement, setComplement] = useState(String(savedAddress.complement ?? ''))
+  const [district, setDistrict] = useState(String(savedAddress.district ?? ''))
+  const [city, setCity] = useState(String(savedAddress.city ?? 'Rio de Janeiro/RJ'))
+  const [phone, setPhone] = useState(String(note?.tomadorPhone ?? ''))
+  const [copied, setCopied] = useState('')
   const [busy, setBusy] = useState(false)
+
+  async function copy(key: string, text: string) {
+    try { await navigator.clipboard.writeText(text); setCopied(key); window.setTimeout(() => setCopied(''), 1500) } catch { /* clipboard indisponível */ }
+  }
+  const copyButton = (key: string, text: string) => <button className="fiscal-copy-button" type="button" title="Copiar" onClick={() => void copy(key, text)} disabled={!text.trim()}>{copied === key ? 'Copiado' : <Copy size={14} />}</button>
 
   async function save() {
     if (!profile || !canEdit) return
@@ -106,6 +123,10 @@ function FiscalNoteModal({ source, note, onClose }: { source: AnyRecord; note?: 
         issueDate,
         status,
         notes: notes.trim(),
+        description: description.trim(),
+        competence,
+        tomadorPhone: phone.trim(),
+        tomadorAddress: { cep: cep.trim(), street: street.trim(), number: streetNumber.trim(), complement: complement.trim(), district: district.trim(), city: city.trim() },
         sourceSnapshot: {
           unidade: source.unidade || '', natureza: source.natureza || '', processo: source.processo || '',
           reclamante: source.reclamante || '', reclamada: source.reclamada || '', titular: source.titular || '',
@@ -135,7 +156,22 @@ function FiscalNoteModal({ source, note, onClose }: { source: AnyRecord; note?: 
 
   return <div className="modal-backdrop"><section className="decision-modal obligation-modal" role="dialog" aria-modal="true">
     <div className="modal-toolbar"><div><span className="eyebrow">Nota Fiscal / NFS-e</span><h2>Dados para emissão</h2></div><button className="icon-button" type="button" onClick={onClose}><X size={20} /></button></div>
-    <div className="fiscal-client-card"><div><span>Cliente</span><strong>{fiscalClientName(source) || '—'}</strong></div><div><span>CPF</span><strong>{source.cpf || '—'}</strong></div><div><span>E-mail</span><strong>{source.emailNf || '—'}</strong></div><div><span>Endereço</span><strong>{source.enderecoNf || '—'}</strong></div><div><span>Processo</span><strong>{source.processo || '—'}</strong></div><div className="fiscal-value"><span>Valor da NFS-e / Honorários</span><strong>{money.format(value)}</strong></div></div>
+    <div className="fiscal-client-card"><div><span>Cliente</span><strong>{fiscalClientName(source) || '—'} {copyButton('name', fiscalClientName(source))}</strong></div><div><span>CPF</span><strong>{source.cpf || '—'} {copyButton('cpf', String(source.cpf || ''))}</strong></div><div><span>E-mail</span><strong>{source.emailNf || '—'} {copyButton('email', String(source.emailNf || ''))}</strong></div><div><span>Endereço</span><strong>{source.enderecoNf || '—'}</strong></div><div><span>Processo</span><strong>{source.processo || '—'}</strong></div><div className="fiscal-value"><span>Valor da NFS-e / Honorários</span><strong>{money.format(value)} {copyButton('value', value.toFixed(2).replace('.', ','))}</strong></div></div>
+    <h3 className="fiscal-section-title">Endereço e telefone do tomador</h3>
+    <div className="obligation-form-grid fiscal-form-grid fiscal-address-grid">
+      <label><span>CEP</span><input value={cep} onChange={(event) => setCep(event.target.value)} placeholder="00000-000" /></label>
+      <label className="fiscal-span-2"><span>Logradouro</span><input value={street} onChange={(event) => setStreet(event.target.value)} placeholder="Ex.: R Joaquim Martins" /></label>
+      <label><span>Número</span><input value={streetNumber} onChange={(event) => setStreetNumber(event.target.value)} /></label>
+      <label><span>Complemento</span><input value={complement} onChange={(event) => setComplement(event.target.value)} placeholder="Ex.: casa 10" /></label>
+      <label><span>Bairro</span><input value={district} onChange={(event) => setDistrict(event.target.value)} /></label>
+      <label><span>Município/UF</span><input value={city} onChange={(event) => setCity(event.target.value)} /></label>
+      <label><span>Telefone</span><input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="(21) 90000-0000" /></label>
+    </div>
+    <h3 className="fiscal-section-title">Serviço</h3>
+    <div className="obligation-form-grid fiscal-form-grid"><label><span>Competência</span><input type="date" value={competence} onChange={(event) => setCompetence(event.target.value)} /></label></div>
+    <label className="obligation-notes"><span>Descrição do serviço {copyButton('description', description)}</span><textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+    <div className="fiscal-fixed-card"><span className="fiscal-fixed-title">Dados fixos do escritório no Emissor{source.unidade === 'SP' ? ' — atenção: unidade SP, conferir local e códigos' : ''}</span>{NFSE_FIXED_FIELDS.map((item) => <div key={item.label}><span>{item.label}</span><strong>{item.value}</strong></div>)}</div>
+    <h3 className="fiscal-section-title">Controle da NFS-e</h3>
     <div className="obligation-form-grid fiscal-form-grid"><label><span>Status da NFS-e</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="pendente">Pendente de emissão</option><option value="emitida">Emitida</option><option value="cancelada">Cancelada</option></select></label><label><span>Número da NFS-e</span><input data-required-key="fiscal-number" value={number} onChange={(event) => setNumber(event.target.value)} placeholder="Ex.: 0085967" /></label><label><span>Data de emissão</span><input data-required-key="fiscal-date" type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} /></label></div>
     <label className="obligation-notes"><span>Observações</span><textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
     <div className="modal-actions"><button className="secondary-button" type="button" onClick={onClose}>Fechar</button>{canEdit && <button className="revenue-button" type="button" disabled={busy} onClick={() => void save()}><FileText size={16} /> Salvar controle da NFS-e</button>}</div>
