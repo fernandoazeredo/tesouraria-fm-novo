@@ -60,6 +60,46 @@ function statusClass(note?: AnyRecord) {
   return 'workflow-warning'
 }
 
+
+type FichaData = {
+  source: AnyRecord
+  value: number
+  description: string
+  competence: string
+  phone: string
+  address: { cep?: unknown; street?: unknown; number?: unknown; complement?: unknown; district?: unknown; city?: unknown }
+}
+
+function fichaFromNote(source: AnyRecord, note?: AnyRecord): FichaData {
+  return {
+    source,
+    value: invoiceValue(source),
+    description: String(note?.description || buildNfseDescription(source)),
+    competence: String(note?.competence || source.receiptDate || source.data || '').slice(0, 10),
+    phone: String(note?.tomadorPhone || ''),
+    address: (note?.tomadorAddress ?? {}) as FichaData['address'],
+  }
+}
+
+function printFicha({ source, value, description, competence, phone, address }: FichaData) {
+  const inst = getCurrentInstitutionalSettings()
+  const v = (value: unknown) => escapeHtml(String(value ?? '').trim() || '—')
+  const row = (label: string, value: unknown) => `<tr><th>${escapeHtml(label)}</th><td>${v(value)}</td></tr>`
+  const section = (n: string, title: string, rows: string) => `<h2><span>${n}</span>${escapeHtml(title)}</h2><table>${rows}</table>`
+  const w = window.open('', '_blank')
+  if (!w) { window.alert('Libere pop-ups para baixar a ficha.'); return }
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Ficha NFS-e - ${escapeHtml(fiscalClientName(source))}</title><style>@page{size:A4;margin:14mm}body{font-family:Arial,Helvetica,sans-serif;color:#17202b;font-size:12px}h1{margin:0;font-size:18px;color:#17344f}.sub{color:#5b6775;margin:4px 0 16px}h2{display:flex;align-items:center;gap:8px;margin:18px 0 6px;font-size:13px;text-transform:uppercase;color:#24557d;border-bottom:2px solid #24557d;padding-bottom:4px}h2 span{background:#24557d;color:#fff;border-radius:50%;width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;font-size:11px}table{width:100%;border-collapse:collapse}th{width:38%;text-align:left;font-weight:normal;color:#5b6775;padding:6px 8px;border-bottom:1px solid #e3e8ee;vertical-align:top}td{padding:6px 8px;border-bottom:1px solid #e3e8ee;font-weight:bold}.value td{font-size:15px;color:#0b6b3a}.footer{margin-top:18px;color:#687585;font-size:9px}</style></head><body>
+<h1>Ficha para emissão de NFS-e — Emissor Nacional</h1><div class="sub">Processo ${v(source.processo)} · Gerada em ${new Date().toLocaleString('pt-BR')}</div>
+${section('1', 'Pessoas — Prestador', row('CNPJ', inst.cnpj) + row('Razão social', inst.razaoSocial) + row('Município', 'Rio de Janeiro/RJ'))}
+${section('1', 'Pessoas — Tomador', row('CPF', source.cpf) + row('Nome', fiscalClientName(source)) + row('CEP', address.cep) + row('Logradouro', address.street) + row('Número', address.number) + row('Complemento', address.complement) + row('Bairro', address.district) + row('Município/UF', address.city) + row('Telefone', phone) + row('E-mail', source.emailNf) + (address.street ? '' : row('Endereço (cadastro da receita)', source.enderecoNf)))}
+${section('2', 'Serviço', row('Data de competência', competence ? dateBr(competence) : '') + NFSE_FIXED_FIELDS.slice(0, 3).map((item) => row(item.label, item.value)).join('') + row('Descrição do serviço', description))}
+${section('3', 'Valores e tributação', '<tr class="value"><th>Valor do serviço</th><td>' + escapeHtml(money.format(value)) + '</td></tr>' + NFSE_FIXED_FIELDS.slice(3).map((item) => row(item.label, item.value)).join(''))}
+<div class="footer">${escapeHtml(inst.razaoSocial)} · Tesouraria FM · Dados fixos conforme NFS-e nº 303${source.unidade === 'SP' ? ' · ATENÇÃO: unidade SP — conferir local e códigos' : ''}</div>
+<script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`
+  w.document.write(html)
+  w.document.close()
+}
+
 async function audit(profile: ReturnType<typeof useAuth>['profile'], action: string, detail: string, entityId: string) {
   if (!profile) return
   await addDoc(collection(db, 'auditLogs'), {
@@ -174,7 +214,7 @@ function FiscalNoteModal({ source, note, onClose }: { source: AnyRecord; note?: 
     <h3 className="fiscal-section-title">Controle da NFS-e</h3>
     <div className="obligation-form-grid fiscal-form-grid"><label><span>Status da NFS-e</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="pendente">Pendente de emissão</option><option value="emitida">Emitida</option><option value="cancelada">Cancelada</option></select></label><label><span>Número da NFS-e</span><input data-required-key="fiscal-number" value={number} onChange={(event) => setNumber(event.target.value)} placeholder="Ex.: 0085967" /></label><label><span>Data de emissão</span><input data-required-key="fiscal-date" type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} /></label></div>
     <label className="obligation-notes"><span>Observações</span><textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
-    <div className="modal-actions"><button className="secondary-button" type="button" onClick={onClose}>Fechar</button>{canEdit && <button className="revenue-button" type="button" disabled={busy} onClick={() => void save()}><FileText size={16} /> Salvar controle da NFS-e</button>}</div>
+    <div className="modal-actions"><button className="secondary-button" type="button" onClick={onClose}>Fechar</button><button className="secondary-button" type="button" onClick={() => printFicha({ source, value, description, competence, phone, address: { cep, street, number: streetNumber, complement, district, city } })}><FileText size={16} /> Baixar ficha para emissão</button>{canEdit && <button className="revenue-button" type="button" disabled={busy} onClick={() => void save()}><FileText size={16} /> Salvar controle da NFS-e</button>}</div>
   </section></div>
 }
 
@@ -220,7 +260,7 @@ export function FiscalNotesPageV3() {
     <section className="page-card module-card"><div className="module-toolbar"><div className="search-box"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por processo, cliente, CPF, status ou nº da NFS-e" /></div></div>
       {loadingReceivables || loadingNotes ? <div className="module-empty"><RefreshCw className="spin" size={30} /><strong>Carregando Notas Fiscais</strong></div> : sources.length === 0 ? <div className="module-empty"><FileText size={34} /><strong>Nenhum honorário disponível para emissão</strong></div> : <div className="obligation-list fiscal-v3-list"><div className="obligation-list-row obligation-list-head"><span>Processo / Cliente</span><span>CPF</span><span>E-mail</span><span>Valor</span><span>Status NFS-e</span><span>Nº NFSe e Data</span><span>Ação</span></div>{sources.map((source) => {
         const note = noteMap.get(source.id)
-        return <div className="obligation-list-row" key={source.id}><span><strong>{source.processo || '—'}</strong><small>{fiscalClientName(source) || '—'}</small></span><span>{source.cpf || '—'}</span><span className="fiscal-email-cell">{source.emailNf || '—'}</span><span><strong>{money.format(invoiceValue(source))}</strong></span><span><b className={`workflow-status-badge ${statusClass(note)}`}>{statusLabel(note)}</b></span><span className="fiscal-number-cell"><strong>{note?.number || '—'}</strong>{note?.issueDate && <small>{dateBr(note.issueDate)}</small>}</span><span><button className="small-neutral-button" type="button" onClick={() => setTarget(source)}>{note ? 'Abrir controle' : 'Preparar NFS-e'}</button></span></div>
+        return <div className="obligation-list-row" key={source.id}><span><strong>{source.processo || '—'}</strong><small>{fiscalClientName(source) || '—'}</small></span><span>{source.cpf || '—'}</span><span className="fiscal-email-cell">{source.emailNf || '—'}</span><span><strong>{money.format(invoiceValue(source))}</strong></span><span><b className={`workflow-status-badge ${statusClass(note)}`}>{statusLabel(note)}</b></span><span className="fiscal-number-cell"><strong>{note?.number || '—'}</strong>{note?.issueDate && <small>{dateBr(note.issueDate)}</small>}</span><span className="fiscal-actions-cell"><button className="small-neutral-button" type="button" onClick={() => setTarget(source)}>{note ? 'Abrir controle' : 'Preparar NFS-e'}</button><button className="small-neutral-button" type="button" title="Baixar ficha para emissão" onClick={() => printFicha(fichaFromNote(source, note))}>Ficha</button></span></div>
       })}</div>}
     </section>
     {target && <FiscalNoteModal source={target} note={noteMap.get(target.id)} onClose={() => setTarget(null)} />}

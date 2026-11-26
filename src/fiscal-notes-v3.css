@@ -1,6 +1,6 @@
 .fiscal-v3-list .obligation-list-row {
   min-width: 1180px;
-  grid-template-columns: minmax(260px, 1.35fr) 125px minmax(190px, 1fr) 135px 145px 135px 135px;
+  grid-template-columns: minmax(260px, 1.35fr) 125px minmax(190px, 1fr) 135px 145px 135px 190px;
 }
 
 .fiscal-number-cell strong {
@@ -90,3 +90,4 @@
   .fiscal-address-grid, .fiscal-fixed-card { grid-template-columns: 1fr; }
   .fiscal-address-grid .fiscal-span-2 { grid-column: auto; }
 }
+.fiscal-actions-cell { display: flex; gap: 6px; flex-wrap: wrap; }
