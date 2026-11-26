@@ -1,0 +1,59 @@
+/* Recolher / expandir o menu lateral (computador). No tablet e celular vale o menu do cabeçalho. */
+.sidebar-toggle { display: none; }
+
+@media (min-width: 1025px) {
+  .app-shell { transition: grid-template-columns 250ms ease; }
+  .app-shell.sidebar-collapsed { grid-template-columns: 0 minmax(0, 1fr); }
+
+  .sidebar {
+    width: 280px;
+    box-sizing: border-box;
+    transition: transform 250ms ease, opacity 250ms ease, visibility 250ms ease;
+  }
+  .app-shell.sidebar-collapsed .sidebar {
+    transform: translateX(-100%);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .app-shell:not(.sidebar-collapsed) .sidebar .brand { padding-right: 44px; }
+
+  .main-content { transition: padding-left 250ms ease; }
+  .app-shell.sidebar-collapsed .main-content { padding-left: 76px; }
+
+  .sidebar-toggle {
+    position: fixed;
+    top: 14px;
+    left: 236px;
+    z-index: 130;
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--border, #d6e0e8);
+    border-radius: 10px;
+    background: var(--bg-sidebar, #fff);
+    color: var(--text-primary, #182433);
+    cursor: pointer;
+    transition: left 250ms ease, background-color 150ms ease, box-shadow 150ms ease;
+  }
+  .sidebar-toggle:hover { background: var(--bg-hover, #eef5f9); }
+  .sidebar-toggle:focus-visible { outline: 2px solid #1f6fd1; outline-offset: 2px; }
+  .app-shell.sidebar-collapsed .sidebar-toggle {
+    left: 14px;
+    background: var(--bg-card, #fff);
+    box-shadow: 0 4px 14px rgba(20, 36, 52, .14);
+  }
+  html[data-theme='dark'] .sidebar-toggle { border-color: var(--border-strong, #3a5163); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell, .sidebar, .main-content, .sidebar-toggle { transition: none !important; }
+}
+
+/* Tablet e celular: menu em sobreposição, aberto e fechado pelo ícone ☰, com transição de 250 ms. */
+@media (max-width: 1024px) {
+  .sidebar { transition: transform 250ms ease !important; }
+  .mobile-menu-backdrop { transition: opacity 250ms ease, visibility 250ms ease !important; }
+}
